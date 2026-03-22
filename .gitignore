@@ -20,9 +20,8 @@ env/
 Thumbs.db
 
 # Project outputs
-*.csv
-*.png
 holdings.json
+scripts/backtest/results/
 
 # Data cache
 data/

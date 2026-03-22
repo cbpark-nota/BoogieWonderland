@@ -18,6 +18,10 @@ import yfinance as yf
 import pandas_ta as ta
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from pathlib import Path
+
+RESULTS_DIR = Path(__file__).parent / "results"
+RESULTS_DIR.mkdir(exist_ok=True)
 
 START  = "2019-01-01"
 END    = "2024-12-31"
@@ -366,7 +370,7 @@ def plot(results, spy_nav):
         ax3.text(i, v+0.01, f"{v:.2f}", ha="center", fontsize=8)
     ax3.grid(axis="y", alpha=0.25); plt.sca(ax3); plt.xticks(rotation=20, fontsize=7)
 
-    plt.savefig("backtest_v3_result.png", dpi=150, bbox_inches="tight")
+    plt.savefig(RESULTS_DIR / "backtest_v3_result.png", dpi=150, bbox_inches="tight")
     print("\n  차트 저장: backtest_v3_result.png")
     plt.show()
 
@@ -471,7 +475,7 @@ if __name__ == "__main__":
              "CAGR":f"{m['CAGR']:+.1%}", "MDD":f"{m['MDD']:+.1%}",
              "샤프지수":f"{m['샤프']:.2f}", "월간승률":f"{m['월승률']:.1%}"}
             for m in all_m]
-    pd.DataFrame(rows).to_csv("backtest_v3_comparison.csv",
+    pd.DataFrame(rows).to_csv(RESULTS_DIR / "backtest_v3_comparison.csv",
                                index=False, encoding="utf-8-sig")
     print("\n  결과 저장: backtest_v3_comparison.csv")
 

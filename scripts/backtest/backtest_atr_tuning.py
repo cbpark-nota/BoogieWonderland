@@ -21,6 +21,10 @@ import pandas_ta as ta
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from pathlib import Path
+
+RESULTS_DIR = Path(__file__).parent / "results"
+RESULTS_DIR.mkdir(exist_ok=True)
 
 START  = "2010-01-01"
 END    = "2024-12-31"
@@ -409,7 +413,7 @@ def plot_heatmaps(results_df):
         fig.colorbar(im, ax=ax, shrink=0.8)
 
     plt.tight_layout()
-    plt.savefig("backtest_atr_tuning.png", dpi=150, bbox_inches="tight")
+    plt.savefig(RESULTS_DIR / "backtest_atr_tuning.png", dpi=150, bbox_inches="tight")
     print("  차트 저장: backtest_atr_tuning.png")
     plt.close()
 
@@ -433,7 +437,7 @@ def plot_nav_curves(best_results, spy_close):
     ax.legend(fontsize=8)
     ax.grid(alpha=0.25)
     plt.tight_layout()
-    plt.savefig("backtest_atr_tuning_nav.png", dpi=150, bbox_inches="tight")
+    plt.savefig(RESULTS_DIR / "backtest_atr_tuning_nav.png", dpi=150, bbox_inches="tight")
     print("  차트 저장: backtest_atr_tuning_nav.png")
     plt.close()
 
@@ -557,7 +561,7 @@ if __name__ == "__main__":
             "총수익(총)": f"{r['총수익(총)']:+.1%}",
             "총수익(순)": f"{r['총수익(순)']:+.1%}",
         })
-    pd.DataFrame(rows).to_csv("backtest_atr_tuning.csv",
+    pd.DataFrame(rows).to_csv(RESULTS_DIR / "backtest_atr_tuning.csv",
                                index=False, encoding="utf-8-sig")
     print(f"\n  결과 저장: backtest_atr_tuning.csv")
 

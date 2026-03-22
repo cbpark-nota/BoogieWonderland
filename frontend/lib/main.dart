@@ -1,12 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'config/app_config.dart';
+import 'providers/screening_provider.dart';
+import 'providers/portfolio_provider.dart';
+import 'providers/market_provider.dart';
+import 'providers/serverless_providers.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/screening_screen.dart';
 import 'screens/portfolio_screen.dart';
 import 'screens/settings_screen.dart';
 
 void main() {
-  runApp(const ProviderScope(child: MomentumApp()));
+  if (AppConfig.isServerless) {
+    runApp(ProviderScope(
+      overrides: [
+        screeningProvider.overrideWith(() => ServerlessScreeningNotifier()),
+        holdingsProvider.overrideWith(() => ServerlessHoldingsNotifier()),
+        marketStatusProvider.overrideWith(serverlessMarketStatus),
+        stopCheckProvider.overrideWith(serverlessStopCheck),
+      ],
+      child: const MomentumApp(),
+    ));
+  } else {
+    runApp(const ProviderScope(child: MomentumApp()));
+  }
 }
 
 class MomentumApp extends StatelessWidget {

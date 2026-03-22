@@ -23,6 +23,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from pathlib import Path
+
+RESULTS_DIR = Path(__file__).parent / "results"
+RESULTS_DIR.mkdir(exist_ok=True)
 
 START  = "2010-01-01"
 END    = "2024-12-31"
@@ -428,7 +432,7 @@ def plot(all_metrics, spy_close):
     ax4.grid(axis="y", alpha=0.25)
     plt.sca(ax4); plt.xticks(rotation=15, fontsize=8)
 
-    plt.savefig("backtest_rebal_freq.png", dpi=150, bbox_inches="tight")
+    plt.savefig(RESULTS_DIR / "backtest_rebal_freq.png", dpi=150, bbox_inches="tight")
     print("\n  차트 저장: backtest_rebal_freq.png")
     plt.close()
 
@@ -508,7 +512,7 @@ if __name__ == "__main__":
             "총거래횟수": m["거래횟수"],
             "연평균거래": f"{m['연평균거래']:.0f}",
         })
-    pd.DataFrame(rows).to_csv("backtest_rebal_freq.csv",
+    pd.DataFrame(rows).to_csv(RESULTS_DIR / "backtest_rebal_freq.csv",
                                index=False, encoding="utf-8-sig")
     print(f"\n  결과 저장: backtest_rebal_freq.csv")
 

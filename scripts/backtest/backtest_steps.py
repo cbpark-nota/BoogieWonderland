@@ -24,6 +24,10 @@ import pandas_ta as ta
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from copy import deepcopy
+from pathlib import Path
+
+RESULTS_DIR = Path(__file__).parent / "results"
+RESULTS_DIR.mkdir(exist_ok=True)
 
 # ═══════════════════════════════════════════════════════════════
 # 0. 공통 설정
@@ -435,7 +439,7 @@ def plot_all(results, spy_nav):
     ax2.grid(axis="y", alpha=0.25)
     plt.xticks(rotation=15, fontsize=8)
 
-    plt.savefig("backtest_steps_result.png", dpi=150, bbox_inches="tight")
+    plt.savefig(RESULTS_DIR / "backtest_steps_result.png", dpi=150, bbox_inches="tight")
     print("\n  차트 저장: backtest_steps_result.png")
     plt.show()
 
@@ -598,7 +602,7 @@ if __name__ == "__main__":
             "샤프지수": f"{m['샤프']:.2f}",
             "월간승률": f"{m['월승률']:.1%}",
         })
-    pd.DataFrame(rows).to_csv("step_comparison.csv",
+    pd.DataFrame(rows).to_csv(RESULTS_DIR / "step_comparison.csv",
                                index=False, encoding="utf-8-sig")
     print("\n  비교 결과 저장: step_comparison.csv")
 

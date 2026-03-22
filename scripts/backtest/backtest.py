@@ -30,6 +30,10 @@ import pandas_ta as ta
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 from datetime import datetime
+from pathlib import Path
+
+RESULTS_DIR = Path(__file__).parent / "results"
+RESULTS_DIR.mkdir(exist_ok=True)
 
 # ═══════════════════════════════════════════════════════
 # 0. 설정값
@@ -421,7 +425,7 @@ def plot_results(nav_strat: list, nav_bench: np.ndarray, log: list):
     ax3.grid(alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig("backtest_result.png", dpi=150, bbox_inches="tight")
+    plt.savefig(RESULTS_DIR / "backtest_result.png", dpi=150, bbox_inches="tight")
     print("\n  차트 저장: backtest_result.png")
     plt.show()
 
@@ -507,7 +511,7 @@ if __name__ == "__main__":
             "NAV"         : round(e["nav"], 4),
         }
         for e in log
-    ]).to_csv("rebalance_log.csv", index=False, encoding="utf-8-sig")
+    ]).to_csv(RESULTS_DIR / "rebalance_log.csv", index=False, encoding="utf-8-sig")
     print("\n  리밸런싱 로그 저장: rebalance_log.csv")
 
     # ── 최근 6회 리밸런싱 ──
