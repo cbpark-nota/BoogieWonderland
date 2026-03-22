@@ -81,6 +81,17 @@ Future<MarketStatus?> serverlessMarketStatus(Ref ref) async {
 // ── 서버리스 스톱 체크 (정적 데이터 기반) ────────────────────
 
 Future<List<StopCheckResult>> serverlessStopCheck(Ref ref, void _) async {
-  // 서버리스 모드에서는 실시간 스톱 체크 불가
   return [];
 }
+
+// ── 서버리스 4전략 데이터 ──────────────────────────────────
+
+final strategyDataProvider =
+    FutureProvider<StrategyScreeningData?>((ref) async {
+  try {
+    final data = await StaticDataSource().getStrategies();
+    return StrategyScreeningData.fromJson(data);
+  } catch (_) {
+    return null;
+  }
+});

@@ -1,13 +1,66 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../config/app_config.dart';
+import '../models/screening_result.dart';
 import '../providers/screening_provider.dart';
+import '../providers/serverless_providers.dart';
 import '../widgets/stock_card.dart';
 
-class ScreeningScreen extends ConsumerWidget {
+class ScreeningScreen extends ConsumerStatefulWidget {
   const ScreeningScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ScreeningScreen> createState() => _ScreeningScreenState();
+}
+
+class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
+  StrategyType _selected = StrategyType.balanced;
+
+  @override
+  Widget build(BuildContext context) {
+    // 서버리스 모드: 4전략 데이터 사용
+    if (AppConfig.isServerless) {
+      return _buildServerlessView();
+    }
+    // 풀스택 모드: 기존 단일 스크리닝
+    return _buildFullstackView();
+  }
+
+  // ── 서버리스 모드: 4전략 탭 ──
+
+  Widget _buildServerlessView() {
+    final strategyAsync = ref.watch(strategyDataProvider);
+
+    return Scaffold(
+      body: Column(
+        children: [
+          _buildStrategySelector(),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(strategyDataProvider);
+              },
+              child: strategyAsync.when(
+                data: (data) {
+                  if (data == null) return _buildEmpty();
+                  final run = data.toScreeningRun(_selected);
+                  final sr = data.strategies[_selected];
+                  return _buildResultList(run, sr);
+                },
+                loading: () =>
+                    const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Center(child: Text('오류: $e')),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── 풀스택 모드: 기존 화면 ──
+
+  Widget _buildFullstackView() {
     final screeningAsync = ref.watch(screeningProvider);
 
     return Scaffold(
@@ -17,41 +70,8 @@ class ScreeningScreen extends ConsumerWidget {
         },
         child: screeningAsync.when(
           data: (run) {
-            if (run == null || run.results.isEmpty) {
-              return const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.search_off, size: 64, color: Colors.grey),
-                    SizedBox(height: 16),
-                    Text('스크리닝 결과가 없습니다',
-                        style: TextStyle(fontSize: 16, color: Colors.grey)),
-                    SizedBox(height: 8),
-                    Text('아래 버튼을 눌러 스크리닝을 실행하세요',
-                        style: TextStyle(color: Colors.grey)),
-                  ],
-                ),
-              );
-            }
-            return ListView(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('TOP ${run.results.length}',
-                          style: const TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.bold)),
-                      Text('${run.totalPassed}/${run.totalScreened} 통과',
-                          style: const TextStyle(color: Colors.grey)),
-                    ],
-                  ),
-                ),
-                ...run.results.map((r) => StockCard(result: r)),
-                const SizedBox(height: 80),
-              ],
-            );
+            if (run == null || run.results.isEmpty) return _buildEmpty();
+            return _buildResultList(run, null);
           },
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('오류: $e')),
@@ -67,6 +87,134 @@ class ScreeningScreen extends ConsumerWidget {
         icon: const Icon(Icons.play_arrow),
         label: const Text('스크리닝'),
       ),
+    );
+  }
+
+  // ── 전략 선택 바 ──
+
+  Widget _buildStrategySelector() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: StrategyType.values.map((st) {
+            final isSelected = st == _selected;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: ChoiceChip(
+                label: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(st.label,
+                        style: TextStyle(
+                            fontWeight:
+                                isSelected ? FontWeight.bold : FontWeight.normal,
+                            fontSize: 13)),
+                    Text(st.description,
+                        style: TextStyle(
+                            fontSize: 10,
+                            color: isSelected
+                                ? Theme.of(context).colorScheme.onPrimary
+                                : Colors.grey)),
+                  ],
+                ),
+                selected: isSelected,
+                onSelected: (_) => setState(() => _selected = st),
+                selectedColor: _chipColor(st),
+                labelStyle: TextStyle(
+                    color:
+                        isSelected ? Colors.white : null),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Color _chipColor(StrategyType st) {
+    switch (st) {
+      case StrategyType.aggressive:
+        return Colors.red.shade600;
+      case StrategyType.balanced:
+        return Colors.blue.shade600;
+      case StrategyType.conservative:
+        return Colors.amber.shade700;
+      case StrategyType.adaptive:
+        return Colors.purple.shade600;
+    }
+  }
+
+  // ── 결과 리스트 ──
+
+  Widget _buildResultList(ScreeningRun run, StrategyResult? sr) {
+    if (run.results.isEmpty) return _buildEmpty();
+
+    return ListView(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('TOP ${run.results.length}',
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold)),
+              Text('${run.totalPassed}/${run.totalScreened} 통과',
+                  style: const TextStyle(color: Colors.grey)),
+            ],
+          ),
+        ),
+        if (sr != null) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: Row(
+              children: [
+                _infoChip('ATR ${sr.atrMult}'),
+                const SizedBox(width: 8),
+                _infoChip(sr.rebalFreq),
+                if (sr.currentRegime != null) ...[
+                  const SizedBox(width: 8),
+                  _infoChip('국면: ${sr.currentRegime}',
+                      color: Colors.purple.shade100),
+                ],
+              ],
+            ),
+          ),
+        ],
+        ...run.results.map((r) => StockCard(result: r)),
+        const SizedBox(height: 80),
+      ],
+    );
+  }
+
+  Widget _infoChip(String text, {Color? color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color ?? Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(text, style: const TextStyle(fontSize: 11)),
+    );
+  }
+
+  Widget _buildEmpty() {
+    return ListView(
+      children: const [
+        SizedBox(height: 200),
+        Center(
+          child: Column(
+            children: [
+              Icon(Icons.search_off, size: 64, color: Colors.grey),
+              SizedBox(height: 16),
+              Text('스크리닝 결과가 없습니다',
+                  style: TextStyle(fontSize: 16, color: Colors.grey)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

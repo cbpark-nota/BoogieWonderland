@@ -8,14 +8,17 @@ class StaticDataSource {
     receiveTimeout: const Duration(seconds: 10),
   ));
 
-  /// 현재 페이지의 base URL에서 data/ 경로를 계산
-  String get _baseDataUrl {
-    // Flutter 웹에서 base href 기준 상대 경로
-    return 'data';
-  }
+  String get _baseDataUrl => 'data';
 
+  /// 하위 호환: 균형형 기본 결과
   Future<Map<String, dynamic>> getLatestScreening() async {
     final res = await _dio.get('$_baseDataUrl/screening_latest.json');
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// 4전략 전체 결과
+  Future<Map<String, dynamic>> getStrategies() async {
+    final res = await _dio.get('$_baseDataUrl/screening_strategies.json');
     return res.data as Map<String, dynamic>;
   }
 }

@@ -19,7 +19,7 @@ from datetime import datetime
 import pandas as pd
 import yfinance as yf
 
-START = "2010-01-01"
+START = "2007-01-01"
 END   = "2024-12-31"
 
 DATA_DIR   = "data"
