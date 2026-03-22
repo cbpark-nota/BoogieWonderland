@@ -1,0 +1,25 @@
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[project]
+name = "momentum-backend"
+version = "0.1.0"
+description = "모멘텀 주식 스크리너 백엔드"
+requires-python = "==3.12.*"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+    "apscheduler>=3.10.0",
+    "pydantic-settings>=2.0.0",
+    "yfinance>=1.2.0",
+    "pandas>=3.0.0",
+    "pandas-ta>=0.4.0",
+    "numpy>=2.2.0",
+    "firebase-admin>=6.0.0",
+    "httpx>=0.28.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+]

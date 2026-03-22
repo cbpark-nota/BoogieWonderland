@@ -24,7 +24,16 @@ Thumbs.db
 *.png
 holdings.json
 
+# Data cache
+data/
+
 # Byte-compiled
 *.egg-info/
 dist/
 build/
+
+# uv
+.python-version
+
+# FVM
+.fvm/flutter_sdk

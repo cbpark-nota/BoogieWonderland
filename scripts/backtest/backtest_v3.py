@@ -187,7 +187,13 @@ def position_weights(scores, equal=False, max_w=MAX_WEIGHT):
     n = len(scores)
     if equal or n == 0:
         return pd.Series([1.0/n]*n, index=scores.index)
-    w = scores / scores.sum()
+    total = scores.sum()
+    if total == 0 or pd.isna(total):
+        return pd.Series([1.0/n]*n, index=scores.index)
+    # 점수가 0인 종목에 최소 비중 부여 (NaN 방지)
+    adj_scores = scores.copy()
+    adj_scores[adj_scores <= 0] = 1e-6
+    w = adj_scores / adj_scores.sum()
     for _ in range(20):
         if (w <= max_w + 1e-8).all():
             break
@@ -390,8 +396,9 @@ if __name__ == "__main__":
     print("  SPY 벤치마크...")
     spy_raw     = yf.download("SPY", start=START, end=END,
                                auto_adjust=True, progress=False)
-    spy_monthly = spy_raw["Close"].resample("BME").last().pct_change().fillna(0)
-    spy_nav     = [1.0] + list((1+spy_monthly).cumprod().values)
+    spy_close   = spy_raw["Close"].squeeze()
+    spy_monthly = spy_close.resample("BME").last().pct_change().fillna(0)
+    spy_nav     = [1.0] + list((1+spy_monthly).cumprod().values.flatten())
 
     # 지표 계산
     print(f"\n  지표 계산 ({len(all_data)}개)...")
