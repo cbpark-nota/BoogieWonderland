@@ -27,5 +27,15 @@ services:
       db:
         condition: service_healthy
 
+  collector:
+    build: ./scripts/collector
+    environment:
+      COLLECT_DATA_DIR: /data/daily
+      TZ: Asia/Seoul
+    volumes:
+      - collectdata:/data/daily
+    restart: unless-stopped
+
 volumes:
   pgdata:
+  collectdata:

@@ -1,0 +1,7 @@
+# 한국 시장: KST 23:00 (UTC 14:00)
+0 14 * * 1-5 cd /app && python collect_daily.py kr >> /var/log/cron.log 2>&1
+
+# 미국 시장: KST 07:00 (UTC 22:00 전날)
+0 22 * * 1-5 cd /app && python collect_daily.py us >> /var/log/cron.log 2>&1
+
+# cron 필수 빈 줄
