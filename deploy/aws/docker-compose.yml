@@ -1,0 +1,24 @@
+# AWS ECS용: DB는 RDS 사용, 이미지는 ECR에서 pull
+# 로컬 테스트: cd deploy/aws && docker compose up -d
+
+services:
+  backend:
+    image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/momentum-backend:latest
+    environment:
+      APP_DATABASE_URL: ${DATABASE_URL}
+      APP_DATABASE_URL_SYNC: ${DATABASE_URL_SYNC}
+      APP_SCHEDULER_ENABLED: "true"
+      APP_CORS_ORIGINS: '["${FRONTEND_URL:-http://localhost}"]'
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+
+  frontend:
+    image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/momentum-frontend:latest
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+
+  collector:
+    image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/momentum-collector:latest
+    environment:
+      COLLECT_DATA_DIR: /data/daily
+      TZ: Asia/Seoul

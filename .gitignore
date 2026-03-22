@@ -36,3 +36,7 @@ build/
 
 # FVM
 .fvm/flutter_sdk
+
+# Environment files
+.env
+deploy/**/.env

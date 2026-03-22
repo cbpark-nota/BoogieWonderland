@@ -13,6 +13,9 @@ permissions:
   pages: write
   id-token: write
 
+env:
+  BASE_HREF: /BoogieWonderland/
+
 concurrency:
   group: "pages"
   cancel-in-progress: false
@@ -51,7 +54,7 @@ jobs:
         working-directory: frontend
         run: |
           flutter build web --release \
-            --base-href "/BoogieWonderland/" \
+            --base-href "${{ env.BASE_HREF }}" \
             --dart-define=DEPLOY_MODE=serverless
 
       - name: GitHub Pages 설정

@@ -1,0 +1,41 @@
+name: CI 테스트
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 의존성 설치
+        working-directory: backend
+        run: pip install uv && uv pip install --system -r pyproject.toml
+
+      - name: 백엔드 테스트
+        working-directory: backend
+        run: python -m pytest tests/ -v
+
+  frontend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.5'
+          channel: 'stable'
+
+      - name: 의존성 설치
+        working-directory: frontend
+        run: flutter pub get
+
+      - name: 프론트엔드 테스트
+        working-directory: frontend
+        run: flutter test

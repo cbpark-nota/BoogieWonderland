@@ -1,0 +1,45 @@
+{
+  "family": "momentum-app",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "ACCOUNT.dkr.ecr.REGION.amazonaws.com/momentum-backend:latest",
+      "essential": true,
+      "portMappings": [{"containerPort": 8000, "protocol": "tcp"}],
+      "environment": [
+        {"name": "APP_SCHEDULER_ENABLED", "value": "true"}
+      ],
+      "secrets": [
+        {"name": "APP_DATABASE_URL", "valueFrom": "arn:aws:ssm:REGION:ACCOUNT:parameter/momentum/database-url"},
+        {"name": "APP_DATABASE_URL_SYNC", "valueFrom": "arn:aws:ssm:REGION:ACCOUNT:parameter/momentum/database-url-sync"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/momentum",
+          "awslogs-region": "ap-northeast-2",
+          "awslogs-stream-prefix": "backend"
+        }
+      }
+    },
+    {
+      "name": "frontend",
+      "image": "ACCOUNT.dkr.ecr.REGION.amazonaws.com/momentum-frontend:latest",
+      "essential": true,
+      "portMappings": [{"containerPort": 80, "protocol": "tcp"}],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/momentum",
+          "awslogs-region": "ap-northeast-2",
+          "awslogs-stream-prefix": "frontend"
+        }
+      }
+    }
+  ]
+}

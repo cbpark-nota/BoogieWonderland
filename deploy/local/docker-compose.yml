@@ -1,0 +1,24 @@
+# 로컬 개발용: DB만 실행
+# 사용법: cd deploy/local && docker compose up -d
+# 백엔드는 호스트에서 직접: source .venv/bin/activate && uvicorn app.main:app --reload
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-momentum}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-momentum}
+      POSTGRES_DB: ${POSTGRES_DB:-momentum}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-momentum}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    command: ["-c", "ssl=off"]
+
+volumes:
+  pgdata:
