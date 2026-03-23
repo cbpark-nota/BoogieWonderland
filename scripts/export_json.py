@@ -3,8 +3,13 @@
 ─────────────────────────────────────────────────────────
 전략별 ATR 승수를 변경하여 screener_v3 실행 → JSON 생성.
 시장 관망 여부와 무관하게 모든 전략의 결과를 제공한다.
+
+v3 최적 파라미터 적용:
+  ATR 승수: 공격적 1.5 / 균형형 2.0 / 보수적 2.5
+  유니버스: S&P500 전체 + KOSPI/KOSDAQ 상위 종목 동적 수집
 """
 import argparse
+import io
 import json
 import sys
 from datetime import datetime
@@ -12,16 +17,17 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import requests
 
 sys.path.insert(0, str(Path(__file__).parent / "screener"))
 
 import screener_v3 as sc
 
-# 4가지 전략 프리셋
+# 4가지 전략 프리셋 — v3 최적 ATR 승수
 STRATEGIES = {
-    "aggressive":   {"atr_mult": 2.0, "label": "공격적", "rebal_freq": "주간"},
-    "balanced":     {"atr_mult": 2.5, "label": "균형형", "rebal_freq": "격주"},
-    "conservative": {"atr_mult": 3.5, "label": "보수적", "rebal_freq": "월간"},
+    "aggressive":   {"atr_mult": 1.5, "label": "공격적", "rebal_freq": "주간"},
+    "balanced":     {"atr_mult": 2.0, "label": "균형형", "rebal_freq": "격주"},
+    "conservative": {"atr_mult": 2.5, "label": "보수적", "rebal_freq": "월간"},
     "adaptive":     {"atr_mult": None, "label": "적응형", "rebal_freq": "동적"},
 }
 
@@ -36,16 +42,64 @@ def safe_float(val, ndigits=2):
 
 
 def detect_adaptive_regime(mkt):
-    """시장 상태에서 적응형 국면 판별 (간이 버전)."""
+    """시장 상태에서 적응형 국면 판별 (간이 버전, v3 최적 ATR 승수)."""
     if mkt is None:
-        return "balanced", 2.5
+        return "balanced", 2.0
     gap = mkt["gap_pct"]
     if gap > 5:
-        return "aggressive", 2.0
+        return "aggressive", 1.5
     elif gap > 0:
-        return "balanced", 2.5
+        return "balanced", 2.0
     else:
-        return "conservative", 3.5
+        return "conservative", 2.5
+
+
+# ── 동적 유니버스 수집 ────────────────────────────────────────
+
+def fetch_sp500_tickers():
+    """S&P500 구성 종목 및 GICS 섹터 가져오기."""
+    try:
+        url = ("https://raw.githubusercontent.com/datasets/"
+               "s-and-p-500-companies/main/data/constituents.csv")
+        df = pd.read_csv(url)
+        tickers = df["Symbol"].str.replace(".", "-", regex=False).tolist()
+        sectors = dict(zip(
+            df["Symbol"].str.replace(".", "-", regex=False),
+            df["GICS Sector"],
+        ))
+        print(f"  S&P500 {len(tickers)}개 종목 수집 완료")
+        return tickers, sectors
+    except Exception as e:
+        print(f"  S&P500 수집 실패 ({e}), 기본 유니버스 사용")
+        return list(sc.US_UNIVERSE.keys()), dict(sc.US_UNIVERSE)
+
+
+def fetch_kr_tickers(kospi_n=200, kosdaq_n=150):
+    """KRX에서 KOSPI/KOSDAQ 상위 종목 가져오기."""
+    try:
+        url = ("http://kind.krx.co.kr/corpgeneral/corpList.do"
+               "?method=download&searchType=13")
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+        krx = pd.read_html(io.StringIO(r.text))[0]
+
+        kospi = krx[
+            (krx["시장구분"] == "유가") &
+            (krx["종목코드"].astype(str).str.match(r"^\d{6}$"))
+        ].copy()
+        kosdaq = krx[
+            (krx["시장구분"] == "코스닥") &
+            (krx["종목코드"].astype(str).str.match(r"^\d{6}$"))
+        ].copy()
+
+        kospi_tickers  = [f"{str(c).zfill(6)}.KS" for c in kospi["종목코드"].tolist()][:kospi_n]
+        kosdaq_tickers = [f"{str(c).zfill(6)}.KQ" for c in kosdaq["종목코드"].tolist()][:kosdaq_n]
+
+        all_kr = kospi_tickers + kosdaq_tickers
+        print(f"  KR KOSPI {len(kospi_tickers)}개 + KOSDAQ {len(kosdaq_tickers)}개 수집 완료")
+        return all_kr
+    except Exception as e:
+        print(f"  KR 종목 수집 실패 ({e}), 기본 유니버스 사용")
+        return list(sc.KR_UNIVERSE.keys())
 
 
 def run_screening_with_atr(all_data_ind, etf_data, atr_mult):
@@ -76,7 +130,7 @@ def build_results(passed, etf_data):
 
     results = []
     for rank, (ticker, row) in enumerate(top.iterrows(), 1):
-        market = "KR" if ticker.endswith(".KS") else "US"
+        market = "KR" if (ticker.endswith(".KS") or ticker.endswith(".KQ")) else "US"
         sector = sc.ALL_UNIVERSE.get(ticker, "Unknown")
         results.append({
             "rank": rank,
@@ -113,13 +167,23 @@ def export_all_strategies(output_dir: Path):
             "gap_pct": round(mkt["gap_pct"], 2),
         }
 
+    # 동적 유니버스 수집
+    print("유니버스 수집 중...")
+    us_tickers, us_sectors = fetch_sp500_tickers()
+    kr_tickers = fetch_kr_tickers()
+
+    # screener_v3의 유니버스/섹터 맵을 동적 수집 결과로 교체
+    sc.US_UNIVERSE = us_sectors                         # ticker → GICS Sector
+    sc.KR_UNIVERSE = {t: "Unknown" for t in kr_tickers}
+    sc.ALL_UNIVERSE = {**sc.US_UNIVERSE, **sc.KR_UNIVERSE}
+
     # 데이터 다운로드 (1회)
     print("데이터 다운로드 중...")
     us_data, kr_data, etf_data = {}, {}, {}
-    for i in range(0, len(sc.US_UNIVERSE), 30):
-        us_data.update(sc.download(list(sc.US_UNIVERSE.keys())[i:i + 30]))
-    for i in range(0, len(sc.KR_UNIVERSE), 30):
-        kr_data.update(sc.download(list(sc.KR_UNIVERSE.keys())[i:i + 30]))
+    for i in range(0, len(us_tickers), 50):
+        us_data.update(sc.download(us_tickers[i:i + 50]))
+    for i in range(0, len(kr_tickers), 30):
+        kr_data.update(sc.download(kr_tickers[i:i + 30]))
     etf_raw = sc.download(list(set(sc.SECTOR_ETF.values())))
     for t, df in etf_raw.items():
         etf_data[t] = sc.calc_indicators(df)

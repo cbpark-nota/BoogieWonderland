@@ -53,7 +53,14 @@ WEIGHTS      = dict(adx=0.4, ret3m=0.3, sector=0.2, vol_stab=0.1)
 TOP_N        = 10
 # 포지션 사이징 방식: "equal"(동일비중) | "score"(점수 비례) | "score_capped"(점수 비례+상한)
 SIZING_MODE  = "score_capped"
-MAX_WEIGHT   = 0.20   # 단일 종목 최대 비중 (score_capped 모드)
+MAX_WEIGHT   = 0.10   # 단일 종목 최대 비중 (score_capped 모드) — v3 최적: 20% → 10%
+
+# ── 스크리닝 임계값 (v3 최적 파라미터) ────────────────────────
+ADX_THRESH   = 20     # v3 최적: 25 → 20
+RSI_LO       = 50
+RSI_HI       = 77     # v3 최적: 75 → 77
+HH_HL_MIN    = 2      # v3 최적: 3 → 2
+PRICE_52W    = 0.75   # v3 최적: 80% → 75%
 
 
 # ── 다운로드 ──────────────────────────────────────────────────
@@ -136,7 +143,7 @@ def screen(df):
     r63 = df.tail(63)
 
     adx = row.get("ADX", np.nan)
-    if pd.isna(adx) or adx < 25:
+    if pd.isna(adx) or adx < ADX_THRESH:
         return False, {}
 
     ma20, ma50, ma200 = row.get("MA20"), row.get("MA50"), row.get("MA200")
@@ -146,7 +153,7 @@ def screen(df):
         return False, {}
 
     rsi = row.get("RSI", np.nan)
-    if pd.isna(rsi) or not (50 <= rsi <= 75):
+    if pd.isna(rsi) or not (RSI_LO <= rsi <= RSI_HI):
         return False, {}
 
     vol60 = row.get("VolMA60", np.nan)
@@ -158,12 +165,12 @@ def screen(df):
     if (r5["Close"].pct_change().abs() > 0.10).any():
         return False, {}
 
-    if count_hh_hl_swing(r60) < 3:
+    if count_hh_hl_swing(r60) < HH_HL_MIN:
         return False, {}
 
     high52 = row.get("High52w", np.nan)
     if not pd.isna(high52) and high52 > 0:
-        if row["Close"] < high52 * 0.80:
+        if row["Close"] < high52 * PRICE_52W:
             return False, {}
 
     ret3m    = float(df["Close"].iloc[-1] / r63["Close"].iloc[0]) - 1 \
