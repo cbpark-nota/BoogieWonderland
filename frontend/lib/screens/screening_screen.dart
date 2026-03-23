@@ -171,13 +171,15 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Row(
               children: [
-                _infoChip('ATR ${sr.atrMult}'),
+                _infoChip('ATR ${sr.atrMult}',
+                    color: _chipColor(_selected)),
                 const SizedBox(width: 8),
-                _infoChip(sr.rebalFreq),
+                _infoChip(sr.rebalFreq,
+                    color: _chipColor(_selected)),
                 if (sr.currentRegime != null) ...[
                   const SizedBox(width: 8),
                   _infoChip('국면: ${sr.currentRegime}',
-                      color: Colors.purple.shade100),
+                      color: Colors.purple.shade600),
                 ],
               ],
             ),
@@ -196,7 +198,8 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
         color: color ?? Colors.grey.shade200,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(text, style: const TextStyle(fontSize: 11)),
+      child: Text(text,
+          style: const TextStyle(fontSize: 11, color: Colors.black)),
     );
   }
 

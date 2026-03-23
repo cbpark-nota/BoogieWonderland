@@ -43,11 +43,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return ListView(
       children: [
-        const SizedBox(height: 16),
-        const ListTile(
-          title: Text('설정',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-        ),
         const Divider(),
         SwitchListTile(
           title: const Text('푸시 알림'),

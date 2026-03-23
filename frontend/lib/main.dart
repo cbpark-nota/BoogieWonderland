@@ -83,9 +83,10 @@ class _MainNavigationState extends State<MainNavigation> {
                   builder: (ctx) => Scaffold(
                     appBar: AppBar(
                       leading: IconButton(
-                        icon: const Icon(Icons.arrow_back),
+                        icon: const Icon(Icons.arrow_back_ios),
                         onPressed: () => Navigator.pop(ctx),
                       ),
+                      title: const Text('설정'),
                     ),
                     body: const SettingsScreen(),
                   ),
