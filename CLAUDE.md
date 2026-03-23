@@ -43,6 +43,7 @@
 4. 모든 패키지 설치는 가상환경(Python: .venv, Flutter: fvm)에서 수행한다.
 5. 코드 실행 전 가상환경이 활성화되었는지 확인한다. (Python: `source .venv/bin/activate`, Flutter: `fvm flutter`)
 6. GitHub에서 PR 또는 커밋 메시지를 작성할 때는 반드시 한국어를 사용한다.
+7. 커밋 전 `README.md`에 업데이트할 내용이 있는지 확인하고, 필요시 README.md를 함께 업데이트하여 커밋에 포함한다.
 
 ## 코드 컨벤션
 - Python 3.12, 의존성 버전 고정
