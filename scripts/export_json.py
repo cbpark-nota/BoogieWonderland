@@ -23,13 +23,17 @@ sys.path.insert(0, str(Path(__file__).parent / "screener"))
 
 import screener_v3 as sc
 
-# 4가지 전략 프리셋 — v3 최적 ATR 승수
+# 4가지 전략 프리셋 — v3 최적 ATR 승수 + 전략별 종목 수
+# top_n: 공격적(15) > 균형형(10) > 보수적(7) — 위험선호도에 따라 포트폴리오 집중도 차별화
 STRATEGIES = {
-    "aggressive":   {"atr_mult": 1.5, "label": "공격적", "rebal_freq": "주간"},
-    "balanced":     {"atr_mult": 2.0, "label": "균형형", "rebal_freq": "격주"},
-    "conservative": {"atr_mult": 2.5, "label": "보수적", "rebal_freq": "월간"},
-    "adaptive":     {"atr_mult": None, "label": "적응형", "rebal_freq": "동적"},
+    "aggressive":   {"atr_mult": 1.5, "label": "공격적", "rebal_freq": "주간",  "top_n": 15},
+    "balanced":     {"atr_mult": 2.0, "label": "균형형", "rebal_freq": "격주",  "top_n": 10},
+    "conservative": {"atr_mult": 2.5, "label": "보수적", "rebal_freq": "월간",  "top_n": 7},
+    "adaptive":     {"atr_mult": None, "label": "적응형", "rebal_freq": "동적", "top_n": None},
 }
+
+# 적응형 전략의 국면별 종목 수 매핑
+TOP_N_MAP = {"aggressive": 15, "balanced": 10, "conservative": 7}
 
 
 def safe_float(val, ndigits=2):
@@ -118,13 +122,14 @@ def run_screening_with_atr(all_data_ind, etf_data, atr_mult):
     return passed
 
 
-def build_results(passed, etf_data):
+def build_results(passed, etf_data, top_n=None):
     """통과 종목을 랭킹하고 결과 리스트 생성."""
     if not passed:
         return []
 
     ranked = sc.rank_stocks(passed, etf_data)
-    top = ranked.head(sc.TOP_N).copy()
+    n = top_n if top_n is not None else sc.TOP_N
+    top = ranked.head(n).copy()
     weights = sc.calc_position_weights(top["score"], sc.SIZING_MODE, sc.MAX_WEIGHT)
     top["weight"] = weights
 
@@ -203,15 +208,17 @@ def export_all_strategies(output_dir: Path):
     strategies_output = {}
     for key, preset in STRATEGIES.items():
         atr_mult = preset["atr_mult"] if preset["atr_mult"] is not None else adaptive_atr
-        print(f"  {preset['label']} (ATR={atr_mult}) 스크리닝 중...")
+        top_n = preset["top_n"] if preset["top_n"] is not None else TOP_N_MAP.get(adaptive_regime, sc.TOP_N)
+        print(f"  {preset['label']} (ATR={atr_mult}, TOP={top_n}) 스크리닝 중...")
         passed = run_screening_with_atr(all_data_ind, etf_data, atr_mult)
-        results = build_results(passed, etf_data)
+        results = build_results(passed, etf_data, top_n)
 
         strategy_info = {
             "key": key,
             "label": preset["label"],
             "atr_mult": atr_mult,
             "rebal_freq": preset["rebal_freq"],
+            "top_n": top_n,
             "total_screened": len(all_data),
             "total_passed": len(passed),
             "results": results,
@@ -250,12 +257,12 @@ def export_all_strategies(output_dir: Path):
     with open(full_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
-    total_passed = sum(s["total_passed"] for s in strategies_output.values())
     print(f"\n완료: {full_path}")
-    print(f"  공격적: {strategies_output['aggressive']['total_passed']}개 통과")
-    print(f"  균형형: {strategies_output['balanced']['total_passed']}개 통과")
-    print(f"  보수적: {strategies_output['conservative']['total_passed']}개 통과")
-    print(f"  적응형: {strategies_output['adaptive']['total_passed']}개 통과 "
+    for k in ("aggressive", "balanced", "conservative"):
+        s = strategies_output[k]
+        print(f"  {s['label']}: {len(s['results'])}종목 선정 / {s['total_passed']}개 통과")
+    s = strategies_output["adaptive"]
+    print(f"  {s['label']}: {len(s['results'])}종목 선정 / {s['total_passed']}개 통과 "
           f"(현재 국면: {STRATEGIES[adaptive_regime]['label']})")
 
 

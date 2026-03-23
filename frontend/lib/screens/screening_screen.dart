@@ -152,6 +152,7 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
     if (run.results.isEmpty) return _buildEmpty();
 
     return ListView(
+      key: ValueKey(_selected.key),
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
