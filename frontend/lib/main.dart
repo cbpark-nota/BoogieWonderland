@@ -80,7 +80,15 @@ class _MainNavigationState extends State<MainNavigation> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const Scaffold(body: SettingsScreen()),
+                  builder: (ctx) => Scaffold(
+                    appBar: AppBar(
+                      leading: IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ),
+                    body: const SettingsScreen(),
+                  ),
                 ),
               );
             },
