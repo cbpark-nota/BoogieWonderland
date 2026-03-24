@@ -51,9 +51,18 @@ class StockCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(result.score.toStringAsFixed(3),
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 15)),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Score',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey)),
+                        const SizedBox(width: 4),
+                        Text(result.score.toStringAsFixed(3),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 15)),
+                      ],
+                    ),
                     Text('${result.weightPct.toStringAsFixed(1)}%',
                         style: const TextStyle(
                             fontSize: 12, color: Colors.blue)),
