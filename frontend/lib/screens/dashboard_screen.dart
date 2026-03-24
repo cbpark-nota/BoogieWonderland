@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/screening_provider.dart';
 import '../providers/market_provider.dart';
 import '../widgets/market_status_banner.dart';
+import '../widgets/btc_signal_widget.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -35,6 +36,19 @@ class DashboardScreen extends ConsumerWidget {
             },
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, s) => Text('Error: $e'),
+          ),
+
+          const SizedBox(height: 12),
+
+          // BTC V10 시그널
+          screeningAsync.when(
+            data: (run) {
+              final sig = run?.btcSignal;
+              if (sig == null) return const SizedBox.shrink();
+              return BtcSignalWidget(signal: sig);
+            },
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
           ),
 
           const SizedBox(height: 16),

@@ -20,6 +20,7 @@ import pandas as pd
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent / "screener"))
+sys.path.insert(0, str(Path(__file__).parent / "crypto"))
 
 import screener_v3 as sc
 
@@ -155,6 +156,149 @@ def build_results(passed, etf_data, top_n=None):
     return results
 
 
+def _infer_v10_reason(df: pd.DataFrame, entry_idx: int) -> str:
+    """V10 진입 시점의 신호 종류 추정"""
+    if entry_idx < 1:
+        return "V10 진입 조건 충족"
+
+    row  = df.iloc[entry_idx]
+    prev = df.iloc[entry_idx - 1]
+
+    ma50   = row.get("ma50", float("nan"))
+    ma200  = row.get("ma200", float("nan"))
+    adx    = row.get("adx", 0.0)
+    rsi    = row.get("rsi14", float("nan"))
+    mom    = row.get("sq_mom", float("nan"))
+    dm     = row.get("sq_mom_delta", float("nan"))
+    rel    = bool(row.get("sq_release", False))
+    sq_on  = bool(row.get("sq_on", False))
+    vd     = row.get("vwap_dev", float("nan"))
+    bb_up  = row.get("bb_upper", float("nan"))
+    ema20  = row.get("ema20", float("nan"))
+    ema50v = row.get("ema50", float("nan"))
+    wslope = row.get("weekly_slope", 0.0)
+    rpos   = row.get("range_pos", float("nan"))
+    close  = row.get("close", float("nan"))
+
+    mom_series = df["sq_mom"].fillna(0)
+    mom_std = float(mom_series.iloc[max(0, entry_idx - 60):entry_idx].std())
+
+    ema_cross = (ema20 > ema50v) and (prev.get("ema20", float("nan")) <= prev.get("ema50", float("nan")))
+    w_up = wslope > 0.001
+
+    # 레짐
+    if ma50 > ma200 and close > ma50 and adx > 13:
+        regime = "bull"
+    elif adx < 13:
+        regime = "sideways"
+    else:
+        regime = "neutral"
+
+    if regime == "bull":
+        if rel and mom > 0 and dm > 0:
+            return "Squeeze Release — 스퀴즈 해제 + 모멘텀 상승"
+        if sq_on and mom_std > 0 and mom > 0.38 * mom_std and dm > 0 and rsi < 70:
+            return "Squeeze 조기진입 — Squeeze ON + 강한 모멘텀"
+        if ema_cross and adx > 13:
+            return "EMA 골든크로스 — EMA20 > EMA50 돌파"
+        if rsi < 49 and w_up and adx > 13:
+            return f"RSI 눌림목 — RSI {rsi:.0f}, 상승추세 포착"
+        if not pd.isna(vd) and vd < -0.016:
+            return f"VWAP 이탈 회귀 — VWAP 대비 {vd * 100:.1f}% 하락"
+        if not pd.isna(bb_up) and prev.get("close", bb_up) <= prev.get("bb_upper", bb_up) and close > bb_up:
+            return "BB 상단 돌파 — 볼린저 밴드 브레이크아웃"
+    elif regime == "sideways":
+        if not pd.isna(rpos) and rpos < 0.30 and rsi < 50:
+            return f"레인지 하단 매수 — 레인지 포지션 {rpos * 100:.0f}%"
+    elif regime == "neutral":
+        if ema_cross and adx > 13:
+            return "Neutral EMA 크로스 — 추세 전환 감지"
+
+    return "V10 진입 조건 충족"
+
+
+def calculate_btc_signal() -> dict:
+    """
+    BTC V10 4시간봉 현재 시그널 계산
+    Binance API 또는 yfinance에서 최근 데이터를 가져와 V10 전략 실행 후 현재 포지션 반환.
+    """
+    try:
+        from btc_daytrading_4h import get_btc_data_4h, add_indicators, strategy_v10
+    except ImportError as e:
+        return {
+            "signal": "hold",
+            "price": None,
+            "reason": f"모듈 로드 실패: {e}",
+            "strategy": "V10",
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+        }
+
+    try:
+        print("BTC V10 시그널 계산 중...")
+        # MA200(200봉) + 웜업(210봉) + 여유 확보 → 최소 500봉
+        # 2024-01-01 이후 데이터는 약 1100봉 이상 (충분)
+        df = get_btc_data_4h("2024-01-01")
+        df = add_indicators(df)
+        df = strategy_v10(df.copy())
+
+        last_pos   = int(df["position"].iloc[-1])
+        last_close = float(df["close"].iloc[-1])
+        last_time  = df.index[-1].isoformat()
+
+        # 현재 레짐 계산
+        row = df.iloc[-1]
+        ma50  = row.get("ma50", float("nan"))
+        ma200 = row.get("ma200", float("nan"))
+        adx   = row.get("adx", 0.0)
+        close = last_close
+        if ma50 > ma200 and close > ma50 and adx > 13:
+            regime = "bull"
+        elif adx < 13:
+            regime = "sideways"
+        else:
+            regime = "neutral"
+
+        if last_pos == 1:
+            # 진입 시점 역추적
+            pos_series = df["position"]
+            entry_idx = None
+            for i in range(len(pos_series) - 1, 0, -1):
+                if pos_series.iloc[i] == 1 and pos_series.iloc[i - 1] == 0:
+                    entry_idx = i
+                    break
+
+            reason = _infer_v10_reason(df, entry_idx) if entry_idx is not None else "포지션 보유 중"
+            print(f"  → 매수 신호 (현재가 ${last_close:,.0f}, 레짐: {regime})")
+            return {
+                "signal": "buy",
+                "price": round(last_close, 2),
+                "reason": reason,
+                "regime": regime,
+                "strategy": "V10",
+                "timestamp": last_time,
+            }
+        else:
+            print(f"  → 관망 (현재가 ${last_close:,.0f}, 레짐: {regime})")
+            return {
+                "signal": "hold",
+                "price": round(last_close, 2),
+                "reason": "매수 조건 미충족 — 현금 보유",
+                "regime": regime,
+                "strategy": "V10",
+                "timestamp": last_time,
+            }
+
+    except Exception as e:
+        print(f"  BTC 시그널 계산 실패: {e}")
+        return {
+            "signal": "hold",
+            "price": None,
+            "reason": f"시그널 계산 실패: {e}",
+            "strategy": "V10",
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+        }
+
+
 def export_all_strategies(output_dir: Path):
     """4전략 스크리닝 실행 후 단일 JSON으로 저장."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -231,10 +375,14 @@ def export_all_strategies(output_dir: Path):
 
         strategies_output[key] = strategy_info
 
+    # BTC V10 시그널 계산
+    btc_signal = calculate_btc_signal()
+
     output = {
         "run_id": int(now.strftime("%Y%m%d")),
         "run_date": now.isoformat(timespec="seconds"),
         "market_status": market_status,
+        "btc_signal": btc_signal,
         "strategies": strategies_output,
     }
 
@@ -244,6 +392,7 @@ def export_all_strategies(output_dir: Path):
         "run_id": output["run_id"],
         "run_date": output["run_date"],
         "market_status": market_status,
+        "btc_signal": btc_signal,
         "total_screened": balanced["total_screened"],
         "total_passed": balanced["total_passed"],
         "results": balanced["results"],

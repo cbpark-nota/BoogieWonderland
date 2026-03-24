@@ -50,6 +50,35 @@ class ScreeningResult {
   String get flag => market == 'KR' ? '🇰🇷' : '🇺🇸';
 }
 
+class BtcSignal {
+  final String signal; // "buy" | "hold"
+  final double? price;
+  final String reason;
+  final String strategy;
+  final String timestamp;
+  final String? regime;
+
+  BtcSignal({
+    required this.signal,
+    this.price,
+    required this.reason,
+    required this.strategy,
+    required this.timestamp,
+    this.regime,
+  });
+
+  factory BtcSignal.fromJson(Map<String, dynamic> json) {
+    return BtcSignal(
+      signal: json['signal'] ?? 'hold',
+      price: (json['price'] as num?)?.toDouble(),
+      reason: json['reason'] ?? '',
+      strategy: json['strategy'] ?? 'V10',
+      timestamp: json['timestamp'] ?? '',
+      regime: json['regime'],
+    );
+  }
+}
+
 class MarketStatus {
   final double spyPrice;
   final bool isGoldenCross;
@@ -83,6 +112,7 @@ class ScreeningRun {
   final int runId;
   final String runDate;
   final MarketStatus? marketStatus;
+  final BtcSignal? btcSignal;
   final int totalScreened;
   final int totalPassed;
   final List<ScreeningResult> results;
@@ -91,6 +121,7 @@ class ScreeningRun {
     required this.runId,
     required this.runDate,
     this.marketStatus,
+    this.btcSignal,
     required this.totalScreened,
     required this.totalPassed,
     required this.results,
@@ -102,6 +133,9 @@ class ScreeningRun {
       runDate: json['run_date'],
       marketStatus: json['market_status'] != null
           ? MarketStatus.fromJson(json['market_status'])
+          : null,
+      btcSignal: json['btc_signal'] != null
+          ? BtcSignal.fromJson(json['btc_signal'] as Map<String, dynamic>)
           : null,
       totalScreened: json['total_screened'] ?? 0,
       totalPassed: json['total_passed'] ?? 0,
