@@ -41,6 +41,9 @@ _ICB_TO_GICS = {
 
 # 4가지 전략 프리셋 — v3 최적 ATR 승수 + 전략별 종목 수
 # top_n: 공격적(15) > 균형형(10) > 보수적(7) — 위험선호도에 따라 포트폴리오 집중도 차별화
+# 한국 종목명 캐시 (ticker → 회사명)
+KR_NAMES: dict[str, str] = {}
+
 STRATEGIES = {
     "aggressive":   {"atr_mult": 1.5, "label": "공격적", "rebal_freq": "주간",  "top_n": 15},
     "balanced":     {"atr_mult": 2.0, "label": "균형형", "rebal_freq": "격주",  "top_n": 10},
@@ -139,9 +142,10 @@ def _fetch_kr_from_naver(kospi_n: int, kosdaq_n: int) -> list[str]:
     import re
     from bs4 import BeautifulSoup
 
-    def _scrape_market(sosok: int, n: int, suffix: str) -> list[str]:
+    def _scrape_market(sosok: int, n: int, suffix: str) -> tuple[list[str], dict[str, str]]:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
         tickers: list[str] = []
+        names: dict[str, str] = {}
         page = 1
         while len(tickers) < n:
             url = (
@@ -159,16 +163,19 @@ def _fetch_kr_from_naver(kospi_n: int, kosdaq_n: int) -> list[str]:
                     ticker = f"{code}{suffix}"
                     if re.match(r"^\d{6}$", code) and ticker not in tickers:
                         tickers.append(ticker)
+                        names[ticker] = link.text.strip()
                 page += 1
             except Exception:
                 break
-        return tickers[:n]
+        return tickers[:n], {t: names[t] for t in tickers[:n] if t in names}
 
     try:
-        kospi  = _scrape_market(0, kospi_n, ".KS")
-        kosdaq = _scrape_market(1, kosdaq_n, ".KQ")
-        all_kr = kospi + kosdaq
-        print(f"  KR (네이버 fallback) KOSPI {len(kospi)}개 + KOSDAQ {len(kosdaq)}개 수집 완료")
+        kospi_tickers, kospi_names   = _scrape_market(0, kospi_n, ".KS")
+        kosdaq_tickers, kosdaq_names = _scrape_market(1, kosdaq_n, ".KQ")
+        all_kr = kospi_tickers + kosdaq_tickers
+        all_names = {**kospi_names, **kosdaq_names}
+        print(f"  KR (네이버 fallback) KOSPI {len(kospi_tickers)}개 + KOSDAQ {len(kosdaq_tickers)}개 수집 완료")
+        KR_NAMES.update(all_names)
         return all_kr
     except Exception as e:
         print(f"  KR 종목 수집 최종 실패 ({e}), 기본 유니버스 사용")
@@ -200,6 +207,15 @@ def fetch_kr_tickers(kospi_n=200, kosdaq_n=150):
 
         kospi_tickers  = [f"{str(c).zfill(6)}.KS" for c in kospi["종목코드"].tolist()][:kospi_n]
         kosdaq_tickers = [f"{str(c).zfill(6)}.KQ" for c in kosdaq["종목코드"].tolist()][:kosdaq_n]
+
+        # 종목명 수집
+        name_col = "회사명" if "회사명" in krx.columns else krx.columns[0]
+        for _, row in kospi.iterrows():
+            ticker = f"{str(row['종목코드']).zfill(6)}.KS"
+            KR_NAMES[ticker] = str(row[name_col])
+        for _, row in kosdaq.iterrows():
+            ticker = f"{str(row['종목코드']).zfill(6)}.KQ"
+            KR_NAMES[ticker] = str(row[name_col])
 
         all_kr = kospi_tickers + kosdaq_tickers
         print(f"  KR KOSPI {len(kospi_tickers)}개 + KOSDAQ {len(kosdaq_tickers)}개 수집 완료")
@@ -240,10 +256,12 @@ def build_results(passed, etf_data, top_n=None):
     for rank, (ticker, row) in enumerate(top.iterrows(), 1):
         market = "KR" if (ticker.endswith(".KS") or ticker.endswith(".KQ")) else "US"
         sector = sc.ALL_UNIVERSE.get(ticker, "Unknown")
+        name = KR_NAMES.get(ticker) if market == "KR" else None
         results.append({
             "rank": rank,
             "ticker": ticker,
             "market": market,
+            "name": name,
             "sector": sector,
             "score": safe_float(row["score"], 4),
             "weight_pct": safe_float(row["weight"] * 100, 1),

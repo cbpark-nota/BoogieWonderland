@@ -2,6 +2,7 @@ class ScreeningResult {
   final int rank;
   final String ticker;
   final String market;
+  final String? name;
   final String sector;
   final double score;
   final double weightPct;
@@ -17,6 +18,7 @@ class ScreeningResult {
     required this.rank,
     required this.ticker,
     required this.market,
+    this.name,
     required this.sector,
     required this.score,
     required this.weightPct,
@@ -34,6 +36,7 @@ class ScreeningResult {
       rank: json['rank'],
       ticker: json['ticker'],
       market: json['market'] ?? 'US',
+      name: json['name'] as String?,
       sector: json['sector'] ?? '',
       score: (json['score'] as num).toDouble(),
       weightPct: (json['weight_pct'] as num).toDouble(),
@@ -48,6 +51,8 @@ class ScreeningResult {
   }
 
   String get flag => market == 'KR' ? '🇰🇷' : '🇺🇸';
+  String get displayName => (market == 'KR' && name != null) ? name! : ticker;
+  String get currencySymbol => market == 'KR' ? '₩' : '\$';
 }
 
 class BtcSignal {

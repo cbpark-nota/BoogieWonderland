@@ -33,17 +33,21 @@ class StockCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                // 티커 + 섹터
+                // 종목명/티커 + 섹터
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${result.flag} ${result.ticker}',
+                      Text('${result.flag} ${result.displayName}',
                           style: const TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 15)),
-                      Text(result.sector,
-                          style: const TextStyle(
-                              fontSize: 11, color: Colors.grey)),
+                      Text(
+                        result.market == 'KR'
+                            ? '${result.ticker} · ${result.sector}'
+                            : result.sector,
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.grey),
+                      ),
                     ],
                   ),
                 ),
@@ -74,7 +78,7 @@ class StockCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _metric('Price', '\$${result.price.toStringAsFixed(2)}'),
+                _metric('Price', '${result.currencySymbol}${result.price.toStringAsFixed(result.market == 'KR' ? 0 : 2)}'),
                 _metric('ADX', result.adx?.toStringAsFixed(1) ?? '-'),
                 _metric('RSI', result.rsi?.toStringAsFixed(1) ?? '-'),
                 _metric('3M',
@@ -83,7 +87,7 @@ class StockCard extends StatelessWidget {
                         : '-'),
                 _metric('Stop',
                     result.stopPrice != null
-                        ? '\$${result.stopPrice!.toStringAsFixed(2)}'
+                        ? '${result.currencySymbol}${result.stopPrice!.toStringAsFixed(result.market == 'KR' ? 0 : 2)}'
                         : '-'),
               ],
             ),
