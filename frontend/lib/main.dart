@@ -59,6 +59,7 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   final _screens = const [
     DashboardScreen(),
@@ -66,13 +67,29 @@ class _MainNavigationState extends State<MainNavigation> {
     PortfolioScreen(),
   ];
 
-  final _titles = const ['Dashboard', 'Screening', 'Portfolio'];
+  static const _menuItems = [
+    (label: 'Dashboard', icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard),
+    (label: 'Screening', icon: Icons.search_outlined, selectedIcon: Icons.search),
+    (label: 'Portfolio', icon: Icons.account_balance_wallet_outlined, selectedIcon: Icons.account_balance_wallet),
+  ];
+
+  void _selectMenu(int index) {
+    setState(() => _currentIndex = index);
+    _scaffoldKey.currentState?.closeDrawer();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
-        title: Text(_titles[_currentIndex]),
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          tooltip: '메뉴 열기',
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+        ),
+        title: Text(_menuItems[_currentIndex].label),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -96,28 +113,45 @@ class _MainNavigationState extends State<MainNavigation> {
           ),
         ],
       ),
-      body: _screens[_currentIndex],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (i) => setState(() => _currentIndex = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.search_outlined),
-            selectedIcon: Icon(Icons.search),
-            label: 'Screening',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            selectedIcon: Icon(Icons.account_balance_wallet),
-            label: 'Portfolio',
-          ),
-        ],
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(color: colorScheme.primary),
+              child: Text(
+                'Momentum Screener',
+                style: TextStyle(
+                  color: colorScheme.onPrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            ..._menuItems.asMap().entries.map((entry) {
+              final i = entry.key;
+              final item = entry.value;
+              final isSelected = _currentIndex == i;
+              return ListTile(
+                leading: Icon(
+                  isSelected ? item.selectedIcon : item.icon,
+                  color: isSelected ? colorScheme.primary : null,
+                ),
+                title: Text(
+                  item.label,
+                  style: TextStyle(
+                    color: isSelected ? colorScheme.primary : null,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+                selected: isSelected,
+                onTap: () => _selectMenu(i),
+              );
+            }),
+          ],
+        ),
       ),
+      body: _screens[_currentIndex],
     );
   }
 }
