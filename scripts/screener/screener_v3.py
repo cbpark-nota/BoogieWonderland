@@ -183,6 +183,11 @@ def screen(df):
 
     # 현재가 대비 스톱 거리 (%)
     cur_price = float(df["Close"].iloc[-1])
+
+    # 현재가가 이미 ATR 스톱 이하인 종목은 제외 (스톱 트리거 상태)
+    if not pd.isna(stop_price) and cur_price <= stop_price:
+        return False, {}
+
     stop_dist = (stop_price - cur_price) / cur_price if not pd.isna(stop_price) else np.nan
 
     return True, {

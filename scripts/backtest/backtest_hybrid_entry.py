@@ -396,6 +396,11 @@ def _common_filters(hist: pd.DataFrame, row: pd.Series, adx: float,
     peak20     = float(hist["High"].tail(20).max())
     atr_stop   = peak20 - atr_val * atr_mult if not pd.isna(atr_val) else np.nan
 
+    # 현재가가 이미 ATR 스톱 이하인 종목은 제외 (스톱 트리거 상태)
+    cur_price = float(hist["Close"].iloc[-1])
+    if not pd.isna(atr_stop) and cur_price <= atr_stop:
+        return False, {}
+
     return True, {
         "ADX":      float(adx),
         "RSI":      float(rsi),

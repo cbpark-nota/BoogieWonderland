@@ -157,6 +157,10 @@ def screen(df, as_of):
     peak20   = float(hist["High"].tail(20).max())
     atr_stop = peak20 - atr_val * ATR_MULT if not pd.isna(atr_val) else np.nan
 
+    # 현재가가 이미 ATR 스톱 이하인 종목은 제외 (스톱 트리거 상태)
+    if not pd.isna(atr_stop) and float(hist["Close"].iloc[-1]) <= atr_stop:
+        return False, {}
+
     return True, {
         "ADX": float(adx), "RSI": float(rsi),
         "ret3m": ret3m, "vol_stab": vol_stab,
