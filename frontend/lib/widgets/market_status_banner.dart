@@ -39,8 +39,8 @@ class MarketStatusBanner extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(child: _metric('SPY', '\$${status.spyPrice.toStringAsFixed(1)}')),
-              Expanded(child: _metric('50MA', '\$${status.ma50.toStringAsFixed(1)}')),
-              Expanded(child: _metric('200MA', '\$${status.ma200.toStringAsFixed(1)}')),
+              Expanded(child: _metric('20MA', '\$${status.ma20.toStringAsFixed(1)}')),
+              Expanded(child: _metric('60MA', '\$${status.ma60.toStringAsFixed(1)}')),
               Expanded(child: _metric('Gap', '${status.gapPct.toStringAsFixed(1)}%')),
             ],
           ),

@@ -82,16 +82,16 @@ class BtcSignal {
 class MarketStatus {
   final double spyPrice;
   final bool isGoldenCross;
-  final double ma50;
-  final double ma200;
+  final double ma20;
+  final double ma60;
   final double gapPct;
   final String? nextRebalance;
 
   MarketStatus({
     required this.spyPrice,
     required this.isGoldenCross,
-    required this.ma50,
-    required this.ma200,
+    required this.ma20,
+    required this.ma60,
     required this.gapPct,
     this.nextRebalance,
   });
@@ -100,8 +100,8 @@ class MarketStatus {
     return MarketStatus(
       spyPrice: (json['spy_price'] as num).toDouble(),
       isGoldenCross: json['is_golden_cross'] ?? false,
-      ma50: (json['ma50'] as num).toDouble(),
-      ma200: (json['ma200'] as num).toDouble(),
+      ma20: (json['ma20'] as num).toDouble(),
+      ma60: (json['ma60'] as num).toDouble(),
       gapPct: (json['gap_pct'] as num).toDouble(),
       nextRebalance: json['next_rebalance'],
     );

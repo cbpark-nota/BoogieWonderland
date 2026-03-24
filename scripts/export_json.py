@@ -413,8 +413,8 @@ def export_all_strategies(output_dir: Path):
         market_status = {
             "spy_price": round(mkt["price"], 2),
             "is_golden_cross": mkt["is_golden"],
-            "ma50": round(mkt["ma50"], 2),
-            "ma200": round(mkt["ma200"], 2),
+            "ma20": round(mkt["ma20"], 2),
+            "ma60": round(mkt["ma60"], 2),
             "gap_pct": round(mkt["gap_pct"], 2),
         }
 

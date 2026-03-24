@@ -265,12 +265,12 @@ def check_market():
     try:
         spy   = yf.download("SPY", period="1y", auto_adjust=True, progress=False)
         close = spy["Close"].squeeze()
-        ma50  = float(close.rolling(50).mean().iloc[-1])
-        ma200 = float(close.rolling(200).mean().iloc[-1])
+        ma20  = float(close.rolling(20).mean().iloc[-1])
+        ma60  = float(close.rolling(60).mean().iloc[-1])
         price = float(close.iloc[-1])
-        gap   = (ma50 - ma200) / ma200 * 100
-        return {"price": price, "ma50": ma50, "ma200": ma200,
-                "gap_pct": gap, "is_golden": ma50 > ma200}
+        gap   = (ma20 - ma60) / ma60 * 100
+        return {"price": price, "ma20": ma20, "ma60": ma60,
+                "gap_pct": gap, "is_golden": ma20 > ma60}
     except Exception:
         return None
 
@@ -291,12 +291,12 @@ if __name__ == "__main__":
     if mkt:
         status = "골든크로스 ✅" if mkt["is_golden"] else "데드크로스 ⚠️"
         arrow  = "▲" if mkt["gap_pct"] >= 0 else "▼"
-        print(f"  SPY ${mkt['price']:.2f}  │  50MA ${mkt['ma50']:.2f}  │  "
-              f"200MA ${mkt['ma200']:.2f}  │  {arrow}{abs(mkt['gap_pct']):.2f}%  {status}")
+        print(f"  SPY ${mkt['price']:.2f}  │  20MA ${mkt['ma20']:.2f}  │  "
+              f"60MA ${mkt['ma60']:.2f}  │  {arrow}{abs(mkt['gap_pct']):.2f}%  {status}")
         if not mkt["is_golden"]:
             print()
             print("  ┌──────────────────────────────────────────────────┐")
-            print("  │  ⚠️  관망 권장: 50MA < 200MA 데드크로스 상태         │")
+            print("  │  ⚠️  관망 권장: 20MA < 60MA 데드크로스 상태          │")
             print("  │  신규 진입보다 현금 보유를 권장합니다.              │")
             print("  └──────────────────────────────────────────────────┘")
 
