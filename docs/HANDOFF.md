@@ -76,6 +76,14 @@ docker compose run collector python collect_daily.py all  # 수동 수집
 │   │   └── crontab                  # 수집 스케줄
 │   └── export_json.py               # 4전략 → JSON (서버리스용)
 │
+├── crypto/
+│   ├── collect_data.py              # BTC 온체인/시장 데이터 수집 (yfinance, blockchain.com, alternative.me)
+│   ├── backtest_btc.py              # BTC 장기 매매 알고리즘 v1~v5 백테스트
+│   ├── backtest_btc_daytrading.py   # BTC 데이 트레이딩 v1~v5 백테스트 (일봉)
+│   ├── btc_daytrading_v2.py         # BTC 데이 트레이딩 v1~v10 (일봉, 스퀴즈 모멘텀 기반)
+│   ├── btc_daytrading_4h.py         # BTC 데이 트레이딩 v1~v10 (4시간봉, Binance API)
+│   └── btc_signal_v10.py            # V10 알고리즘 독립 실행 시그널 체커
+│
 ├── backend/
 │   ├── app/main.py                  # FastAPI 엔트리포인트
 │   ├── app/config.py                # Pydantic Settings
@@ -148,6 +156,33 @@ Layer 3 (리스크): 즉시 보수적 전환
   주간 수익률 < -5% / 200MA 하회+RSI<40 / 변동성 상위10%+하락
 
 비대칭 전환: 다운그레이드 즉시, 업그레이드 1주 확인
+```
+
+---
+
+## 5-1. Crypto 모듈 (BTC 트레이딩)
+
+### 파일 구성
+
+| 파일 | 설명 |
+|---|---|
+| `crypto/collect_data.py` | BTC 온체인/시장 데이터 수집. yfinance(가격), blockchain.com(해시레이트·NVT), alternative.me(공포탐욕지수) API 통합 |
+| `crypto/backtest_btc.py` | BTC 장기 매매 알고리즘 v1~v5 백테스트 (일봉 기반, 다중 전략 비교) |
+| `crypto/backtest_btc_daytrading.py` | BTC 데이 트레이딩 v1~v5 백테스트 (일봉 기반, 단기 매매 로직) |
+| `crypto/btc_daytrading_v2.py` | BTC 데이 트레이딩 v1~v10 구현 (일봉). 스퀴즈 모멘텀(TTM Squeeze) 기반, v6~v10은 2021+ 데이터 최적화 |
+| `crypto/btc_daytrading_4h.py` | BTC 데이 트레이딩 v1~v10 구현 (4시간봉). Binance API로 OHLCV 수집, 전략별 백테스트 지원 |
+| `crypto/btc_signal_v10.py` | V10 알고리즘 독립 실행 시그널 체커. 현재 BTC 시장 상태를 분석해 매수/매도/홀드 신호 출력 |
+
+### 실행 명령어
+
+```bash
+source .venv/bin/activate
+python crypto/collect_data.py                    # BTC 데이터 수집
+python crypto/backtest_btc.py                    # BTC 장기 전략 v1~v5 백테스트
+python crypto/backtest_btc_daytrading.py         # BTC 데이 트레이딩 v1~v5 백테스트
+python crypto/btc_daytrading_v2.py               # BTC 데이 트레이딩 v1~v10 백테스트 (일봉)
+python crypto/btc_daytrading_4h.py               # BTC 데이 트레이딩 v1~v10 백테스트 (4h봉)
+python crypto/btc_signal_v10.py                  # 현재 BTC V10 시그널 확인
 ```
 
 ---
