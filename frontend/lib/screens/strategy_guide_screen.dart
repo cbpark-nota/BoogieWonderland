@@ -23,7 +23,7 @@ class StrategyGuideScreen extends StatelessWidget {
           entryConditions: _commonEntryConditions,
           stopLoss: 'ATR 기반 동적 (20d High − ATR × 1.5)',
           positionSizing: '복합점수 비례 배분, 최대 10%/종목',
-          backtestResult: 'CAGR +53.0% | MDD -8.5% | 샤프 3.10',
+          backtestResult: 'CAGR +89.6% | MDD -8.5% | 샤프 3.10',
         ),
         const SizedBox(height: 12),
         const _StrategyCard(
@@ -38,7 +38,7 @@ class StrategyGuideScreen extends StatelessWidget {
           entryConditions: _commonEntryConditions,
           stopLoss: 'ATR 기반 동적 (20d High − ATR × 2.0)',
           positionSizing: '복합점수 비례 배분, 최대 10%/종목',
-          backtestResult: 'CAGR +39.3% | MDD -10.4% | 샤프 3.33',
+          backtestResult: 'CAGR +49.0% | MDD -10.4% | 샤프 3.33',
         ),
         const SizedBox(height: 12),
         const _StrategyCard(
@@ -53,7 +53,7 @@ class StrategyGuideScreen extends StatelessWidget {
           entryConditions: _commonEntryConditions,
           stopLoss: 'ATR 기반 동적 (20d High − ATR × 2.5)',
           positionSizing: '복합점수 비례 배분, 최대 10%/종목',
-          backtestResult: 'CAGR +39.8% | MDD -3.9% | 샤프 4.54',
+          backtestResult: 'CAGR +38.5% | MDD -3.9% | 샤프 4.54',
         ),
         const SizedBox(height: 12),
         const _StrategyCard(
@@ -68,7 +68,7 @@ class StrategyGuideScreen extends StatelessWidget {
           entryConditions: _commonEntryConditions,
           stopLoss: '3계층 복합 판별로 국면별 자동 전환',
           positionSizing: '복합점수 비례 배분, 최대 10%/종목',
-          backtestResult: 'CAGR +44.0% | MDD -10.6% | 샤프 2.65',
+          backtestResult: 'CAGR 국면별 동적 | MDD -10.6% | 샤프 2.65',
           extraInfo: 'Bull / Bear / Neutral 국면을 자동 감지하여\nATR 승수·리밸런싱 주기·TOP N을 동적으로 전환합니다.',
         ),
         const SizedBox(height: 24),
@@ -83,6 +83,10 @@ class StrategyGuideScreen extends StatelessWidget {
         _SectionHeader(title: '스코어 산식', colorScheme: colorScheme),
         const SizedBox(height: 12),
         const _ScoreFormulaCard(),
+        const SizedBox(height: 24),
+        _SectionHeader(title: '용어 설명', colorScheme: colorScheme),
+        const SizedBox(height: 12),
+        const _GlossaryCard(),
         const SizedBox(height: 32),
       ],
     );
@@ -474,6 +478,143 @@ class _BulletRow extends StatelessWidget {
             child: Text(text, style: Theme.of(context).textTheme.bodySmall),
           ),
         ],
+      ),
+    );
+  }
+}
+
+const _glossaryTerms = [
+  (
+    'ATR',
+    'Average True Range',
+    '일정 기간의 평균 변동폭. 스톱로스 거리를 동적으로 설정하는 데 사용',
+  ),
+  (
+    'CAGR',
+    'Compound Annual Growth Rate',
+    '연평균 복합 성장률. 투자 수익률을 연간 기준으로 환산한 지표',
+  ),
+  (
+    'MDD',
+    'Maximum Drawdown',
+    '최대 낙폭. 고점 대비 최대 하락 비율로 위험도를 나타냄',
+  ),
+  (
+    '샤프지수',
+    'Sharpe Ratio',
+    '위험 대비 수익률. 높을수록 위험 대비 수익이 좋음',
+  ),
+  (
+    'ADX',
+    'Average Directional Index',
+    '추세 강도 지표. 25 이상이면 강한 추세',
+  ),
+  (
+    'RSI',
+    'Relative Strength Index',
+    '상대강도지수. 과매수(>70) / 과매도(<30) 판단에 사용',
+  ),
+  (
+    '골든크로스',
+    'Golden Cross',
+    '단기 이동평균이 장기 이동평균을 상향 돌파하는 것',
+  ),
+  (
+    '데드크로스',
+    'Dead Cross',
+    '단기 이동평균이 장기 이동평균을 하향 돌파하는 것',
+  ),
+  (
+    '볼린저 밴드',
+    'Bollinger Bands',
+    '이동평균 ± 표준편차로 구성된 밴드. 가격 변동성을 시각화',
+  ),
+  (
+    '스퀴즈',
+    'Squeeze',
+    '볼린저 밴드가 켈트너 채널 안으로 수축한 상태. 변동성 확장 직전 신호',
+  ),
+  (
+    'EMA',
+    'Exponential Moving Average',
+    '지수이동평균. 최근 데이터에 더 높은 가중치 부여',
+  ),
+  (
+    '레짐',
+    'Regime',
+    '시장 국면. Bull(상승) / Bear(하락) / Neutral(중립)으로 분류',
+  ),
+];
+
+class _GlossaryCard extends StatelessWidget {
+  const _GlossaryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _glossaryTerms.asMap().entries.map((entry) {
+            final i = entry.key;
+            final term = entry.value;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (i != 0) const Divider(height: 16, thickness: 0.5),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: colorScheme.primary.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Text(
+                        term.$1,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            term.$2,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            term.$3,
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          }).toList(),
+        ),
       ),
     );
   }
