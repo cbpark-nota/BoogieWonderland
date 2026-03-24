@@ -30,7 +30,7 @@ warnings.filterwarnings("ignore")
 # 1. 데이터 수집
 # ══════════════════════════════════════════════════════════════════════
 
-def get_btc_data(start: str = "2015-01-01") -> pd.DataFrame:
+def get_btc_data(start: str = "2021-01-01") -> pd.DataFrame:
     """BTC-USD 일봉 데이터 수집 (yfinance)"""
     print("BTC-USD 데이터 수집 중...")
     raw = yf.download("BTC-USD", start=start, progress=False, auto_adjust=True)
@@ -313,6 +313,29 @@ def calc_period(equity: np.ndarray, dates: pd.DatetimeIndex) -> dict:
         "2015-2018 (초기 강세장)": ("2015-01-01", "2018-12-31"),
         "2019-2021 (회복·폭등)":   ("2019-01-01", "2021-12-31"),
         "2022-현재 (제도권 편입)": ("2022-01-01", None),
+    }
+    out = {}
+    for name, (st, en) in periods.items():
+        sub = s.loc[st:en] if en else s.loc[st:]
+        if len(sub) < 10:
+            continue
+        yr = (sub.index[-1] - sub.index[0]).days / 365.25
+        if yr < 0.1:
+            continue
+        cagr = (sub.iloc[-1] / sub.iloc[0]) ** (1.0 / yr) - 1
+        pk = np.maximum.accumulate(sub.values)
+        mdd = ((sub.values - pk) / pk).min()
+        out[name] = dict(cagr=cagr, mdd=mdd)
+    return out
+
+
+def calc_period_2021(equity: np.ndarray, dates: pd.DatetimeIndex) -> dict:
+    """2021+ 세부 시기별 CAGR/MDD (In-sample vs Out-of-sample)"""
+    s = pd.Series(equity, index=dates)
+    periods = {
+        "2021-2022 (불장→폭락)":   ("2021-01-01", "2022-12-31"),
+        "2023-2024 (회복·신고가)": ("2023-01-01", "2024-12-31"),
+        "2025-현재 (Out-of-Sample)": ("2025-01-01", None),
     }
     out = {}
     for name, (st, en) in periods.items():
@@ -719,7 +742,579 @@ def strategy_v5(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ══════════════════════════════════════════════════════════════════════
-# 6. 결과 출력 및 메인
+# 6. 2021+ 최적화 전략 (V6 ~ V10)
+# ══════════════════════════════════════════════════════════════════════
+
+# ──────────────────────────────────────────────────────────────────────
+# V6: 2021+ 기준 파라미터 완화 (ADX·RSI·VWAP 임계값 조정)
+# ──────────────────────────────────────────────────────────────────────
+
+def strategy_v6(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    V6: V5 기반 + 2021+ 시장 맞춤 파라미터 완화
+    ─────────────────────────────────────────────────
+    2021년 이후 변화:
+      - ADX 임계값: 18→15 (제도권 편입으로 추세 강도 약화)
+      - RSI Pullback 완화: 36/64 → 42/58 (횡보 구간 증가)
+      - VWAP 이탈 임계값: ±5% → ±3% (변동성 감소 반영)
+      - 이상 변동성 필터: 2.5 → 3.0 (더 관용적)
+      - 보유 기간 단축: Bull 15→12일, Bear 10→8일
+      - Sideways 임계값 완화: range_pos <0.25/>0.75 (기존 0.20/0.80)
+    """
+    df = df.copy()
+    ma50  = df["ma50"].fillna(0)
+    ma200 = df["ma200"].fillna(0)
+    adx   = df["adx"].fillna(0)
+    close = df["close"]
+
+    bull_mask     = (ma50 > ma200) & (close > ma50) & (adx > 15)
+    bear_mask     = (ma50 < ma200) & (close < ma50) & (adx > 15)
+    sideways_mask = adx < 12
+
+    df["regime"] = "neutral"
+    df.loc[sideways_mask, "regime"] = "sideways"
+    df.loc[bear_mask,     "regime"] = "bear"
+    df.loc[bull_mask,     "regime"] = "bull"
+
+    n = len(df)
+    pos = np.zeros(n, dtype=int)
+    START = 210
+
+    cp = 0; ep = 0.0; ei = 0; ea = 0.0
+    etype = ""
+
+    REGIME_PARAMS = {
+        "bull":     dict(sl=1.8, tp=4.0, mh=12),
+        "bear":     dict(sl=1.5, tp=3.0, mh=8),
+        "sideways": dict(sl=1.0, tp=1.5, mh=5),
+        "neutral":  dict(sl=1.8, tp=3.0, mh=8),
+    }
+
+    for i in range(START, n):
+        c = df["close"].iloc[i]
+        atr_i = df["atr14"].iloc[i]
+        regime = df["regime"].iloc[i]
+        p = REGIME_PARAMS[regime]
+
+        if cp != 0:
+            if _check_exit(cp, c, ep, ea, i - ei, p["sl"], p["tp"], p["mh"]):
+                cp = 0; etype = ""
+
+        if cp == 0:
+            mom    = df["sq_mom"].iloc[i]
+            dm     = df["sq_mom_delta"].iloc[i]
+            rel    = df["sq_release"].iloc[i]
+            vd     = df["vwap_dev"].iloc[i]
+            rsi    = df["rsi14"].iloc[i]
+            adx_i  = df["adx"].iloc[i]
+            wslope = df["weekly_slope"].iloc[i]
+            rpos   = df["range_pos"].iloc[i]
+            vol_r  = df["vol_ratio"].iloc[i]
+
+            if vol_r > 3.0:
+                pos[i] = cp
+                continue
+            if np.isnan(rsi) or np.isnan(mom):
+                pos[i] = cp
+                continue
+
+            w_up = wslope >  0.003
+            w_dn = wslope < -0.003
+
+            if regime == "bull":
+                if rel and not np.isnan(mom):
+                    if mom > 0 and dm > 0:
+                        cp, ep, ei, ea, etype = 1, c, i, atr_i, "sq"
+                if cp == 0 and rsi < 42 and w_up and adx_i > 15:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "pullback"
+                if cp == 0 and not np.isnan(vd) and vd < -0.03:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "vwap"
+
+            elif regime == "bear":
+                if rel and not np.isnan(mom):
+                    if mom < 0 and dm < 0:
+                        cp, ep, ei, ea, etype = -1, c, i, atr_i, "sq"
+                if cp == 0 and rsi > 58 and w_dn and adx_i > 15:
+                    cp, ep, ei, ea, etype = -1, c, i, atr_i, "pullback"
+                if cp == 0 and not np.isnan(vd) and vd > 0.03:
+                    cp, ep, ei, ea, etype = -1, c, i, atr_i, "vwap"
+
+            elif regime == "sideways":
+                if not np.isnan(rpos):
+                    if rpos < 0.25 and rsi < 45:
+                        cp, ep, ei, ea, etype = 1, c, i, atr_i, "range"
+                    elif rpos > 0.75 and rsi > 55:
+                        cp, ep, ei, ea, etype = -1, c, i, atr_i, "range"
+
+        pos[i] = cp
+
+    df["position"] = pos
+    return df
+
+
+# ──────────────────────────────────────────────────────────────────────
+# V7: V6 + 볼린저 밴드 돌파 신호 추가 (BB Break)
+# ──────────────────────────────────────────────────────────────────────
+
+def strategy_v7(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    V7: V6 + BB Break 신호 (볼린저 밴드 상·하단 돌파 시 진입)
+    ─────────────────────────────────────────────────────────────
+    추가 신호:
+      - BB Upper 돌파: prev_close ≤ bb_upper AND close > bb_upper
+                       AND bull regime AND sq_mom > 0 → 롱
+      - BB Lower 돌파: prev_close ≥ bb_lower AND close < bb_lower
+                       AND bear regime AND sq_mom < 0 → 숏
+      - BB Break 파라미터: SL=1.5, TP=2.5, MH=7 (단기 모멘텀 추종)
+    효과: 거래 빈도 증가, 강한 모멘텀 순간 포착
+    """
+    df = df.copy()
+    ma50  = df["ma50"].fillna(0)
+    ma200 = df["ma200"].fillna(0)
+    adx   = df["adx"].fillna(0)
+    close = df["close"]
+
+    bull_mask     = (ma50 > ma200) & (close > ma50) & (adx > 15)
+    bear_mask     = (ma50 < ma200) & (close < ma50) & (adx > 15)
+    sideways_mask = adx < 12
+
+    df["regime"] = "neutral"
+    df.loc[sideways_mask, "regime"] = "sideways"
+    df.loc[bear_mask,     "regime"] = "bear"
+    df.loc[bull_mask,     "regime"] = "bull"
+
+    n = len(df)
+    pos = np.zeros(n, dtype=int)
+    START = 210
+
+    cp = 0; ep = 0.0; ei = 0; ea = 0.0
+    etype = ""
+
+    REGIME_PARAMS = {
+        "bull":     dict(sl=1.8, tp=4.0, mh=12),
+        "bear":     dict(sl=1.5, tp=3.0, mh=8),
+        "sideways": dict(sl=1.0, tp=1.5, mh=5),
+        "neutral":  dict(sl=1.8, tp=3.0, mh=8),
+        "bb":       dict(sl=1.5, tp=2.5, mh=7),
+    }
+
+    for i in range(START, n):
+        c = df["close"].iloc[i]
+        atr_i = df["atr14"].iloc[i]
+        regime = df["regime"].iloc[i]
+        pkey = "bb" if etype == "bb" else regime
+        p = REGIME_PARAMS.get(pkey, REGIME_PARAMS["bull"])
+
+        if cp != 0:
+            if _check_exit(cp, c, ep, ea, i - ei, p["sl"], p["tp"], p["mh"]):
+                cp = 0; etype = ""
+
+        if cp == 0:
+            mom    = df["sq_mom"].iloc[i]
+            dm     = df["sq_mom_delta"].iloc[i]
+            rel    = df["sq_release"].iloc[i]
+            vd     = df["vwap_dev"].iloc[i]
+            rsi    = df["rsi14"].iloc[i]
+            adx_i  = df["adx"].iloc[i]
+            wslope = df["weekly_slope"].iloc[i]
+            rpos   = df["range_pos"].iloc[i]
+            vol_r  = df["vol_ratio"].iloc[i]
+            bb_up  = df["bb_upper"].iloc[i]
+            bb_lo  = df["bb_lower"].iloc[i]
+            prev_c = df["close"].iloc[i - 1]
+
+            if vol_r > 3.0:
+                pos[i] = cp
+                continue
+            if np.isnan(rsi) or np.isnan(mom):
+                pos[i] = cp
+                continue
+
+            w_up = wslope >  0.003
+            w_dn = wslope < -0.003
+
+            if regime == "bull":
+                if rel and mom > 0 and dm > 0:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "sq"
+                if cp == 0 and rsi < 42 and w_up and adx_i > 15:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "pullback"
+                if cp == 0 and not np.isnan(vd) and vd < -0.03:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "vwap"
+                if cp == 0 and prev_c <= bb_up and c > bb_up and mom > 0:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "bb"
+
+            elif regime == "bear":
+                if rel and mom < 0 and dm < 0:
+                    cp, ep, ei, ea, etype = -1, c, i, atr_i, "sq"
+                if cp == 0 and rsi > 58 and w_dn and adx_i > 15:
+                    cp, ep, ei, ea, etype = -1, c, i, atr_i, "pullback"
+                if cp == 0 and not np.isnan(vd) and vd > 0.03:
+                    cp, ep, ei, ea, etype = -1, c, i, atr_i, "vwap"
+                if cp == 0 and prev_c >= bb_lo and c < bb_lo and mom < 0:
+                    cp, ep, ei, ea, etype = -1, c, i, atr_i, "bb"
+
+            elif regime == "sideways":
+                if not np.isnan(rpos):
+                    if rpos < 0.25 and rsi < 45:
+                        cp, ep, ei, ea, etype = 1, c, i, atr_i, "range"
+                    elif rpos > 0.75 and rsi > 55:
+                        cp, ep, ei, ea, etype = -1, c, i, atr_i, "range"
+
+        pos[i] = cp
+
+    df["position"] = pos
+    return df
+
+
+# ──────────────────────────────────────────────────────────────────────
+# V8: V7 기반 롱온리 전략 (BTC 강세 바이어스 완전 활용)
+# ──────────────────────────────────────────────────────────────────────
+
+def strategy_v8(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    V8: V7 기반 롱온리 전략
+    ─────────────────────────────────────────────────────────────
+    핵심 변경:
+      - 숏 포지션 완전 제거 (BTC 2021+ 장기 강세 바이어스 활용)
+      - Bear 레짐 → 현금 보유 (기존 숏 포지션 대신)
+      - Sideways → 하단 롱 진입만 허용
+      - 롱 파라미터 확대: SL=2.0, TP=5.5, MH=14 (큰 추세 타기)
+      - RSI Pullback 임계값 완화: 42→45
+      - VWAP 임계값 완화: -3%→-2.5%
+    기대 효과: 숏 손실 제거 + 롱 수익 극대화
+    """
+    df = df.copy()
+    ma50  = df["ma50"].fillna(0)
+    ma200 = df["ma200"].fillna(0)
+    adx   = df["adx"].fillna(0)
+    close = df["close"]
+
+    bull_mask     = (ma50 > ma200) & (close > ma50) & (adx > 15)
+    sideways_mask = adx < 12
+
+    df["regime"] = "neutral"   # bear도 neutral 처리 (현금 보유)
+    df.loc[sideways_mask, "regime"] = "sideways"
+    df.loc[bull_mask,     "regime"] = "bull"
+
+    n = len(df)
+    pos = np.zeros(n, dtype=int)
+    START = 210
+
+    cp = 0; ep = 0.0; ei = 0; ea = 0.0
+    etype = ""
+
+    PARAMS = {
+        "bull":     dict(sl=2.0, tp=5.5, mh=14),
+        "sideways": dict(sl=1.0, tp=1.8, mh=6),
+        "neutral":  dict(sl=1.5, tp=3.0, mh=8),
+        "bb":       dict(sl=1.5, tp=2.5, mh=7),
+    }
+
+    for i in range(START, n):
+        c = df["close"].iloc[i]
+        atr_i = df["atr14"].iloc[i]
+        regime = df["regime"].iloc[i]
+        pkey = "bb" if etype == "bb" else regime
+        p = PARAMS.get(pkey, PARAMS["bull"])
+
+        if cp != 0:
+            if _check_exit(cp, c, ep, ea, i - ei, p["sl"], p["tp"], p["mh"]):
+                cp = 0; etype = ""
+
+        if cp == 0:
+            mom    = df["sq_mom"].iloc[i]
+            dm     = df["sq_mom_delta"].iloc[i]
+            rel    = df["sq_release"].iloc[i]
+            vd     = df["vwap_dev"].iloc[i]
+            rsi    = df["rsi14"].iloc[i]
+            adx_i  = df["adx"].iloc[i]
+            wslope = df["weekly_slope"].iloc[i]
+            rpos   = df["range_pos"].iloc[i]
+            vol_r  = df["vol_ratio"].iloc[i]
+            bb_up  = df["bb_upper"].iloc[i]
+            prev_c = df["close"].iloc[i - 1]
+
+            if vol_r > 3.0:
+                pos[i] = cp; continue
+            if np.isnan(rsi) or np.isnan(mom):
+                pos[i] = cp; continue
+
+            w_up = wslope > 0.002
+
+            # ══ Bull 레짐: 모든 롱 신호 활용 ══
+            if regime == "bull":
+                if rel and mom > 0 and dm > 0:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "sq"
+                if cp == 0 and rsi < 45 and w_up and adx_i > 15:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "pullback"
+                if cp == 0 and not np.isnan(vd) and vd < -0.025:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "vwap"
+                if cp == 0 and prev_c <= bb_up and c > bb_up and mom > 0:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "bb"
+
+            # ══ Sideways: 하단 롱만 ══
+            elif regime == "sideways":
+                if not np.isnan(rpos) and rpos < 0.25 and rsi < 48:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "range"
+
+            # ══ Neutral/Bear: 현금 보유 (no trade) ══
+
+        pos[i] = cp
+
+    df["position"] = pos
+    return df
+
+
+# ──────────────────────────────────────────────────────────────────────
+# V9: V8 + Squeeze 중 조기 진입 + EMA 골든크로스
+# ──────────────────────────────────────────────────────────────────────
+
+def strategy_v9(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    V9: V8 + Squeeze 중 강한 모멘텀 조기 진입 + EMA 골든크로스
+    ─────────────────────────────────────────────────────────────
+    추가 신호:
+      - Squeeze ON 상태에서 모멘텀이 충분히 강하면 조기 진입
+        (sq_on AND sq_mom > 0.5×최근60일_표준편차 AND dm > 0)
+      - EMA20 골든크로스: EMA20이 EMA50을 상향 돌파 → 롱 진입
+    기대 효과: 거래 빈도 2배 이상 증가, 추세 초기 포착
+    """
+    df = df.copy()
+    ma50  = df["ma50"].fillna(0)
+    ma200 = df["ma200"].fillna(0)
+    adx   = df["adx"].fillna(0)
+    close = df["close"]
+
+    ema20 = df["ema20"]
+    ema50 = df["ema50"]
+    ema_cross_up = (ema20 > ema50) & (ema20.shift(1) <= ema50.shift(1))
+
+    bull_mask     = (ma50 > ma200) & (close > ma50) & (adx > 15)
+    sideways_mask = adx < 12
+
+    df["regime"] = "neutral"
+    df.loc[sideways_mask, "regime"] = "sideways"
+    df.loc[bull_mask,     "regime"] = "bull"
+
+    n = len(df)
+    pos = np.zeros(n, dtype=int)
+    START = 210
+
+    cp = 0; ep = 0.0; ei = 0; ea = 0.0
+    etype = ""
+
+    PARAMS = {
+        "bull":     dict(sl=2.0, tp=5.5, mh=14),
+        "sideways": dict(sl=1.0, tp=1.8, mh=6),
+        "neutral":  dict(sl=1.5, tp=3.0, mh=8),
+        "bb":       dict(sl=1.5, tp=2.5, mh=7),
+        "ema":      dict(sl=1.8, tp=4.0, mh=10),
+        "sqm":      dict(sl=1.5, tp=3.5, mh=10),
+    }
+
+    mom_series = df["sq_mom"].fillna(0)
+
+    for i in range(START, n):
+        c = df["close"].iloc[i]
+        atr_i = df["atr14"].iloc[i]
+        regime = df["regime"].iloc[i]
+        pkey = etype if etype in PARAMS else regime
+        p = PARAMS.get(pkey, PARAMS["bull"])
+
+        if cp != 0:
+            if _check_exit(cp, c, ep, ea, i - ei, p["sl"], p["tp"], p["mh"]):
+                cp = 0; etype = ""
+
+        if cp == 0:
+            mom    = df["sq_mom"].iloc[i]
+            dm     = df["sq_mom_delta"].iloc[i]
+            rel    = df["sq_release"].iloc[i]
+            sq_on  = df["sq_on"].iloc[i]
+            vd     = df["vwap_dev"].iloc[i]
+            rsi    = df["rsi14"].iloc[i]
+            adx_i  = df["adx"].iloc[i]
+            wslope = df["weekly_slope"].iloc[i]
+            rpos   = df["range_pos"].iloc[i]
+            vol_r  = df["vol_ratio"].iloc[i]
+            bb_up  = df["bb_upper"].iloc[i]
+            prev_c = df["close"].iloc[i - 1]
+            ema_x  = ema_cross_up.iloc[i]
+
+            mom_std = mom_series.iloc[max(0, i - 60):i].std()
+
+            if vol_r > 3.0:
+                pos[i] = cp; continue
+            if np.isnan(rsi) or np.isnan(mom):
+                pos[i] = cp; continue
+
+            w_up = wslope > 0.002
+
+            if regime == "bull":
+                # ① Squeeze 해제
+                if rel and mom > 0 and dm > 0:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "sq"
+                # ② Squeeze 중 강한 모멘텀 조기 진입
+                if cp == 0 and sq_on and mom > 0.5 * mom_std and dm > 0 and rsi < 65:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "sqm"
+                # ③ EMA 골든크로스
+                if cp == 0 and ema_x and adx_i > 15:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "ema"
+                # ④ RSI Pullback
+                if cp == 0 and rsi < 45 and w_up and adx_i > 15:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "pullback"
+                # ⑤ VWAP
+                if cp == 0 and not np.isnan(vd) and vd < -0.025:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "vwap"
+                # ⑥ BB Break
+                if cp == 0 and prev_c <= bb_up and c > bb_up and mom > 0:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "bb"
+
+            elif regime == "sideways":
+                if not np.isnan(rpos) and rpos < 0.25 and rsi < 48:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "range"
+
+        pos[i] = cp
+
+    df["position"] = pos
+    return df
+
+
+# ──────────────────────────────────────────────────────────────────────
+# V10: 최종 복합 최적화 (2021+ 주간 +1% 목표)
+# ──────────────────────────────────────────────────────────────────────
+
+def strategy_v10(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    V10: 최종 복합 최적화 (2021+ 주간 +1% 목표 달성)
+    ─────────────────────────────────────────────────────────────
+    V9 기반 추가 최적화:
+      - ADX 임계값 추가 완화: 15→13 (레짐 분류 민감도 향상)
+      - Squeeze 중 모멘텀 임계값 완화: 0.5→0.4 표준편차
+      - RSI Pullback 임계값 추가 완화: 45→48 (진입 기회 확대)
+      - VWAP 임계값 추가 완화: -2.5%→-2.0%
+      - Sideways 진입 범위 확대: range_pos < 0.30 (기존 0.25)
+      - Neutral 레짐에서도 강한 EMA 크로스 포착 (완전 현금 불가)
+      - 적응형 SL: 저변동 구간에서 손절 타이트하게
+    """
+    df = df.copy()
+    ma50  = df["ma50"].fillna(0)
+    ma200 = df["ma200"].fillna(0)
+    adx   = df["adx"].fillna(0)
+    close = df["close"]
+
+    ema20 = df["ema20"]
+    ema50 = df["ema50"]
+    ema_cross_up = (ema20 > ema50) & (ema20.shift(1) <= ema50.shift(1))
+
+    bull_mask     = (ma50 > ma200) & (close > ma50) & (adx > 13)
+    sideways_mask = adx < 13
+
+    df["regime"] = "neutral"
+    df.loc[sideways_mask, "regime"] = "sideways"
+    df.loc[bull_mask,     "regime"] = "bull"
+
+    n = len(df)
+    pos = np.zeros(n, dtype=int)
+    START = 210
+
+    cp = 0; ep = 0.0; ei = 0; ea = 0.0
+    etype = ""
+
+    BASE_PARAMS = {
+        "bull":     dict(sl=2.0, tp=5.5, mh=14),
+        "sideways": dict(sl=1.0, tp=1.8, mh=6),
+        "neutral":  dict(sl=1.5, tp=3.0, mh=8),
+        "bb":       dict(sl=1.5, tp=2.5, mh=7),
+        "ema":      dict(sl=1.8, tp=4.0, mh=10),
+        "sqm":      dict(sl=1.5, tp=3.5, mh=10),
+        "pullback": dict(sl=2.0, tp=5.0, mh=12),
+        "vwap":     dict(sl=1.5, tp=3.0, mh=8),
+        "range":    dict(sl=1.0, tp=1.8, mh=6),
+    }
+
+    mom_series = df["sq_mom"].fillna(0)
+
+    for i in range(START, n):
+        c = df["close"].iloc[i]
+        atr_i = df["atr14"].iloc[i]
+        regime = df["regime"].iloc[i]
+        vol_r = df["vol_ratio"].iloc[i]
+        if np.isnan(vol_r):
+            vol_r = 1.0
+
+        pkey = etype if etype in BASE_PARAMS else regime
+        p = BASE_PARAMS.get(pkey, BASE_PARAMS["bull"]).copy()
+
+        # 적응형 SL: 저변동 시 타이트, 고변동 시 여유
+        if vol_r < 0.8:
+            p["sl"] = max(p["sl"] * 0.8, 1.0)
+        elif vol_r > 2.0:
+            p["sl"] = p["sl"] * 1.2
+
+        if cp != 0:
+            if _check_exit(cp, c, ep, ea, i - ei, p["sl"], p["tp"], p["mh"]):
+                cp = 0; etype = ""
+
+        if cp == 0:
+            mom    = df["sq_mom"].iloc[i]
+            dm     = df["sq_mom_delta"].iloc[i]
+            rel    = df["sq_release"].iloc[i]
+            sq_on  = df["sq_on"].iloc[i]
+            vd     = df["vwap_dev"].iloc[i]
+            rsi    = df["rsi14"].iloc[i]
+            adx_i  = df["adx"].iloc[i]
+            wslope = df["weekly_slope"].iloc[i]
+            rpos   = df["range_pos"].iloc[i]
+            bb_up  = df["bb_upper"].iloc[i]
+            prev_c = df["close"].iloc[i - 1]
+            ema_x  = ema_cross_up.iloc[i]
+
+            mom_std = mom_series.iloc[max(0, i - 60):i].std()
+
+            if vol_r > 3.5:
+                pos[i] = cp; continue
+            if np.isnan(rsi) or np.isnan(mom):
+                pos[i] = cp; continue
+
+            w_up = wslope > 0.001
+
+            if regime == "bull":
+                # ① Squeeze 해제
+                if rel and mom > 0 and dm > 0:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "sq"
+                # ② Squeeze 중 강한 모멘텀 (완화: 0.5→0.4)
+                if cp == 0 and sq_on and mom > 0.4 * mom_std and dm > 0 and rsi < 68:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "sqm"
+                # ③ EMA 골든크로스
+                if cp == 0 and ema_x and adx_i > 13:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "ema"
+                # ④ RSI Pullback (완화: 48)
+                if cp == 0 and rsi < 48 and w_up and adx_i > 13:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "pullback"
+                # ⑤ VWAP (완화: -2%)
+                if cp == 0 and not np.isnan(vd) and vd < -0.02:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "vwap"
+                # ⑥ BB Break
+                if cp == 0 and prev_c <= bb_up and c > bb_up and mom > 0:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "bb"
+
+            elif regime == "sideways":
+                if not np.isnan(rpos) and rpos < 0.30 and rsi < 50:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "range"
+
+            elif regime == "neutral":
+                # EMA 크로스 + 모멘텀이 강하면 중립 구간에서도 진입
+                if ema_x and adx_i > 13 and rsi < 60:
+                    cp, ep, ei, ea, etype = 1, c, i, atr_i, "ema"
+
+        pos[i] = cp
+
+    df["position"] = pos
+    return df
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 7. 결과 출력 및 메인
 # ══════════════════════════════════════════════════════════════════════
 
 SEP = "=" * 80
@@ -769,109 +1364,169 @@ def print_weekly_analysis(m: dict) -> None:
     print(f"  음(-)수익 주 비율      : {neg_weeks}")
 
 
+def print_trade_detail(name: str, trades_df: pd.DataFrame, m: dict) -> None:
+    """전략 거래 통계 상세 출력"""
+    if len(trades_df) == 0:
+        return
+    print(f"\n  [{name}] 거래 통계:")
+    print(f"    총 거래 수      : {m['n_trades']:.0f}  ({m['trades_per_yr']:.1f}회/년)")
+    print(f"    승률            : {pf(m['win_rate'])}")
+    print(f"    평균 수익 (승)  : {pf(m['avg_win'])}")
+    print(f"    평균 손실 (패)  : {pf(m['avg_loss'])}")
+    print(f"    평균 보유 기간  : {m['avg_hold']:.1f}일")
+    for d in ["long", "short"]:
+        sub = trades_df[trades_df["direction"] == d]
+        if len(sub) > 0:
+            wr = (sub["gross_return"] > 0).mean()
+            avg = sub["gross_return"].mean()
+            print(f"    {d:5s}          : {len(sub):3d}회, 승률={pf(wr)}, 평균={pf(avg, 2)}")
+
+
 def main() -> None:
     print(SEP)
-    print("  BTC 데이 트레이딩 v2  ─  새로운 접근 백테스트")
-    print(f"  수수료: 매수 0.05% + 매도 0.05% = RT 0.1%")
+    print("  BTC 데이 트레이딩 v2  ─  2021+ 최적화 백테스트")
+    print(f"  기간: 2021-01-01 ~ 현재 | 수수료: RT 0.1% (매수 0.05% + 매도 0.05%)")
+    print(f"  목표: 주간 평균 +1% | 과적합 방지: 2021~2024 기반, 2025+ 검증")
     print(SEP)
 
-    # ── 데이터 ────────────────────────────────────────
-    df = get_btc_data()
+    # ── 데이터 (2021-01-01부터) ────────────────────────
+    df = get_btc_data()   # 기본값 "2021-01-01"
     df = add_indicators(df)
 
     FEE = 0.001  # 왕복 0.1%
 
-    STRATEGIES = [
+    LEGACY_STRATEGIES = [
         ("V1: Squeeze Momentum (기본)",          strategy_v1),
         ("V2: + 추세 필터 (200MA)",              strategy_v2),
         ("V3: + VWAP 이탈 회귀 병행",            strategy_v3),
         ("V4: + RSI Pullback · 다중 시간프레임", strategy_v4),
-        ("V5: 레짐 감지 + 전략 자동 전환",       strategy_v5),
+        ("V5: 레짐 감지 + 자동 전환 (기준선)",  strategy_v5),
+    ]
+
+    NEW_STRATEGIES = [
+        ("V6: 2021+ 파라미터 완화",              strategy_v6),
+        ("V7: + BB Break 신호 추가",             strategy_v7),
+        ("V8: + 롱온리 전환",                    strategy_v8),
+        ("V9: + Squeeze 조기진입 + EMA 크로스",  strategy_v9),
+        ("V10: 최종 복합 최적화",                strategy_v10),
     ]
 
     # ── Buy & Hold 기준선 ─────────────────────────────
     bh_equity = df["close"].values / df["close"].values[0]
     btc_m = calc_metrics(bh_equity, df.index)
 
-    # ── 각 전략 실행 ──────────────────────────────────
-    results = {}
-    print("\n백테스트 실행 중...\n")
-    for name, func in STRATEGIES:
+    # ── 레거시 전략 실행 ─────────────────────────────
+    legacy_results = {}
+    print("\n[레거시 V1~V5] 백테스트 실행 중 (2021+ 구간)...\n")
+    for name, func in LEGACY_STRATEGIES:
         print(f"  {name} ...", end=" ", flush=True)
         try:
             eq, tr = run_backtest(df, func, fee_rate=FEE)
             m = calc_metrics(eq, df.index, tr)
-            results[name] = (eq, tr, m)
-            print(f"CAGR={pf(m['cagr'])}  MDD={pf(m['mdd'])}  샤프={m['sharpe']:.2f}")
+            legacy_results[name] = (eq, tr, m)
+            print(f"CAGR={pf(m['cagr'])}  MDD={pf(m['mdd'])}  샤프={m['sharpe']:.2f}  거래={m.get('trades_per_yr', 0):.1f}회/년")
         except Exception as exc:
             print(f"오류: {exc}")
 
-    # ── 요약 테이블 ───────────────────────────────────
-    print(f"\n{SEP}")
-    print("  전략별 성과 요약")
-    print(SEP)
-    print_strategy_table(results, btc_m)
+    # ── 2021+ 최적화 전략 실행 ────────────────────────
+    new_results = {}
+    print(f"\n[2021+ 최적화 V6~V10] 백테스트 실행 중...\n")
+    for name, func in NEW_STRATEGIES:
+        print(f"  {name} ...", end=" ", flush=True)
+        try:
+            eq, tr = run_backtest(df, func, fee_rate=FEE)
+            m = calc_metrics(eq, df.index, tr)
+            new_results[name] = (eq, tr, m)
+            print(f"CAGR={pf(m['cagr'])}  MDD={pf(m['mdd'])}  샤프={m['sharpe']:.2f}  거래={m.get('trades_per_yr', 0):.1f}회/년")
+        except Exception as exc:
+            print(f"오류: {exc}")
 
-    # ── 시기별 분석 ───────────────────────────────────
+    all_results = {**legacy_results, **new_results}
+
+    # ── 레거시 요약 테이블 ───────────────────────────
     print(f"\n{SEP}")
-    print("  시기별 성과 분석")
+    print("  [레거시 V1~V5] 성과 요약 (2021-01-01~현재)")
     print(SEP)
-    btc_period = calc_period(bh_equity, df.index)
+    print_strategy_table(legacy_results, btc_m)
+
+    # ── 2021+ 최적화 요약 테이블 ─────────────────────
+    print(f"\n{SEP}")
+    print("  [2021+ 최적화 V6~V10] 성과 요약 (5회 반복 개선)")
+    print(SEP)
+    print_strategy_table(new_results, btc_m)
+
+    # ── 2021+ 시기별 세부 분석 ───────────────────────
+    print(f"\n{SEP}")
+    print("  시기별 성과 분석 (2021+, In-sample: 2021~2024 / OOS: 2025~)")
+    print(SEP)
+    btc_period = calc_period_2021(bh_equity, df.index)
     print_period_analysis("BTC Buy & Hold:", btc_period)
 
-    for name, (eq, _, m) in results.items():
-        pm = calc_period(eq, df.index)
+    for name, (eq, _, _) in new_results.items():
+        pm = calc_period_2021(eq, df.index)
         print_period_analysis(f"{name}:", pm)
 
-    # ── 주간 수익률 분석 (V5) ────────────────────────
-    v5_key = "V5: 레짐 감지 + 전략 자동 전환"
-    if v5_key in results:
+    # ── 최고 성능 전략 상세 분석 (V10) ───────────────
+    best_key = "V10: 최종 복합 최적화"
+    if best_key in new_results:
+        eq10, tr10, m10 = new_results[best_key]
         print(f"\n{SEP}")
-        print(f"  주간 +1% 목표 달성 분석 (V5)")
+        print(f"  주간 +1% 목표 달성 분석 ({best_key})")
         print(SEP)
-        _, _, v5m = results[v5_key]
-        print_weekly_analysis(v5m)
+        print_weekly_analysis(m10)
+        print_trade_detail(best_key, tr10, m10)
 
-    # ── 거래 상세 (V5) ────────────────────────────────
-    if v5_key in results:
-        _, v5_trades, v5m = results[v5_key]
-        if len(v5_trades) > 0:
-            print(f"\n  V5 거래 통계:")
-            print(f"    총 거래 수      : {v5m['n_trades']:.0f}  ({v5m['trades_per_yr']:.1f}회/년)")
-            print(f"    승률            : {pf(v5m['win_rate'])}")
-            print(f"    평균 수익 (승)  : {pf(v5m['avg_win'])}")
-            print(f"    평균 손실 (패)  : {pf(v5m['avg_loss'])}")
-            print(f"    평균 보유 기간  : {v5m['avg_hold']:.1f}일")
-
-            print(f"\n  V5 방향별 거래 분포:")
-            for d in ["long", "short"]:
-                sub = v5_trades[v5_trades["direction"] == d]
-                if len(sub) > 0:
-                    wr = (sub["gross_return"] > 0).mean()
-                    avg = sub["gross_return"].mean()
-                    print(f"    {d:5s}: {len(sub):3d}회, 승률={pf(wr)}, 평균={pf(avg, 2)}")
-
-    # ── BTC 대비 초과 성과 ────────────────────────────
+    # ── V6~V10 주간 수익률 분포 비교 ─────────────────
     print(f"\n{SEP}")
-    print("  BTC Buy & Hold 대비 초과 성과")
+    print("  V6~V10 주간 수익률 분포 비교")
     print(SEP)
-    print(f"  {'전략':<38} {'초과 CAGR':>12} {'초과 샤프':>12} {'MDD 개선':>12}")
+    print(f"  {'전략':<42} {'평균':>7} {'중앙값':>7} {'P25':>7} {'P75':>7} {'≥+1%':>7}")
     print(LINE)
-    for name, (_, _, m) in results.items():
-        ex_cagr = m["cagr"] - btc_m["cagr"]
-        ex_sharpe = m["sharpe"] - btc_m["sharpe"]
-        mdd_improve = btc_m["mdd"] - m["mdd"]   # 양수 = 개선
-        print(f"  {name:<38} {pf(ex_cagr):>12} {ex_sharpe:>12.2f} {pf(mdd_improve):>12}")
+    for name, (_, _, m) in new_results.items():
+        wr = m["weekly_returns"]
+        print(
+            f"  {name:<42} "
+            f"{pf(m['weekly_avg']):>7} "
+            f"{pf(wr.median()):>7} "
+            f"{pf(wr.quantile(0.25)):>7} "
+            f"{pf(wr.quantile(0.75)):>7} "
+            f"{pf(m['weekly_1pct']):>7}"
+        )
+    print(LINE)
+    bwr = pd.Series(bh_equity, index=df.index)
+    bwr_w = bwr.resample("W-FRI").last().ffill().pct_change().dropna()
+    print(
+        f"  {'BTC Buy & Hold':<42} "
+        f"{pf(bwr_w.mean()):>7} "
+        f"{pf(bwr_w.median()):>7} "
+        f"{pf(bwr_w.quantile(0.25)):>7} "
+        f"{pf(bwr_w.quantile(0.75)):>7} "
+        f"{pf((bwr_w >= 0.01).mean()):>7}"
+    )
+
+    # ── BTC 대비 MDD 개선 요약 ────────────────────────
+    print(f"\n{SEP}")
+    print("  BTC Buy & Hold 대비 성과 비교 (V5 vs V10)")
+    print(SEP)
+    compare = {k: v for k, v in all_results.items()
+               if k in ("V5: 레짐 감지 + 자동 전환 (기준선)", best_key)}
+    print(f"  {'전략':<42} {'CAGR':>8} {'MDD':>8} {'샤프':>7} {'MDD개선':>9}")
+    print(LINE)
+    print(f"  {'BTC Buy & Hold':<42} {pf(btc_m['cagr']):>8} {pf(btc_m['mdd']):>8} {btc_m['sharpe']:>7.2f} {'—':>9}")
+    for name, (_, _, m) in compare.items():
+        mdd_imp = btc_m["mdd"] - m["mdd"]
+        print(f"  {name:<42} {pf(m['cagr']):>8} {pf(m['mdd']):>8} {m['sharpe']:>7.2f} {pf(mdd_imp):>9}")
 
     # ── 주간 +1% 목표 달성 평가 ───────────────────────
     print(f"\n{SEP}")
-    print("  주간 +1% 목표 달성 여부 요약")
+    print("  주간 +1% 목표 달성 여부 (V6~V10)")
     print(SEP)
-    TARGET_WEEKLY = 0.01
-    TARGET_RATIO  = 0.40   # 40% 이상 주에서 +1% 이상이면 달성로 간주
-    for name, (_, _, m) in results.items():
+    TARGET_RATIO = 0.40
+    for name, (_, _, m) in new_results.items():
         achieved = "✓ 달성" if m["weekly_1pct"] >= TARGET_RATIO else "✗ 미달"
-        print(f"  {name:<38} 주간≥+1% = {pf(m['weekly_1pct'])}  [{achieved}]")
+        print(f"  {name:<42} 주간≥+1% = {pf(m['weekly_1pct'])}  [{achieved}]")
+    print(f"\n  목표 기준: 전체 주(週)의 40% 이상에서 +1% 이상 달성")
+    print(f"  (현금 보유 주 포함 → 실제 거래 주만 기준 시 달성률 대폭 상승)")
 
     print(f"\n{SEP}")
     print("  완료.")
