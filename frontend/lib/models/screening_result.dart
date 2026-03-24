@@ -86,6 +86,11 @@ class MarketStatus {
   final double ma60;
   final double gapPct;
   final String? nextRebalance;
+  final double? kospiPrice;
+  final bool? kospiIsGoldenCross;
+  final double? kospiMa20;
+  final double? kospiMa60;
+  final double? kospiGapPct;
 
   MarketStatus({
     required this.spyPrice,
@@ -94,6 +99,11 @@ class MarketStatus {
     required this.ma60,
     required this.gapPct,
     this.nextRebalance,
+    this.kospiPrice,
+    this.kospiIsGoldenCross,
+    this.kospiMa20,
+    this.kospiMa60,
+    this.kospiGapPct,
   });
 
   factory MarketStatus.fromJson(Map<String, dynamic> json) {
@@ -104,6 +114,11 @@ class MarketStatus {
       ma60: (json['ma60'] as num).toDouble(),
       gapPct: (json['gap_pct'] as num).toDouble(),
       nextRebalance: json['next_rebalance'],
+      kospiPrice: (json['kospi_price'] as num?)?.toDouble(),
+      kospiIsGoldenCross: json['kospi_golden_cross'] as bool?,
+      kospiMa20: (json['kospi_ma20'] as num?)?.toDouble(),
+      kospiMa60: (json['kospi_ma60'] as num?)?.toDouble(),
+      kospiGapPct: (json['kospi_gap_pct'] as num?)?.toDouble(),
     );
   }
 }

@@ -2,7 +2,8 @@ name: 일일 스크리닝 + 서버리스 배포
 
 on:
   schedule:
-    - cron: '0 14 * * 1-5'  # UTC 14:00 = KST 23:00, 월~금
+    - cron: '0 14 * * 1-5'  # UTC 14:00 = KST 23:00, 월~금 (한국 시장 종가 후)
+    - cron: '0 23 * * 1-5'  # UTC 23:00 = KST 08:00, 월~금 (미국 시장 종가 후)
   workflow_dispatch:
 
 permissions:

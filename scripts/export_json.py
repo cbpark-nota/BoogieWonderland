@@ -401,12 +401,29 @@ def calculate_btc_signal() -> dict:
         }
 
 
+def check_kospi_market() -> dict | None:
+    """KOSPI 지수(^KS11) MA20/MA60 골든/데드크로스 확인."""
+    try:
+        import yfinance as yf
+        ks = yf.download("^KS11", period="1y", auto_adjust=True, progress=False)
+        close = ks["Close"].squeeze()
+        ma20 = float(close.rolling(20).mean().iloc[-1])
+        ma60 = float(close.rolling(60).mean().iloc[-1])
+        price = float(close.iloc[-1])
+        gap = (ma20 - ma60) / ma60 * 100
+        return {"price": price, "ma20": ma20, "ma60": ma60,
+                "gap_pct": gap, "is_golden": ma20 > ma60}
+    except Exception as e:
+        print(f"  KOSPI 시장 상태 조회 실패 ({e})")
+        return None
+
+
 def export_all_strategies(output_dir: Path):
     """4전략 스크리닝 실행 후 단일 JSON으로 저장."""
     output_dir.mkdir(parents=True, exist_ok=True)
     now = datetime.now()
 
-    # 시장 상태
+    # 시장 상태 (SPY)
     mkt = sc.check_market()
     market_status = None
     if mkt:
@@ -416,6 +433,23 @@ def export_all_strategies(output_dir: Path):
             "ma20": round(mkt["ma20"], 2),
             "ma60": round(mkt["ma60"], 2),
             "gap_pct": round(mkt["gap_pct"], 2),
+        }
+
+    # KOSPI 시장 상태
+    kospi_mkt = check_kospi_market()
+    if kospi_mkt and market_status is not None:
+        market_status["kospi_price"] = round(kospi_mkt["price"], 2)
+        market_status["kospi_golden_cross"] = kospi_mkt["is_golden"]
+        market_status["kospi_ma20"] = round(kospi_mkt["ma20"], 2)
+        market_status["kospi_ma60"] = round(kospi_mkt["ma60"], 2)
+        market_status["kospi_gap_pct"] = round(kospi_mkt["gap_pct"], 2)
+    elif kospi_mkt and market_status is None:
+        market_status = {
+            "kospi_price": round(kospi_mkt["price"], 2),
+            "kospi_golden_cross": kospi_mkt["is_golden"],
+            "kospi_ma20": round(kospi_mkt["ma20"], 2),
+            "kospi_ma60": round(kospi_mkt["ma60"], 2),
+            "kospi_gap_pct": round(kospi_mkt["gap_pct"], 2),
         }
 
     # 동적 유니버스 수집

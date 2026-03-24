@@ -13,8 +13,11 @@ class ScreeningScreen extends ConsumerStatefulWidget {
   ConsumerState<ScreeningScreen> createState() => _ScreeningScreenState();
 }
 
+enum _MarketFilter { all, kr, us }
+
 class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
   StrategyType _selected = StrategyType.balanced;
+  _MarketFilter _marketFilter = _MarketFilter.all;
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +38,7 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
       body: Column(
         children: [
           _buildStrategySelector(),
+          _buildMarketFilter(),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async {
@@ -45,7 +49,7 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
                   if (data == null) return _buildEmpty();
                   final run = data.toScreeningRun(_selected);
                   final sr = data.strategies[_selected];
-                  return _buildResultList(run, sr);
+                  return _buildResultList(_filterRun(run), sr);
                 },
                 loading: () =>
                     const Center(child: CircularProgressIndicator()),
@@ -130,6 +134,70 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
           }).toList(),
         ),
       ),
+    );
+  }
+
+  Widget _buildMarketFilter() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: _MarketFilter.values.map((f) {
+          final isSelected = f == _marketFilter;
+          final label = switch (f) {
+            _MarketFilter.all => '전체',
+            _MarketFilter.kr => '🇰🇷 한국',
+            _MarketFilter.us => '🇺🇸 미국',
+          };
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(label,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+              selected: isSelected,
+              onSelected: (_) => setState(() => _marketFilter = f),
+              selectedColor: Colors.teal.shade600,
+              labelStyle: TextStyle(color: isSelected ? Colors.white : null),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  ScreeningRun _filterRun(ScreeningRun run) {
+    if (_marketFilter == _MarketFilter.all) return run;
+    final marketCode = _marketFilter == _MarketFilter.kr ? 'KR' : 'US';
+    final filtered = run.results
+        .where((r) => r.market == marketCode)
+        .toList();
+    final reranked = filtered.asMap().entries.map((e) {
+      final r = e.value;
+      return ScreeningResult(
+        rank: e.key + 1,
+        ticker: r.ticker,
+        market: r.market,
+        sector: r.sector,
+        score: r.score,
+        weightPct: r.weightPct,
+        price: r.price,
+        adx: r.adx,
+        rsi: r.rsi,
+        ret3m: r.ret3m,
+        stopPrice: r.stopPrice,
+        stopDistPct: r.stopDistPct,
+        atr: r.atr,
+      );
+    }).toList();
+    return ScreeningRun(
+      runId: run.runId,
+      runDate: run.runDate,
+      marketStatus: run.marketStatus,
+      btcSignal: run.btcSignal,
+      totalScreened: run.totalScreened,
+      totalPassed: run.totalPassed,
+      results: reranked,
     );
   }
 

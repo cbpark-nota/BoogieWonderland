@@ -32,7 +32,13 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                 );
               }
-              return MarketStatusBanner(status: status);
+              return Column(
+                children: [
+                  MarketStatusBanner(status: status),
+                  const SizedBox(height: 8),
+                  KospiStatusBanner(status: status),
+                ],
+              );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, s) => Text('Error: $e'),
