@@ -350,7 +350,8 @@ def detect_spy_market_state(spy_hist: pd.DataFrame,
 # ══════════════════════════════════════════════════════════════
 # 공통 필터 (RSI, 거래량, 변동성, HH-HL, 52주고점, ATR 스톱)
 # ══════════════════════════════════════════════════════════════
-def _common_filters(hist: pd.DataFrame, row: pd.Series, adx: float) -> tuple:
+def _common_filters(hist: pd.DataFrame, row: pd.Series, adx: float,
+                    atr_mult: float = ATR_MULT) -> tuple:
     """
     v3 표준 필터 — RSI 조건 포함 (MA 정배열 방식 유지)
     Returns (ok: bool, metrics: dict)
@@ -393,7 +394,7 @@ def _common_filters(hist: pd.DataFrame, row: pd.Series, adx: float) -> tuple:
     atr_series = hist["ATR"].dropna() if "ATR" in hist.columns else pd.Series(dtype=float)
     atr_val    = float(atr_series.iloc[-1]) if len(atr_series) > 0 else np.nan
     peak20     = float(hist["High"].tail(20).max())
-    atr_stop   = peak20 - atr_val * ATR_MULT if not pd.isna(atr_val) else np.nan
+    atr_stop   = peak20 - atr_val * atr_mult if not pd.isna(atr_val) else np.nan
 
     return True, {
         "ADX":      float(adx),
@@ -409,7 +410,7 @@ def _common_filters(hist: pd.DataFrame, row: pd.Series, adx: float) -> tuple:
 # ══════════════════════════════════════════════════════════════
 # 전략별 스크리닝 함수
 # ══════════════════════════════════════════════════════════════
-def screen_A(df: pd.DataFrame, as_of) -> tuple:
+def screen_A(df: pd.DataFrame, as_of, atr_mult: float = ATR_MULT) -> tuple:
     """
     전략 A — 기존 방식: MA20 > MA50 > MA200 정배열
     시장 상태 무관하게 항상 스크리닝
@@ -424,10 +425,11 @@ def screen_A(df: pd.DataFrame, as_of) -> tuple:
     ma20, ma50, ma200 = row.get("MA20"), row.get("MA50"), row.get("MA200")
     if any(pd.isna(v) for v in [ma20, ma50, ma200]) or not (ma20 > ma50 > ma200):
         return False, {}
-    return _common_filters(hist, row, adx)
+    return _common_filters(hist, row, adx, atr_mult)
 
 
-def screen_B(df: pd.DataFrame, as_of, market_state: dict) -> tuple:
+def screen_B(df: pd.DataFrame, as_of, market_state: dict,
+             atr_mult: float = ATR_MULT) -> tuple:
     """
     전략 B — 하이브리드:
     - 시장 레벨: SPY 바닥 확인 시에만 스크리닝 활성화
@@ -449,15 +451,16 @@ def screen_B(df: pd.DataFrame, as_of, market_state: dict) -> tuple:
     ma20, ma50, ma200 = row.get("MA20"), row.get("MA50"), row.get("MA200")
     if any(pd.isna(v) for v in [ma20, ma50, ma200]) or not (ma20 > ma50 > ma200):
         return False, {}
-    return _common_filters(hist, row, adx)
+    return _common_filters(hist, row, adx, atr_mult)
 
 
-def screen_C(df: pd.DataFrame, as_of, market_state: dict) -> tuple:
+def screen_C(df: pd.DataFrame, as_of, market_state: dict,
+             atr_mult: float = ATR_MULT) -> tuple:
     """
     전략 C — 하이브리드 + 3단계 점진 진입:
     B와 동일한 종목 선별 + SPY 단계별 포지션 비중 조절
     """
-    ok, m = screen_B(df, as_of, market_state)
+    ok, m = screen_B(df, as_of, market_state, atr_mult)
     if ok:
         m["market_stage"]   = market_state["stage"]
         m["market_wt_mult"] = market_state["weight_mult"]
@@ -564,16 +567,25 @@ def build_spy_state_cache(spy_data: pd.DataFrame,
 # 백테스트 메인 루프
 # ══════════════════════════════════════════════════════════════
 def run_backtest(all_data: dict, etf_data: dict, spy_data: pd.DataFrame,
-                 strategy: str = "A") -> list:
+                 strategy: str = "A",
+                 atr_mult: float = ATR_MULT,
+                 top_n: int = TOP_N,
+                 rebal_freq: str = "BME",
+                 adaptive: bool = False) -> list:
     """
-    strategy : "A" | "B" | "C"
-    Returns monthly NAV list (시작=1.0)
+    strategy   : "A" | "B" | "C"
+    atr_mult   : ATR 스톱 배수
+    top_n      : 상위 종목 수
+    rebal_freq : 리밸런싱 주기 (pandas offset alias)
+    adaptive   : True이면 시장 국면별로 atr_mult/top_n 동적 전환
+                 (데드크로스→ATR2.5/TOP7, 바닥/stage2→ATR2.0/TOP10, 골든/중립→ATR1.5/TOP15)
+    Returns rebal-period NAV list (시작=1.0)
     """
-    rebal_dates = pd.date_range(start=START, end=END, freq="BME")
+    rebal_dates = pd.date_range(start=START, end=END, freq=rebal_freq)
 
-    # SPY 시장 상태 캐시 (B, C 전략용)
+    # SPY 시장 상태 캐시 (B, C 전략 또는 adaptive용)
     spy_state_cache = {}
-    if strategy in ("B", "C"):
+    if strategy in ("B", "C") or adaptive:
         print(f"  SPY 시장 상태 캐시 생성 중 ({len(rebal_dates)}개 날짜)...", end="", flush=True)
         spy_state_cache = build_spy_state_cache(spy_data, rebal_dates)
         print(" 완료")
@@ -583,13 +595,25 @@ def run_backtest(all_data: dict, etf_data: dict, spy_data: pd.DataFrame,
     prev_dt  = None
 
     for rd in rebal_dates:
-        # ── 시장 상태 (B, C 전략)
+        # ── 시장 상태 (B, C 전략 또는 adaptive)
         market_state = spy_state_cache.get(rd, {
             "state": "neutral", "stage": 3, "weight_mult": 1.0,
             "bottom_date": None, "days_since": None,
         })
 
-        # ── 월중 스톱 체크
+        # ── adaptive: 국면별 파라미터 동적 전환
+        cur_atr_mult = atr_mult
+        cur_top_n    = top_n
+        if adaptive:
+            stage = market_state.get("stage", 3)
+            if stage == 0:                    # 데드크로스 → 보수적
+                cur_atr_mult, cur_top_n = 2.5, 7
+            elif stage in (1, 2):            # 바닥확인/Stage2 → 균형형
+                cur_atr_mult, cur_top_n = 2.0, 10
+            else:                            # 골든크로스/중립 → 공격적
+                cur_atr_mult, cur_top_n = 1.5, 15
+
+        # ── 구간 스톱 체크
         if prev_dt and holdings:
             holdings = check_stops(holdings, all_data, prev_dt, rd)
 
@@ -597,7 +621,7 @@ def run_backtest(all_data: dict, etf_data: dict, spy_data: pd.DataFrame,
         if strategy in ("B", "C") and market_state["stage"] == 0 and holdings:
             holdings = {}  # 전량 현금화
 
-        # ── 월 수익 반영
+        # ── 구간 수익 반영
         if prev_dt and holdings:
             ret = 0.0
             for ticker, info in holdings.items():
@@ -616,25 +640,23 @@ def run_backtest(all_data: dict, etf_data: dict, spy_data: pd.DataFrame,
         passed = {}
         for ticker, df_t in all_data.items():
             if strategy == "A":
-                ok, m = screen_A(df_t, rd)
+                ok, m = screen_A(df_t, rd, cur_atr_mult)
             elif strategy == "B":
-                ok, m = screen_B(df_t, rd, market_state)
+                ok, m = screen_B(df_t, rd, market_state, cur_atr_mult)
             else:  # C
-                ok, m = screen_C(df_t, rd, market_state)
+                ok, m = screen_C(df_t, rd, market_state, cur_atr_mult)
             if ok:
                 passed[ticker] = m
 
         # ── 랭킹
         ranked = rank_stocks(passed, etf_data, rd)
-        top    = ranked.head(TOP_N)
+        top    = ranked.head(cur_top_n)
 
         # ── 시장 단계별 비중 배율 결정
         if strategy == "C":
             mkt_wt = market_state["weight_mult"]
-        elif strategy == "B":
-            mkt_wt = 1.0  # B는 on/off만, 비중은 100%
         else:
-            mkt_wt = 1.0
+            mkt_wt = 1.0  # A/B는 on/off만, 비중은 100%
 
         # ── 수수료 (턴오버 기반)
         if prev_dt and len(top) > 0:
@@ -813,14 +835,20 @@ def plot_results(results: list, spy_nav: list, state_df: pd.DataFrame):
 # MAIN
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    print("=" * 66)
-    print("  하이브리드 진입 전략 백테스트")
+    print("=" * 70)
+    print("  하이브리드 진입 전략 백테스트 — 4전략 × 3진입방식")
     print(f"  기간: {START} ~ {END}")
     print(f"  수수료: 편도 {COMMISSION*100:.1f}% (왕복 {COMMISSION*2*100:.1f}%)")
-    print(f"  유니버스: 풀 유니버스 (S&P500 + NASDAQ-100 + KOSPI200 + KOSDAQ150, 동적 수집)")
-    print("=" * 66)
+    print(f"  유니버스: 풀 유니버스 (S&P500 + NASDAQ-100 + KOSPI200 + KOSDAQ150)")
+    print("=" * 70)
     print()
-    print("  [전략 설계]")
+    print("  [전략 파라미터]")
+    print("  공격적: ATR1.5, 주간 리밸런싱, TOP15")
+    print("  균형형: ATR2.0, 월간 리밸런싱, TOP10")
+    print("  보수적: ATR2.5, 월간 리밸런싱, TOP7")
+    print("  적응형: 국면별 동적 전환 (데드→ATR2.5/7, 바닥→ATR2.0/10, 골든→ATR1.5/15)")
+    print()
+    print("  [진입방식]")
     print("  A: 기존 MA 정배열 — 시장 상태 무관하게 항상 스크리닝")
     print("  B: 하이브리드    — SPY 바닥확인 시 스크리닝 ON + 종목 MA 정배열 유지")
     print("  C: 하이브리드+3단계 — B + SPY 단계별 포지션 비중 조절(50→80→100%)")
@@ -829,7 +857,6 @@ if __name__ == "__main__":
     # ── 데이터 로드 (공용 캐시 → 없으면 자동 다운로드)
     print("[1] 데이터 로드")
     all_data_raw, spy_df, etf_raw, universe_map = load_full_universe(START)
-    # 동적 유니버스로 ALL_UNIVERSE 업데이트 (rank_stocks 섹터 조회에 사용)
     ALL_UNIVERSE.update(universe_map)
     print(f"  → 종목 {len(all_data_raw)}개 로드 완료 (유니버스: {len(universe_map)}개)")
 
@@ -865,77 +892,75 @@ if __name__ == "__main__":
         label = state_label_map.get(state, state)
         print(f"  {label:<22}: {cnt:>4}개월 ({pct:.1f}%)")
 
-    results     = []
+    # ── 전략 정의
+    # (이름, atr_mult, top_n, rebal_freq, adaptive)
+    strategy_configs = [
+        ("공격적", 1.5, 15, "W-FRI", False),
+        ("균형형", 2.0, 10, "BME",   False),
+        ("보수적", 2.5,  7, "BME",   False),
+        ("적응형", 2.0, 10, "BME",   True),   # adaptive=True → 국면별 동적 전환
+    ]
+    entry_methods = [
+        ("A", "기존MA정배열"),
+        ("B", "하이브리드"),
+        ("C", "하이브리드+3단계"),
+    ]
+
     all_metrics = []
+    results_for_chart = []   # 차트용 (전략명, nav)
 
-    # ── 전략 A: 기존 방식
-    print("\n" + "═" * 66)
-    print("  [전략 A] 기존 방식 — MA20 > MA50 > MA200 정배열 (시장 무관)")
-    nav_a = run_backtest(all_data, etf_data, spy_data, strategy="A")
-    m_a = calc_metrics(nav_a, "A: 기존(MA정배열)")
-    print_metrics(m_a)
-    results.append(("A: 기존(MA정배열)", nav_a))
-    all_metrics.append(m_a)
+    for strat_name, atr_m, tn, freq, is_adaptive in strategy_configs:
+        print("\n" + "═" * 70)
+        print(f"  [{strat_name}] ATR{atr_m}, TOP{tn}, freq={freq}"
+              + (" (adaptive)" if is_adaptive else ""))
+        print("═" * 70)
 
-    # ── 전략 B: 하이브리드
-    print("\n" + "═" * 66)
-    print("  [전략 B] 하이브리드 — SPY 바닥확인 ON/OFF + 종목 MA 정배열")
-    nav_b = run_backtest(all_data, etf_data, spy_data, strategy="B")
-    m_b = calc_metrics(nav_b, "B: 하이브리드")
-    print_metrics(m_b)
-    dc = m_b["CAGR"] - m_a["CAGR"]
-    dm = m_b["MDD"]  - m_a["MDD"]
-    print(f"\n  A 대비 → CAGR {dc:+.1%}  MDD {dm:+.1%}")
-    results.append(("B: 하이브리드", nav_b))
-    all_metrics.append(m_b)
+        group_metrics = []
+        for entry_code, entry_name in entry_methods:
+            label = f"{strat_name}-{entry_code}({entry_name})"
+            print(f"\n  ▶ {label}")
+            nav = run_backtest(
+                all_data, etf_data, spy_data,
+                strategy=entry_code,
+                atr_mult=atr_m,
+                top_n=tn,
+                rebal_freq=freq,
+                adaptive=is_adaptive,
+            )
+            m = calc_metrics(nav, label)
+            print_metrics(m)
+            group_metrics.append(m)
+            all_metrics.append(m)
+            if strat_name == "균형형":   # 차트에는 균형형만 표시 (기존 동작 유지)
+                results_for_chart.append((label, nav))
 
-    # ── 전략 C: 하이브리드 + 3단계
-    print("\n" + "═" * 66)
-    print("  [전략 C] 하이브리드+3단계 — SPY 단계별 비중(50→80→100%) + 종목 MA 정배열")
-    nav_c = run_backtest(all_data, etf_data, spy_data, strategy="C")
-    m_c = calc_metrics(nav_c, "C: 하이브리드+3단계")
-    print_metrics(m_c)
-    dc = m_c["CAGR"] - m_a["CAGR"]
-    dm = m_c["MDD"]  - m_a["MDD"]
-    print(f"\n  A 대비 → CAGR {dc:+.1%}  MDD {dm:+.1%}")
-    results.append(("C: 하이브리드+3단계", nav_c))
-    all_metrics.append(m_c)
+        # 그룹 내 A 대비 B/C 비교
+        m_a = group_metrics[0]
+        for m_x in group_metrics[1:]:
+            tag = m_x["label"].split("-")[1][0]
+            dc = m_x["CAGR"] - m_a["CAGR"]
+            dm = m_x["MDD"]  - m_a["MDD"]
+            print(f"  {tag} vs A → CAGR {dc:+.1%}  MDD {dm:+.1%}")
 
-    # ── SPY 벤치마크 지표
+    # ── SPY 벤치마크
     m_spy = calc_metrics(spy_nav, "SPY 벤치마크")
     all_metrics.append(m_spy)
 
     # ── 종합 비교 표
-    print("\n" + "═" * 66)
-    print("  종합 성과 비교")
-    print("═" * 66)
-    print(f"  {'전략':<26} {'총수익률':>8} {'CAGR':>8} "
-          f"{'MDD':>8} {'샤프':>7} {'월승률':>7}")
-    print("  " + "─" * 64)
+    print("\n" + "═" * 70)
+    print("  종합 성과 비교 (4전략 × 3진입방식 + SPY)")
+    print("═" * 70)
+    print(f"  {'전략':<35} {'CAGR':>8} {'MDD':>8} {'샤프':>7} {'월승률':>7}")
+    print("  " + "─" * 67)
+    prev_strat = None
     for m in all_metrics:
-        tag = ""
-        if m["label"].startswith("B"):
-            tag = " ◀ 하이브리드"
-        elif m["label"].startswith("C"):
-            tag = " ◀ 하이브리드+3단계"
-        print(f"  {m['label']:<26} {m['총수익률']:>+8.1%} {m['CAGR']:>+8.1%} "
-              f"{m['MDD']:>+8.1%} {m['샤프']:>7.2f} {m['월승률']:>7.1%}{tag}")
-
-    # ── B vs A 개선 분석
-    print("\n" + "═" * 66)
-    print("  [핵심 분석] 하이브리드 전략의 가치")
-    print("  " + "─" * 64)
-    # 하락장 회피 효과: stage=0인 기간 비율
-    dead_pct = state_counts.get("dead_cross", 0) / total_months * 100
-    active_pct = 100 - dead_pct
-    print(f"  SPY 데드크로스(현금) 기간: {dead_pct:.1f}%  ({total_months - state_counts.get('dead_cross',0)}개월 스크리닝 활성)")
-    print(f"  스크리닝 활성화 기간:      {active_pct:.1f}%")
-    cagr_diff_b = m_b["CAGR"] - m_a["CAGR"]
-    mdd_diff_b  = m_b["MDD"]  - m_a["MDD"]
-    cagr_diff_c = m_c["CAGR"] - m_a["CAGR"]
-    mdd_diff_c  = m_c["MDD"]  - m_a["MDD"]
-    print(f"  B vs A: CAGR {cagr_diff_b:+.1%}, MDD {mdd_diff_b:+.1%}")
-    print(f"  C vs A: CAGR {cagr_diff_c:+.1%}, MDD {mdd_diff_c:+.1%}")
+        cur_strat = m["label"].split("-")[0] if "-" in m["label"] else m["label"]
+        if cur_strat != prev_strat:
+            if prev_strat is not None:
+                print("  " + "─" * 67)
+            prev_strat = cur_strat
+        print(f"  {m['label']:<35} {m['CAGR']:>+8.1%} "
+              f"{m['MDD']:>+8.1%} {m['샤프']:>7.2f} {m['월승률']:>7.1%}")
 
     # ── CSV 저장
     rows = [{
@@ -946,18 +971,19 @@ if __name__ == "__main__":
         "샤프지수": f"{m['샤프']:.2f}",
         "월간승률": f"{m['월승률']:.1%}",
     } for m in all_metrics]
-    csv_path = RESULTS_DIR / "hybrid_entry_comparison.csv"
+    csv_path = RESULTS_DIR / "hybrid_entry_all_strategies.csv"
     pd.DataFrame(rows).to_csv(csv_path, index=False, encoding="utf-8-sig")
-    print(f"\n  비교 결과 CSV: {csv_path}")
+    print(f"\n  결과 CSV: {csv_path}")
 
     # 시장 상태 CSV
     state_csv = RESULTS_DIR / "spy_market_states.csv"
     state_df.to_csv(state_csv, index=False, encoding="utf-8-sig")
     print(f"  SPY 상태 CSV:  {state_csv}")
 
-    # ── 차트
-    plot_results(results, spy_nav, state_df)
+    # ── 차트 (균형형 3개 + SPY)
+    if results_for_chart:
+        plot_results(results_for_chart, spy_nav, state_df)
 
-    print("\n" + "=" * 66)
+    print("\n" + "=" * 70)
     print("  백테스트 완료")
-    print("=" * 66)
+    print("=" * 70)
