@@ -36,7 +36,7 @@ jobs:
           python-version: '3.12'
 
       - name: Python 의존성 설치
-        run: pip install yfinance pandas pandas-ta numpy lxml beautifulsoup4 requests
+        run: pip install yfinance pandas pandas-ta numpy lxml beautifulsoup4 requests pykrx
 
       - name: 스크리닝 실행 및 JSON 생성
         run: python scripts/export_json.py --output frontend/web/data/

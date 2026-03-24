@@ -179,7 +179,26 @@ def _fetch_kr_from_naver(kospi_n: int, kosdaq_n: int) -> list[str]:
         return all_kr
     except Exception as e:
         print(f"  KR 종목 수집 최종 실패 ({e}), 기본 유니버스 사용")
-        return list(sc.KR_UNIVERSE.keys())
+        fallback = list(sc.KR_UNIVERSE.keys())
+        _fill_kr_names_pykrx(fallback)
+        return fallback
+
+
+def _fill_kr_names_pykrx(tickers: list[str]) -> None:
+    """pykrx로 KR 종목명 보완 (KRX/네이버 실패 시 3차 fallback)."""
+    try:
+        from pykrx import stock as pkstock  # type: ignore
+        missing = [t for t in tickers if t not in KR_NAMES]
+        for t in missing:
+            code = t.split(".")[0]
+            name = pkstock.get_market_ticker_name(code)
+            if name:
+                KR_NAMES[t] = name
+        filled = sum(1 for t in missing if t in KR_NAMES)
+        if filled:
+            print(f"  pykrx로 종목명 {filled}개 보완 완료")
+    except Exception as pe:
+        print(f"  pykrx 종목명 보완 실패 ({pe})")
 
 
 def fetch_kr_tickers(kospi_n=200, kosdaq_n=150):
@@ -257,6 +276,9 @@ def build_results(passed, etf_data, top_n=None):
         market = "KR" if (ticker.endswith(".KS") or ticker.endswith(".KQ")) else "US"
         sector = sc.ALL_UNIVERSE.get(ticker, "Unknown")
         name = KR_NAMES.get(ticker) if market == "KR" else None
+        if name is None and market == "KR":
+            _fill_kr_names_pykrx([ticker])
+            name = KR_NAMES.get(ticker)
         results.append({
             "rank": rank,
             "ticker": ticker,
