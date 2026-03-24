@@ -24,6 +24,21 @@ sys.path.insert(0, str(Path(__file__).parent / "crypto"))
 
 import screener_v3 as sc
 
+# ICB Industry (Wikipedia NASDAQ-100) → GICS Sector 매핑
+_ICB_TO_GICS = {
+    "Technology":              "Information Technology",
+    "Consumer Discretionary":  "Consumer Discretionary",
+    "Health Care":             "Health Care",
+    "Utilities":               "Utilities",
+    "Industrials":             "Industrials",
+    "Energy":                  "Energy",
+    "Telecommunications":      "Communication Services",
+    "Consumer Staples":        "Consumer Staples",
+    "Real Estate":             "Real Estate",
+    "Basic Materials":         "Materials",
+    "Financials":              "Financials",
+}
+
 # 4가지 전략 프리셋 — v3 최적 ATR 승수 + 전략별 종목 수
 # top_n: 공격적(15) > 균형형(10) > 보수적(7) — 위험선호도에 따라 포트폴리오 집중도 차별화
 STRATEGIES = {
@@ -79,13 +94,100 @@ def fetch_sp500_tickers():
         return list(sc.US_UNIVERSE.keys()), dict(sc.US_UNIVERSE)
 
 
+def fetch_nasdaq100_tickers():
+    """NASDAQ-100 구성 종목 및 섹터 가져오기 (Wikipedia).
+
+    Wikipedia의 NASDAQ-100 페이지에서 종목 리스트를 수집한다.
+    ICB Industry를 GICS 섹터로 변환해서 S&P500과 동일한 형식으로 반환.
+    """
+    try:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+            )
+        }
+        r = requests.get(
+            "https://en.wikipedia.org/wiki/Nasdaq-100",
+            headers=headers,
+            timeout=15,
+        )
+        r.raise_for_status()
+        tables = pd.read_html(io.StringIO(r.text))
+        # Table 4: Ticker | Company | ICB Industry[14] | ICB Subsector[14]
+        ndx = tables[4]
+        tickers = ndx["Ticker"].str.replace(".", "-", regex=False).tolist()
+        sectors = {
+            row["Ticker"].replace(".", "-"): _ICB_TO_GICS.get(
+                row["ICB Industry[14]"], row["ICB Industry[14]"]
+            )
+            for _, row in ndx.iterrows()
+        }
+        print(f"  NASDAQ-100 {len(tickers)}개 종목 수집 완료")
+        return tickers, sectors
+    except Exception as e:
+        print(f"  NASDAQ-100 수집 실패 ({e})")
+        return [], {}
+
+
+def _fetch_kr_from_naver(kospi_n: int, kosdaq_n: int) -> list[str]:
+    """네이버 금융 시가총액 페이지에서 KR 종목 수집 (fallback).
+
+    BeautifulSoup으로 HTML a[href*=code] 링크를 파싱해서 종목코드를 추출한다.
+    sosok=0: KOSPI, sosok=1: KOSDAQ
+    """
+    import re
+    from bs4 import BeautifulSoup
+
+    def _scrape_market(sosok: int, n: int, suffix: str) -> list[str]:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        tickers: list[str] = []
+        page = 1
+        while len(tickers) < n:
+            url = (
+                f"https://finance.naver.com/sise/sise_market_sum.nhn"
+                f"?sosok={sosok}&page={page}"
+            )
+            try:
+                resp = requests.get(url, headers=headers, timeout=15)
+                soup = BeautifulSoup(resp.content, "lxml", from_encoding="euc-kr")
+                links = soup.select("table.type_2 a[href*=code]")
+                if not links:
+                    break
+                for link in links:
+                    code = link["href"].split("code=")[-1]
+                    ticker = f"{code}{suffix}"
+                    if re.match(r"^\d{6}$", code) and ticker not in tickers:
+                        tickers.append(ticker)
+                page += 1
+            except Exception:
+                break
+        return tickers[:n]
+
+    try:
+        kospi  = _scrape_market(0, kospi_n, ".KS")
+        kosdaq = _scrape_market(1, kosdaq_n, ".KQ")
+        all_kr = kospi + kosdaq
+        print(f"  KR (네이버 fallback) KOSPI {len(kospi)}개 + KOSDAQ {len(kosdaq)}개 수집 완료")
+        return all_kr
+    except Exception as e:
+        print(f"  KR 종목 수집 최종 실패 ({e}), 기본 유니버스 사용")
+        return list(sc.KR_UNIVERSE.keys())
+
+
 def fetch_kr_tickers(kospi_n=200, kosdaq_n=150):
-    """KRX에서 KOSPI/KOSDAQ 상위 종목 가져오기."""
+    """KRX에서 KOSPI/KOSDAQ 상위 종목 가져오기.
+
+    1차: kind.krx.co.kr 상장법인 목록 (EUC-KR 명시 디코딩)
+    2차 fallback: 네이버 금융 시가총액 페이지 BeautifulSoup 파싱
+    """
     try:
         url = ("http://kind.krx.co.kr/corpgeneral/corpList.do"
                "?method=download&searchType=13")
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
-        krx = pd.read_html(io.StringIO(r.text))[0]
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+        r.raise_for_status()
+        # Content-Type: application/vnd.ms-excel; charset=EUC-KR → 명시적 디코딩
+        krx = pd.read_html(io.StringIO(r.content.decode("euc-kr")))[0]
 
         kospi = krx[
             (krx["시장구분"] == "유가") &
@@ -103,8 +205,8 @@ def fetch_kr_tickers(kospi_n=200, kosdaq_n=150):
         print(f"  KR KOSPI {len(kospi_tickers)}개 + KOSDAQ {len(kosdaq_tickers)}개 수집 완료")
         return all_kr
     except Exception as e:
-        print(f"  KR 종목 수집 실패 ({e}), 기본 유니버스 사용")
-        return list(sc.KR_UNIVERSE.keys())
+        print(f"  KRX (kind.krx.co.kr) 실패 ({e}), 네이버 금융으로 재시도...")
+        return _fetch_kr_from_naver(kospi_n, kosdaq_n)
 
 
 def run_screening_with_atr(all_data_ind, etf_data, atr_mult):
@@ -319,6 +421,17 @@ def export_all_strategies(output_dir: Path):
     # 동적 유니버스 수집
     print("유니버스 수집 중...")
     us_tickers, us_sectors = fetch_sp500_tickers()
+    ndx_tickers, ndx_sectors = fetch_nasdaq100_tickers()
+
+    # S&P500과 중복 제거 후 NASDAQ-100 신규 종목만 추가
+    sp500_set = set(us_tickers)
+    ndx_new = [t for t in ndx_tickers if t not in sp500_set]
+    ndx_new_sectors = {t: s for t, s in ndx_sectors.items() if t not in sp500_set}
+    print(f"  NASDAQ-100 신규 추가: {len(ndx_new)}개 (S&P500 중복 {len(ndx_tickers) - len(ndx_new)}개 제거)")
+
+    us_tickers = us_tickers + ndx_new
+    us_sectors = {**us_sectors, **ndx_new_sectors}
+
     kr_tickers = fetch_kr_tickers()
 
     # screener_v3의 유니버스/섹터 맵을 동적 수집 결과로 교체
