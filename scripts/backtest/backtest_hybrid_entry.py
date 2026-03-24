@@ -41,6 +41,10 @@ import matplotlib.gridspec as gridspec
 from pathlib import Path
 from datetime import datetime
 
+# 공용 데이터 캐시 모듈 (scripts/data_cache.py)
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from data_cache import load_full_universe
+
 RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
 
@@ -813,7 +817,7 @@ if __name__ == "__main__":
     print("  하이브리드 진입 전략 백테스트")
     print(f"  기간: {START} ~ {END}")
     print(f"  수수료: 편도 {COMMISSION*100:.1f}% (왕복 {COMMISSION*2*100:.1f}%)")
-    print(f"  유니버스: US {len(US_UNIVERSE)}종목 + KR {len(KR_UNIVERSE)}종목")
+    print(f"  유니버스: 풀 유니버스 (S&P500 + NASDAQ-100 + KOSPI200 + KOSDAQ150, 동적 수집)")
     print("=" * 66)
     print()
     print("  [전략 설계]")
@@ -822,23 +826,19 @@ if __name__ == "__main__":
     print("  C: 하이브리드+3단계 — B + SPY 단계별 포지션 비중 조절(50→80→100%)")
     print()
 
-    # ── 데이터 다운로드
-    print("[1] 데이터 다운로드")
-    all_tickers = list(ALL_UNIVERSE.keys())
-    print(f"  전체 {len(all_tickers)}종목 다운로드 중...")
-    all_data_raw = download_all(all_tickers, START, END)
-    print(f"  → {len(all_data_raw)}개 완료")
+    # ── 데이터 로드 (공용 캐시 → 없으면 자동 다운로드)
+    print("[1] 데이터 로드")
+    all_data_raw, spy_df, etf_raw, universe_map = load_full_universe(START)
+    # 동적 유니버스로 ALL_UNIVERSE 업데이트 (rank_stocks 섹터 조회에 사용)
+    ALL_UNIVERSE.update(universe_map)
+    print(f"  → 종목 {len(all_data_raw)}개 로드 완료 (유니버스: {len(universe_map)}개)")
 
-    etf_tickers = list(set(SECTOR_ETF.values()))
-    etf_raw     = download_all(etf_tickers, START, END)
-    etf_data    = {t: add_indicators(df) for t, df in etf_raw.items()}
+    etf_data = {t: add_indicators(df) for t, df in etf_raw.items()}
     print(f"  섹터 ETF {len(etf_data)}개 완료")
 
-    print("  SPY 다운로드 및 지표 계산...")
-    spy_raw   = yf.download("SPY", start=START, end=END,
-                             auto_adjust=True, progress=False)
-    spy_data  = add_indicators(spy_raw)
-    spy_close = spy_raw["Close"].squeeze()
+    print("  SPY 지표 계산...")
+    spy_data  = add_indicators(spy_df)
+    spy_close = spy_df["Close"].squeeze()
     spy_monthly = spy_close.resample("BME").last().pct_change().fillna(0)
     spy_nav     = [1.0] + list((1 + spy_monthly).cumprod().values.flatten())
 
