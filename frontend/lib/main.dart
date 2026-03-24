@@ -9,6 +9,7 @@ import 'screens/dashboard_screen.dart';
 import 'screens/screening_screen.dart';
 import 'screens/portfolio_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/strategy_guide_screen.dart';
 
 void main() {
   if (AppConfig.isServerless) {
@@ -148,6 +149,29 @@ class _MainNavigationState extends State<MainNavigation> {
                 onTap: () => _selectMenu(i),
               );
             }),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.auto_stories_outlined),
+              title: const Text('전략 설명'),
+              onTap: () {
+                _scaffoldKey.currentState?.closeDrawer();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (ctx) => Scaffold(
+                      appBar: AppBar(
+                        leading: IconButton(
+                          icon: const Icon(Icons.arrow_back_ios),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                        title: const Text('전략 설명'),
+                      ),
+                      body: const StrategyGuideScreen(),
+                    ),
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
