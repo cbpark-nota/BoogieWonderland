@@ -44,6 +44,15 @@
 5. 코드 실행 전 가상환경이 활성화되었는지 확인한다. (Python: `source .venv/bin/activate`, Flutter: `fvm flutter`)
 6. GitHub에서 PR 또는 커밋 메시지를 작성할 때는 반드시 한국어를 사용한다.
 7. 커밋 전 `README.md`에 업데이트할 내용이 있는지 확인하고, 필요시 README.md를 함께 업데이트하여 커밋에 포함한다.
+8. 주식 백테스트 시에는 항상 풀 유니버스(S&P 500 + Nasdaq 100 + KOSPI 200 + KOSDAQ 150, 동적 수집)로 수행한다. 하드코딩된 축소 유니버스는 절대 사용하지 않는다.
+
+## 백테스트 유니버스
+- 주식 백테스트는 **반드시 풀 유니버스**로 수행한다: S&P 500 + Nasdaq 100 + KOSPI 200 + KOSDAQ 150
+- 티커 목록은 하드코딩하지 않고 `export_json.py`의 동적 수집 함수를 사용한다:
+  - `fetch_sp500_tickers()` — S&P 500 종목 동적 수집
+  - `fetch_nasdaq100_tickers()` — Nasdaq 100 종목 동적 수집
+  - `fetch_kr_tickers()` — KOSPI 200 + KOSDAQ 150 종목 동적 수집
+- 축소 유니버스(예: 임의로 선별한 수십 종목 목록)를 백테스트에 사용하는 것은 금지한다.
 
 ## 코드 컨벤션
 - Python 3.12, 의존성 버전 고정
