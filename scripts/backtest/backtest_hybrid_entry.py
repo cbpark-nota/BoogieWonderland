@@ -29,9 +29,13 @@
 import warnings
 warnings.filterwarnings("ignore")
 
+import io
+import pickle
+import re
 import sys
 import numpy as np
 import pandas as pd
+import requests
 import yfinance as yf
 import pandas_ta as ta
 import matplotlib
@@ -43,6 +47,8 @@ from datetime import datetime
 
 RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
+CACHE_DIR = Path(__file__).parent / "cache"
+CACHE_DIR.mkdir(exist_ok=True)
 
 # ── 파라미터 ───────────────────────────────────────────────────
 START         = "2015-01-01"
@@ -77,61 +83,116 @@ SECTOR_ETF = {
     "Communication": "XLC",
 }
 
-# ── 유니버스 (S&P500 + Nasdaq100 대표 + KOSPI/KOSDAQ) ─────────
-US_UNIVERSE = {
-    # Technology
-    "NVDA":"Technology","AAPL":"Technology","MSFT":"Technology","AVGO":"Technology",
-    "AMD":"Technology","QCOM":"Technology","AMAT":"Technology","LRCX":"Technology",
-    "MU":"Technology","KLAC":"Technology","ORCL":"Technology","ADBE":"Technology",
-    "CRM":"Technology","NOW":"Technology","PANW":"Technology","SNPS":"Technology",
-    "CDNS":"Technology","MRVL":"Technology","TXN":"Technology","INTC":"Technology",
-    "IBM":"Technology","DELL":"Technology",
-    # Communication
-    "META":"Communication","GOOGL":"Communication","NFLX":"Communication",
-    "TMUS":"Communication","DIS":"Communication","CMCSA":"Communication","T":"Communication",
-    # Consumer Disc
-    "AMZN":"Consumer Disc","TSLA":"Consumer Disc","HD":"Consumer Disc","LULU":"Consumer Disc",
-    "NKE":"Consumer Disc","SBUX":"Consumer Disc","MCD":"Consumer Disc","LOW":"Consumer Disc",
-    "TGT":"Consumer Disc","BKNG":"Consumer Disc","COST":"Consumer Disc","WMT":"Consumer Disc",
-    # Health Care
-    "LLY":"Health Care","UNH":"Health Care","ABBV":"Health Care","ISRG":"Health Care",
-    "VRTX":"Health Care","MRK":"Health Care","JNJ":"Health Care","PFE":"Health Care",
-    "TMO":"Health Care","DHR":"Health Care","AMGN":"Health Care","GILD":"Health Care",
-    # Financials
-    "V":"Financials","MA":"Financials","JPM":"Financials","GS":"Financials",
-    "BAC":"Financials","WFC":"Financials","BLK":"Financials","SCHW":"Financials",
-    "AXP":"Financials","MS":"Financials",
-    # Energy
-    "XOM":"Energy","CVX":"Energy","SLB":"Energy","COP":"Energy","EOG":"Energy",
-    # Industrials
-    "CAT":"Industrials","GE":"Industrials","ETN":"Industrials","LMT":"Industrials",
-    "RTX":"Industrials","HON":"Industrials","UNP":"Industrials","BA":"Industrials",
-    # Materials
-    "FCX":"Materials","NEM":"Materials","LIN":"Materials","APD":"Materials",
+# ── 풀 유니버스 (동적 수집, __main__ 에서 채워짐) ─────────────
+# CLAUDE.md 규칙: 하드코딩된 축소 유니버스 사용 금지
+# S&P 500 + Nasdaq 100 + KOSPI 200 + KOSDAQ 150 동적 수집
+ALL_UNIVERSE: dict = {}   # ticker → sector, __main__ 시작 시 채워짐
+
+# ICB Industry(Wikipedia NASDAQ-100) → GICS Sector 매핑
+_ICB_TO_GICS = {
+    "Technology":             "Information Technology",
+    "Consumer Discretionary": "Consumer Discretionary",
+    "Health Care":            "Health Care",
+    "Utilities":              "Utilities",
+    "Industrials":            "Industrials",
+    "Energy":                 "Energy",
+    "Telecommunications":     "Communication Services",
+    "Consumer Staples":       "Consumer Staples",
+    "Real Estate":            "Real Estate",
+    "Basic Materials":        "Materials",
+    "Financials":             "Financials",
 }
-KR_UNIVERSE = {
-    # KOSPI Technology
-    "005930.KS":"Technology","000660.KS":"Technology","009150.KS":"Technology",
-    "006400.KS":"Technology","373220.KS":"Technology",
-    # KOSPI Health Care
-    "207940.KS":"Health Care","068270.KS":"Health Care","091990.KS":"Health Care",
-    # KOSPI Materials/Consumer/Communication/Financials/Energy/Industrials
-    "051910.KS":"Materials","011170.KS":"Materials",
-    "005380.KS":"Consumer Disc","000270.KS":"Consumer Disc",
-    "035420.KS":"Communication","035720.KS":"Communication",
-    "105560.KS":"Financials","055550.KS":"Financials",
-    "096770.KS":"Energy","011200.KS":"Industrials","009540.KS":"Industrials",
-    # KOSDAQ
-    "263750.KQ":"Technology","293490.KQ":"Technology","357780.KQ":"Technology",
-    "086900.KQ":"Technology",
-}
-ALL_UNIVERSE = {**US_UNIVERSE, **KR_UNIVERSE}
+
+
+def fetch_sp500_tickers() -> tuple[list, dict]:
+    """S&P 500 구성 종목 및 GICS 섹터 동적 수집."""
+    try:
+        url = ("https://raw.githubusercontent.com/datasets/"
+               "s-and-p-500-companies/main/data/constituents.csv")
+        df = pd.read_csv(url)
+        tickers = df["Symbol"].str.replace(".", "-", regex=False).tolist()
+        sectors = dict(zip(
+            df["Symbol"].str.replace(".", "-", regex=False),
+            df["GICS Sector"],
+        ))
+        print(f"  S&P500 {len(tickers)}개 종목 수집 완료")
+        return tickers, sectors
+    except Exception as e:
+        print(f"  S&P500 수집 실패 ({e})")
+        return [], {}
+
+
+def fetch_nasdaq100_tickers() -> tuple[list, dict]:
+    """NASDAQ-100 구성 종목 및 섹터 동적 수집 (Wikipedia)."""
+    try:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+            )
+        }
+        r = requests.get(
+            "https://en.wikipedia.org/wiki/Nasdaq-100",
+            headers=headers,
+            timeout=15,
+        )
+        r.raise_for_status()
+        tables = pd.read_html(io.StringIO(r.text))
+        # Table index 4: Ticker | Company | ICB Industry | ICB Subsector
+        ndx = tables[4]
+        tickers = ndx["Ticker"].str.replace(".", "-", regex=False).tolist()
+        sectors = {
+            row["Ticker"].replace(".", "-"): _ICB_TO_GICS.get(
+                row["ICB Industry[14]"], row["ICB Industry[14]"]
+            )
+            for _, row in ndx.iterrows()
+        }
+        print(f"  NASDAQ-100 {len(tickers)}개 종목 수집 완료")
+        return tickers, sectors
+    except Exception as e:
+        print(f"  NASDAQ-100 수집 실패 ({e})")
+        return [], {}
+
+
+def fetch_kr_tickers(kospi_n: int = 200, kosdaq_n: int = 150) -> list:
+    """KRX에서 KOSPI 200 + KOSDAQ 150 종목 동적 수집."""
+    try:
+        url = ("http://kind.krx.co.kr/corpgeneral/corpList.do"
+               "?method=download&searchType=13")
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+        r.raise_for_status()
+        krx = pd.read_html(io.StringIO(r.content.decode("euc-kr")))[0]
+        kospi = krx[
+            (krx["시장구분"] == "유가") &
+            (krx["종목코드"].astype(str).str.match(r"^\d{6}$"))
+        ]
+        kosdaq = krx[
+            (krx["시장구분"] == "코스닥") &
+            (krx["종목코드"].astype(str).str.match(r"^\d{6}$"))
+        ]
+        kospi_tickers  = [f"{str(c).zfill(6)}.KS" for c in kospi["종목코드"].tolist()][:kospi_n]
+        kosdaq_tickers = [f"{str(c).zfill(6)}.KQ" for c in kosdaq["종목코드"].tolist()][:kosdaq_n]
+        all_kr = kospi_tickers + kosdaq_tickers
+        print(f"  KR KOSPI {len(kospi_tickers)}개 + KOSDAQ {len(kosdaq_tickers)}개 수집 완료")
+        return all_kr
+    except Exception as e:
+        print(f"  KR 수집 실패 ({e}), fallback 없음")
+        return []
 
 
 # ══════════════════════════════════════════════════════════════
 # 데이터 다운로드
 # ══════════════════════════════════════════════════════════════
-def download_all(tickers: list, start: str, end: str) -> dict:
+def download_all(tickers: list, start: str, end: str,
+                 cache_key: str = "") -> dict:
+    """종목 데이터 다운로드 (pickle 캐시 활용)."""
+    if cache_key:
+        cache_path = CACHE_DIR / f"{cache_key}.pkl"
+        if cache_path.exists():
+            print(f"  캐시 로드: {cache_path.name}")
+            with open(cache_path, "rb") as f:
+                return pickle.load(f)
+
     data = {}
     for i in range(0, len(tickers), 40):
         chunk = tickers[i:i + 40]
@@ -153,6 +214,12 @@ def download_all(tickers: list, start: str, end: str) -> dict:
                     data[chunk[0]] = raw
         except Exception:
             pass
+
+    if cache_key and data:
+        cache_path = CACHE_DIR / f"{cache_key}.pkl"
+        with open(cache_path, "wb") as f:
+            pickle.dump(data, f)
+        print(f"  캐시 저장: {cache_path.name}")
     return data
 
 
@@ -810,10 +877,9 @@ def plot_results(results: list, spy_nav: list, state_df: pd.DataFrame):
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     print("=" * 66)
-    print("  하이브리드 진입 전략 백테스트")
+    print("  하이브리드 진입 전략 백테스트 (풀 유니버스)")
     print(f"  기간: {START} ~ {END}")
     print(f"  수수료: 편도 {COMMISSION*100:.1f}% (왕복 {COMMISSION*2*100:.1f}%)")
-    print(f"  유니버스: US {len(US_UNIVERSE)}종목 + KR {len(KR_UNIVERSE)}종목")
     print("=" * 66)
     print()
     print("  [전략 설계]")
@@ -822,11 +888,34 @@ if __name__ == "__main__":
     print("  C: 하이브리드+3단계 — B + SPY 단계별 포지션 비중 조절(50→80→100%)")
     print()
 
+    # ── [0] 풀 유니버스 동적 수집 (CLAUDE.md 규칙 준수)
+    print("[0] 풀 유니버스 동적 수집")
+    sp500_tickers, sp500_sectors   = fetch_sp500_tickers()
+    ndx100_tickers, ndx100_sectors = fetch_nasdaq100_tickers()
+    kr_tickers                      = fetch_kr_tickers()
+
+    # ALL_UNIVERSE 빌드: 섹터 정보 병합 후 중복 제거
+    for t, s in {**sp500_sectors, **ndx100_sectors}.items():
+        ALL_UNIVERSE[t] = s
+    for t in set(sp500_tickers) | set(ndx100_tickers):
+        if t not in ALL_UNIVERSE:
+            ALL_UNIVERSE[t] = "Unknown"
+    for t in kr_tickers:
+        if t not in ALL_UNIVERSE:
+            ALL_UNIVERSE[t] = "Unknown"
+
+    us_count = len(set(sp500_tickers) | set(ndx100_tickers))
+    print(f"  S&P500 {len(sp500_tickers)}개 + NASDAQ-100 {len(ndx100_tickers)}개 (중복제거 후 US {us_count}개)")
+    print(f"  KR {len(kr_tickers)}개 (KOSPI200 + KOSDAQ150)")
+    print(f"  풀 유니버스 총 {len(ALL_UNIVERSE)}개 종목")
+    print()
+
     # ── 데이터 다운로드
     print("[1] 데이터 다운로드")
     all_tickers = list(ALL_UNIVERSE.keys())
+    cache_key = f"hybrid_full_{START[:4]}_{END[:7].replace('-', '')}"
     print(f"  전체 {len(all_tickers)}종목 다운로드 중...")
-    all_data_raw = download_all(all_tickers, START, END)
+    all_data_raw = download_all(all_tickers, START, END, cache_key=cache_key)
     print(f"  → {len(all_data_raw)}개 완료")
 
     etf_tickers = list(set(SECTOR_ETF.values()))
@@ -837,6 +926,9 @@ if __name__ == "__main__":
     print("  SPY 다운로드 및 지표 계산...")
     spy_raw   = yf.download("SPY", start=START, end=END,
                              auto_adjust=True, progress=False)
+    # yfinance MultiIndex 버그 대응: 단일 종목도 MultiIndex로 반환할 수 있음
+    if isinstance(spy_raw.columns, pd.MultiIndex):
+        spy_raw = spy_raw.xs("SPY", axis=1, level=1)
     spy_data  = add_indicators(spy_raw)
     spy_close = spy_raw["Close"].squeeze()
     spy_monthly = spy_close.resample("BME").last().pct_change().fillna(0)
