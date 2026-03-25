@@ -41,6 +41,7 @@ _ICB_TO_GICS = {
 
 # 4가지 전략 프리셋 — v3 최적 ATR 승수 + 전략별 종목 수
 # top_n: 공격적(15) > 균형형(10) > 보수적(7) — 위험선호도에 따라 포트폴리오 집중도 차별화
+# 적응형: ATR 2.0, TOP 10 고정 (균형형 기준, 국면 정보는 별도 표시)
 # 한국 종목명 캐시 (ticker → 회사명)
 KR_NAMES: dict[str, str] = {}
 
@@ -48,11 +49,8 @@ STRATEGIES = {
     "aggressive":   {"atr_mult": 1.5, "label": "공격적", "rebal_freq": "격주",  "top_n": 15},
     "balanced":     {"atr_mult": 2.0, "label": "균형형", "rebal_freq": "격주",  "top_n": 10},
     "conservative": {"atr_mult": 2.5, "label": "보수적", "rebal_freq": "격주",  "top_n": 7},
-    "adaptive":     {"atr_mult": None, "label": "적응형", "rebal_freq": "격주", "top_n": None},
+    "adaptive":     {"atr_mult": 2.0, "label": "적응형", "rebal_freq": "격주",  "top_n": 10},
 }
-
-# 적응형 전략의 국면별 종목 수 매핑
-TOP_N_MAP = {"aggressive": 15, "balanced": 10, "conservative": 7}
 
 
 def safe_float(val, ndigits=2):
@@ -538,8 +536,8 @@ def export_all_strategies(output_dir: Path):
     # 4전략 스크리닝
     strategies_output = {}
     for key, preset in STRATEGIES.items():
-        atr_mult = preset["atr_mult"] if preset["atr_mult"] is not None else adaptive_atr
-        top_n = preset["top_n"] if preset["top_n"] is not None else TOP_N_MAP.get(adaptive_regime, sc.TOP_N)
+        atr_mult = preset["atr_mult"]
+        top_n = preset["top_n"]
         print(f"  {preset['label']} (ATR={atr_mult}, TOP={top_n}) 스크리닝 중...")
         passed = run_screening_with_atr(all_data_ind, etf_data, atr_mult)
         results = build_results(passed, etf_data, top_n)
