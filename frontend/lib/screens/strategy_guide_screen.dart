@@ -258,7 +258,7 @@ class _StrategyOverviewCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -346,7 +346,7 @@ class _FilterStep extends StatelessWidget {
             height: 22,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: colorScheme.primary.withOpacity(0.15),
+              color: colorScheme.primary.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
             child: Text(
@@ -395,9 +395,9 @@ class _TagChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,
@@ -443,7 +443,7 @@ class _StrategyCard extends StatelessWidget {
         children: [
           Container(
             decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
+              color: color.withValues(alpha: 0.15),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -480,7 +480,7 @@ class _StrategyCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.08),
+                    color: color.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
@@ -626,8 +626,8 @@ class _BacktestResultTable extends StatelessWidget {
                   cells: [row.$1, row.$2, row.$3, row.$4, row.$5, row.$6, row.$7],
                   isHeader: false,
                   rowColor: isSpy
-                      ? colorScheme.surfaceContainerHighest.withOpacity(0.3)
-                      : row.$8.withOpacity(0.08),
+                      ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                      : row.$8.withValues(alpha: 0.08),
                   textColor: isSpy ? colorScheme.onSurfaceVariant : row.$8,
                   theme: theme,
                   accentColor: row.$8,
@@ -779,7 +779,7 @@ class _BtcStrategyCard extends StatelessWidget {
         children: [
           Container(
             decoration: BoxDecoration(
-              color: btcColor.withOpacity(0.15),
+              color: btcColor.withValues(alpha: 0.15),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -821,7 +821,7 @@ class _BtcStrategyCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: btcColor.withOpacity(0.08),
+                    color: btcColor.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
@@ -908,9 +908,9 @@ class _Chip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: RichText(
         text: TextSpan(
@@ -1079,10 +1079,10 @@ class _GlossaryCard extends StatelessWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: colorScheme.primary.withOpacity(0.12),
+                        color: colorScheme.primary.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: colorScheme.primary.withOpacity(0.3),
+                          color: colorScheme.primary.withValues(alpha: 0.3),
                         ),
                       ),
                       child: Text(
