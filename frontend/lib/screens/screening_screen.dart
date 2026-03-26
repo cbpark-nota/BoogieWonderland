@@ -178,6 +178,7 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
         rank: e.key + 1,
         ticker: r.ticker,
         market: r.market,
+        name: r.name,
         sector: r.sector,
         score: r.score,
         weightPct: r.weightPct,
