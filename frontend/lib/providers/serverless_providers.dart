@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/holding.dart';
+import '../models/portfolio_data.dart';
 import '../models/screening_result.dart';
 import '../services/local_portfolio_service.dart';
 import '../services/static_data_source.dart';
@@ -93,5 +94,22 @@ final strategyDataProvider =
     return StrategyScreeningData.fromJson(data);
   } catch (_) {
     return null;
+  }
+});
+
+// ── 서버리스 포트폴리오 데이터 (엑셀 기반) ──────────────────────
+
+final portfolioDataProvider = FutureProvider<PortfolioData>((ref) async {
+  try {
+    final data = await StaticDataSource().getPortfolio();
+    return PortfolioData.fromJson(data);
+  } catch (_) {
+    return PortfolioData.fromJson({
+      'updated_at': '',
+      'total_invested': 0.0,
+      'total_current': 0.0,
+      'total_return_pct': 0.0,
+      'holdings': [],
+    });
   }
 });

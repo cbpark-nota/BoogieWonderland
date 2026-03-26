@@ -600,9 +600,189 @@ def export_all_strategies(output_dir: Path):
           f"(현재 국면: {STRATEGIES[adaptive_regime]['label']})")
 
 
+def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
+    """portfolio.xlsx를 읽어서 현재가·수익률을 계산하고 portfolio.json으로 저장.
+
+    엑셀이 없으면 빈 포트폴리오를 저장한다 (에러 없음).
+    """
+    import yfinance as yf
+
+    # 검색 경로: 명시적 경로 → scripts/portfolio.xlsx → data/portfolio.xlsx
+    candidates = [xlsx_path] if xlsx_path else []
+    candidates += [
+        Path(__file__).parent / "portfolio.xlsx",
+        Path(__file__).parent / "data" / "portfolio.xlsx",
+    ]
+    found = next((p for p in candidates if p and p.exists()), None)
+
+    now_str = datetime.now().isoformat(timespec="seconds")
+    empty_output = {
+        "updated_at": now_str,
+        "total_invested": 0.0,
+        "total_current": 0.0,
+        "total_return_pct": 0.0,
+        "holdings": [],
+    }
+
+    if found is None:
+        print("  portfolio.xlsx 파일 없음 — 빈 포트폴리오 저장")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with open(output_dir / "portfolio.json", "w", encoding="utf-8") as f:
+            json.dump(empty_output, f, ensure_ascii=False, indent=2)
+        return
+
+    print(f"  포트폴리오 파일 로드: {found}")
+    try:
+        df = pd.read_excel(found, sheet_name="Portfolio", dtype=str)
+    except Exception as e:
+        print(f"  엑셀 읽기 실패 ({e}) — 빈 포트폴리오 저장")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with open(output_dir / "portfolio.json", "w", encoding="utf-8") as f:
+            json.dump(empty_output, f, ensure_ascii=False, indent=2)
+        return
+
+    # 컬럼명 정규화 (한글 헤더 지원)
+    col_map = {
+        "ticker": "ticker", "티커": "ticker",
+        "name": "name", "종목명": "name",
+        "market": "market", "시장(us/kr)": "market", "시장": "market",
+        "entry_price": "entry_price", "진입가": "entry_price",
+        "shares": "shares", "주수": "shares",
+        "entry_date": "entry_date", "진입일": "entry_date",
+        "stop_loss": "stop_loss", "스톱로스": "stop_loss",
+        "target_price": "target_price", "목표가": "target_price",
+        "memo": "memo", "메모": "memo",
+    }
+    df.columns = [col_map.get(c.strip().lower(), c.strip().lower()) for c in df.columns]
+
+    # 빈 행 제거 (ticker 없는 행)
+    df = df[df.get("ticker", pd.Series(dtype=str)).notna()].copy()
+    df = df[df["ticker"].str.strip() != ""]
+    if df.empty:
+        print("  포트폴리오 종목 없음 — 빈 포트폴리오 저장")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with open(output_dir / "portfolio.json", "w", encoding="utf-8") as f:
+            json.dump(empty_output, f, ensure_ascii=False, indent=2)
+        return
+
+    # 숫자 변환
+    for col in ("entry_price", "shares", "stop_loss", "target_price"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    tickers = df["ticker"].str.strip().tolist()
+    print(f"  현재가 조회 중 ({len(tickers)}개 종목)...")
+
+    # yfinance 일괄 조회
+    price_map: dict[str, float] = {}
+    try:
+        raw = yf.download(tickers, period="2d", auto_adjust=True, progress=False)
+        close = raw["Close"] if "Close" in raw.columns else raw
+        if isinstance(close, pd.Series):
+            # 단일 종목
+            last = float(close.dropna().iloc[-1]) if not close.dropna().empty else None
+            price_map[tickers[0]] = last
+        else:
+            for t in tickers:
+                if t in close.columns:
+                    series = close[t].dropna()
+                    price_map[t] = float(series.iloc[-1]) if not series.empty else None
+    except Exception as e:
+        print(f"  yfinance 일괄 조회 실패 ({e}), 개별 조회로 재시도...")
+        for t in tickers:
+            try:
+                series = yf.download(t, period="2d", auto_adjust=True, progress=False)["Close"].squeeze().dropna()
+                price_map[t] = float(series.iloc[-1]) if not series.empty else None
+            except Exception:
+                price_map[t] = None
+
+    # 종목별 계산
+    holdings = []
+    for _, row in df.iterrows():
+        ticker = str(row["ticker"]).strip()
+        market = str(row.get("market", "US")).strip().upper() if pd.notna(row.get("market")) else "US"
+        name = str(row.get("name", "")).strip() if pd.notna(row.get("name")) else None
+        entry_price = float(row["entry_price"]) if pd.notna(row.get("entry_price")) else None
+        shares = float(row["shares"]) if pd.notna(row.get("shares")) else 0.0
+        entry_date = str(row.get("entry_date", "")).strip() if pd.notna(row.get("entry_date")) else ""
+        stop_loss = float(row["stop_loss"]) if "stop_loss" in df.columns and pd.notna(row.get("stop_loss")) else None
+        target_price = float(row["target_price"]) if "target_price" in df.columns and pd.notna(row.get("target_price")) else None
+        memo = str(row.get("memo", "")).strip() if pd.notna(row.get("memo")) else ""
+
+        current_price = price_map.get(ticker)
+
+        if entry_price and entry_price > 0:
+            invested = round(entry_price * shares, 2)
+            current_value = round(current_price * shares, 2) if current_price else None
+            return_pct = round((current_price - entry_price) / entry_price * 100, 2) if current_price else None
+        else:
+            invested = 0.0
+            current_value = None
+            return_pct = None
+
+        stop_triggered = bool(current_price and stop_loss and current_price < stop_loss)
+
+        holdings.append({
+            "ticker": ticker,
+            "name": name or ticker,
+            "market": market,
+            "entry_price": safe_float(entry_price),
+            "current_price": safe_float(current_price),
+            "shares": shares,
+            "entry_date": entry_date,
+            "stop_loss": safe_float(stop_loss),
+            "target_price": safe_float(target_price),
+            "memo": memo,
+            "invested": safe_float(invested),
+            "current_value": safe_float(current_value),
+            "return_pct": safe_float(return_pct),
+            "weight_pct": None,  # 나중에 계산
+            "stop_triggered": stop_triggered,
+        })
+
+    # 전체 합계
+    total_invested = sum(h["invested"] or 0 for h in holdings)
+    total_current = sum(h["current_value"] or h["invested"] or 0 for h in holdings)
+    total_return_pct = round((total_current - total_invested) / total_invested * 100, 2) if total_invested > 0 else 0.0
+
+    # 비중 계산
+    for h in holdings:
+        invested_val = h["invested"] or 0
+        h["weight_pct"] = round(invested_val / total_invested * 100, 1) if total_invested > 0 else 0.0
+
+    output = {
+        "updated_at": now_str,
+        "total_invested": round(total_invested, 2),
+        "total_current": round(total_current, 2),
+        "total_return_pct": total_return_pct,
+        "holdings": holdings,
+    }
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / "portfolio.json"
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+
+    print(f"  포트폴리오 JSON 저장 완료: {out_path} ({len(holdings)}개 종목)")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="4전략 스크리닝 결과 JSON 내보내기")
     parser.add_argument("--output", type=str, default="frontend/web/data/",
                         help="JSON 출력 디렉토리")
+    parser.add_argument("--portfolio-only", action="store_true",
+                        help="포트폴리오 JSON만 생성 (스크리닝 생략)")
+    parser.add_argument("--xlsx", type=str, default=None,
+                        help="portfolio.xlsx 경로 (기본: scripts/portfolio.xlsx)")
     args = parser.parse_args()
-    export_all_strategies(Path(args.output))
+
+    output_path = Path(args.output)
+    xlsx_path = Path(args.xlsx) if args.xlsx else None
+
+    if args.portfolio_only:
+        print("포트폴리오 JSON 생성 중...")
+        portfolio_to_json(output_path, xlsx_path)
+    else:
+        export_all_strategies(output_path)
+        print("\n포트폴리오 JSON 생성 중...")
+        portfolio_to_json(output_path, xlsx_path)

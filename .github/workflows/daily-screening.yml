@@ -30,9 +30,9 @@ jobs:
           python-version: '3.12'
 
       - name: Python 의존성 설치
-        run: pip install yfinance pandas pandas-ta numpy lxml beautifulsoup4 requests pykrx
+        run: pip install yfinance pandas pandas-ta numpy lxml beautifulsoup4 requests pykrx openpyxl
 
-      - name: 스크리닝 실행 및 JSON 생성
+      - name: 스크리닝 + 포트폴리오 JSON 생성
         run: python scripts/export_json.py --output frontend/web/data/
 
       # Flutter 웹 빌드 (서버리스 모드)

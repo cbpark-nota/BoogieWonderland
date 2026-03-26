@@ -21,4 +21,10 @@ class StaticDataSource {
     final res = await _dio.get('$_baseDataUrl/screening_strategies.json');
     return res.data as Map<String, dynamic>;
   }
+
+  /// 엑셀 기반 포트폴리오 데이터
+  Future<Map<String, dynamic>> getPortfolio() async {
+    final res = await _dio.get('$_baseDataUrl/portfolio.json');
+    return res.data as Map<String, dynamic>;
+  }
 }
