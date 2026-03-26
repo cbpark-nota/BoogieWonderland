@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.stock import ScreeningRun, ScreeningResult, Stock
 from app.schemas.screening import ScreeningRunOut, ScreeningRunSummary, ScreeningResultOut, MarketStatusOut
-from app.services.screener import run_screening, ALL_UNIVERSE
+from app.services.screener import run_screening, ALL_UNIVERSE, KR_NAMES
 
 router = APIRouter(prefix="/api/v1/screening", tags=["screening"])
 
@@ -102,6 +102,7 @@ def _results_from_model(results: list[ScreeningResult]) -> list[dict]:
     return [{
         "rank": r.rank, "ticker": r.ticker,
         "market": "KR" if r.ticker.endswith(".KS") else "US",
+        "name": KR_NAMES.get(r.ticker) if r.ticker.endswith(".KS") else None,
         "sector": ALL_UNIVERSE.get(r.ticker, "Unknown"),
         "score": r.score, "weight_pct": r.weight_pct, "price": r.price,
         "adx": r.adx, "rsi": r.rsi, "ret_3m": r.ret_3m,

@@ -14,6 +14,7 @@ class ScreeningResultOut(BaseModel):
     rank: int
     ticker: str
     market: str
+    name: str | None = None
     sector: str
     score: float
     weight_pct: float

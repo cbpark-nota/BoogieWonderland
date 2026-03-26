@@ -30,6 +30,25 @@ KR_UNIVERSE = {
     "105560.KS":"Financials","055550.KS":"Financials",
     "096770.KS":"Energy","011200.KS":"Industrials",
 }
+KR_NAMES = {
+    "005930.KS": "삼성전자",
+    "000660.KS": "SK하이닉스",
+    "009150.KS": "삼성전기",
+    "006400.KS": "삼성SDI",
+    "373220.KS": "LG에너지솔루션",
+    "207940.KS": "삼성바이오로직스",
+    "068270.KS": "셀트리온",
+    "051910.KS": "LG화학",
+    "247540.KS": "에코프로비엠",
+    "005380.KS": "현대차",
+    "000270.KS": "기아",
+    "035420.KS": "NAVER",
+    "035720.KS": "카카오",
+    "105560.KS": "KB금융",
+    "055550.KS": "신한지주",
+    "096770.KS": "SK이노베이션",
+    "011200.KS": "HMM",
+}
 ALL_UNIVERSE = {**US_UNIVERSE, **KR_UNIVERSE}
 
 SECTOR_ETF = {
@@ -250,6 +269,7 @@ def run_screening() -> dict:
                 "rank": rank_idx,
                 "ticker": ticker,
                 "market": "KR" if ticker.endswith(".KS") else "US",
+                "name": KR_NAMES.get(ticker) if ticker.endswith(".KS") else None,
                 "sector": ALL_UNIVERSE.get(ticker, "Unknown"),
                 "score": float(row["score"]),
                 "weight_pct": float(weights[ticker]) * 100,
