@@ -38,6 +38,26 @@ jobs:
       - name: Python 의존성 설치
         run: pip install yfinance pandas pandas-ta numpy lxml beautifulsoup4 requests pykrx openpyxl
 
+      - name: 이전 history 파일 복원 (gh-pages에서)
+        run: |
+          OWNER=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f1)
+          REPO=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2)
+          PAGES_BASE="https://${OWNER}.github.io/${REPO}"
+          HISTORY_DIR="frontend/web/data/history"
+          mkdir -p "$HISTORY_DIR"
+          if curl -sf "${PAGES_BASE}/data/history/index.json" -o /tmp/history_index.json; then
+            echo "이전 history index 발견, 파일 복원 중..."
+            DATES=$(python3 -c "import json; d=json.load(open('/tmp/history_index.json')); print('\n'.join(d.get('dates', [])))")
+            while IFS= read -r date; do
+              if [ -n "$date" ]; then
+                curl -sf "${PAGES_BASE}/data/history/${date}.json" -o "${HISTORY_DIR}/${date}.json" \
+                  && echo "  복원: ${date}.json" || echo "  건너뜀: ${date}.json"
+              fi
+            done <<< "$DATES"
+          else
+            echo "이전 history 없음 — 오늘부터 시작"
+          fi
+
       - name: 스크리닝 + 포트폴리오 JSON 생성
         run: python scripts/export_json.py --output frontend/web/data/
 

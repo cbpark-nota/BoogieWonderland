@@ -32,19 +32,22 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
   // ── 서버리스 모드: 4전략 탭 ──
 
   Widget _buildServerlessView() {
-    final strategyAsync = ref.watch(strategyDataProvider);
+    final historyAsync = ref.watch(historyScreeningProvider);
 
     return Scaffold(
       body: Column(
         children: [
+          _buildDateSelector(),
           _buildStrategySelector(),
           _buildMarketFilter(),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async {
                 ref.invalidate(strategyDataProvider);
+                ref.invalidate(historyScreeningProvider);
+                ref.invalidate(historyDatesProvider);
               },
-              child: strategyAsync.when(
+              child: historyAsync.when(
                 data: (data) {
                   if (data == null) return _buildEmpty();
                   final run = data.toScreeningRun(_selected);
@@ -59,6 +62,76 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // ── 날짜 선택 바 ──
+
+  Widget _buildDateSelector() {
+    final datesAsync = ref.watch(historyDatesProvider);
+    final selectedDate = ref.watch(selectedHistoryDateProvider);
+
+    return datesAsync.when(
+      data: (dates) {
+        if (dates.isEmpty) return const SizedBox.shrink();
+        // null = 최신(오늘)
+        final effectiveDate = selectedDate ?? dates.first;
+        final idx = dates.indexOf(effectiveDate);
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.31),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left),
+                iconSize: 20,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: idx < dates.length - 1
+                    ? () => ref
+                        .read(selectedHistoryDateProvider.notifier)
+                        .state = dates[idx + 1]
+                    : null,
+              ),
+              const SizedBox(width: 4),
+              DropdownButton<String>(
+                value: effectiveDate,
+                underline: const SizedBox.shrink(),
+                isDense: true,
+                items: dates.map((d) {
+                  final isLatest = d == dates.first;
+                  return DropdownMenuItem(
+                    value: d,
+                    child: Text(
+                      isLatest ? '$d (최신)' : d,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (d) {
+                  ref.read(selectedHistoryDateProvider.notifier).state = d;
+                },
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.chevron_right),
+                iconSize: 20,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: idx > 0
+                    ? () => ref
+                        .read(selectedHistoryDateProvider.notifier)
+                        .state = dates[idx - 1]
+                    : null,
+              ),
+            ],
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 

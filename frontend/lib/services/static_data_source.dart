@@ -27,4 +27,22 @@ class StaticDataSource {
     final res = await _dio.get('$_baseDataUrl/portfolio.json');
     return res.data as Map<String, dynamic>;
   }
+
+  /// 사용 가능한 히스토리 날짜 목록 (최근 5일)
+  /// history/index.json이 없거나 에러 시 빈 목록 반환
+  Future<List<String>> getHistoryDates() async {
+    try {
+      final res = await _dio.get('$_baseDataUrl/history/index.json');
+      final data = res.data as Map<String, dynamic>;
+      return List<String>.from(data['dates'] as List);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// 특정 날짜의 스크리닝 결과 (history/{date}.json)
+  Future<Map<String, dynamic>> getScreeningByDate(String date) async {
+    final res = await _dio.get('$_baseDataUrl/history/$date.json');
+    return res.data as Map<String, dynamic>;
+  }
 }

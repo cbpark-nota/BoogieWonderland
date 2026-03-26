@@ -591,6 +591,9 @@ def export_all_strategies(output_dir: Path):
     with open(full_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
+    # history/{date}.json 저장 및 index.json 업데이트
+    save_history(output_dir, output, now)
+
     print(f"\n완료: {full_path}")
     for k in ("aggressive", "balanced", "conservative"):
         s = strategies_output[k]
@@ -764,6 +767,42 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
     print(f"  포트폴리오 JSON 저장 완료: {out_path} ({len(holdings)}개 종목)")
+
+
+def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int = 5) -> None:
+    """일자별 스크리닝 결과를 history/ 폴더에 저장하고 최근 keep_days일치만 유지."""
+    history_dir = output_dir / "history"
+    history_dir.mkdir(parents=True, exist_ok=True)
+
+    today = now.strftime("%Y-%m-%d")
+
+    # 오늘 날짜 파일 저장
+    day_path = history_dir / f"{today}.json"
+    with open(day_path, "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+    print(f"  history 저장: {day_path}")
+
+    # 기존 날짜 파일 목록 수집 (YYYY-MM-DD.json 패턴)
+    existing = sorted(
+        [p.stem for p in history_dir.glob("????-??-??.json")],
+        reverse=True,
+    )
+
+    # keep_days 초과 파일 삭제
+    for old_date in existing[keep_days:]:
+        old_path = history_dir / f"{old_date}.json"
+        old_path.unlink(missing_ok=True)
+        print(f"  history 삭제 (오래된 파일): {old_date}.json")
+
+    # 최신 날짜 목록으로 index.json 갱신
+    dates = sorted(
+        [p.stem for p in history_dir.glob("????-??-??.json")],
+        reverse=True,
+    )[:keep_days]
+    index_path = history_dir / "index.json"
+    with open(index_path, "w", encoding="utf-8") as f:
+        json.dump({"dates": dates}, f, ensure_ascii=False, indent=2)
+    print(f"  history index 갱신: {dates}")
 
 
 if __name__ == "__main__":

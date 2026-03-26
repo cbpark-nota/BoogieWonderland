@@ -113,3 +113,30 @@ final portfolioDataProvider = FutureProvider<PortfolioData>((ref) async {
     });
   }
 });
+
+// ── 히스토리 날짜 목록 ──────────────────────────────────────
+
+final historyDatesProvider = FutureProvider<List<String>>((ref) async {
+  return StaticDataSource().getHistoryDates();
+});
+
+// ── 선택된 히스토리 날짜 (null = 최신) ─────────────────────
+
+final selectedHistoryDateProvider = StateProvider<String?>((ref) => null);
+
+// ── 선택된 날짜의 스크리닝 데이터 ──────────────────────────
+
+final historyScreeningProvider =
+    FutureProvider<StrategyScreeningData?>((ref) async {
+  final date = ref.watch(selectedHistoryDateProvider);
+  if (date == null) {
+    // 최신 데이터 사용
+    return ref.watch(strategyDataProvider).valueOrNull;
+  }
+  try {
+    final data = await StaticDataSource().getScreeningByDate(date);
+    return StrategyScreeningData.fromJson(data);
+  } catch (_) {
+    return null;
+  }
+});
