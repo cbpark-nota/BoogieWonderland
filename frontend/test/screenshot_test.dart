@@ -15,8 +15,8 @@ import 'package:momentum_app/models/holding.dart';
 final _mockMarketStatus = MarketStatus(
   spyPrice: 523.40,
   isGoldenCross: true,
-  ma50: 510.20,
-  ma200: 498.50,
+  ma20: 510.20,
+  ma60: 498.50,
   gapPct: 2.35,
   nextRebalance: '2026-04-04',
 );

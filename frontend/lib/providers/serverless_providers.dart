@@ -122,7 +122,15 @@ final historyDatesProvider = FutureProvider<List<String>>((ref) async {
 
 // ── 선택된 히스토리 날짜 (null = 최신) ─────────────────────
 
-final selectedHistoryDateProvider = StateProvider<String?>((ref) => null);
+class _SelectedHistoryDateNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+}
+
+final selectedHistoryDateProvider =
+    NotifierProvider<_SelectedHistoryDateNotifier, String?>(
+  _SelectedHistoryDateNotifier.new,
+);
 
 // ── 선택된 날짜의 스크리닝 데이터 ──────────────────────────
 
@@ -130,8 +138,8 @@ final historyScreeningProvider =
     FutureProvider<StrategyScreeningData?>((ref) async {
   final date = ref.watch(selectedHistoryDateProvider);
   if (date == null) {
-    // 최신 데이터 사용
-    return ref.watch(strategyDataProvider).valueOrNull;
+    // 최신 데이터 사용 (Riverpod 3.x: valueOrNull → value)
+    return ref.watch(strategyDataProvider).value;
   }
   try {
     final data = await StaticDataSource().getScreeningByDate(date);
