@@ -7,7 +7,7 @@ import 'package:momentum_app/providers/market_provider.dart';
 import 'package:momentum_app/models/screening_result.dart';
 
 void main() {
-  testWidgets('App renders with bottom navigation', (WidgetTester tester) async {
+  testWidgets('App renders with drawer navigation', (WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -19,9 +19,9 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Dashboard'), findsWidgets);
-    expect(find.text('Screening'), findsOneWidget);
-    expect(find.text('Portfolio'), findsOneWidget);
+    // AppBar 타이틀과 Drawer 메뉴 아이콘이 표시된다
+    expect(find.text('Dashboard'), findsOneWidget);
+    expect(find.byIcon(Icons.menu), findsOneWidget);
   });
 
   testWidgets('Settings icon is present', (WidgetTester tester) async {
