@@ -619,6 +619,30 @@ def fetch_usdkrw() -> float:
         return 1380.0
 
 
+def _calc_atr_stop(df_ohlc: pd.DataFrame, period: int = 14, atr_mult: float = 2.0) -> "float | None":
+    """ATR 기반 스톱로스 계산: 20일 고점 - ATR(14) × atr_mult.
+
+    pandas_ta 없이 Wilder's ATR을 직접 계산한다.
+    """
+    if len(df_ohlc) < period + 5:
+        return None
+    h = df_ohlc["High"].astype(float)
+    l = df_ohlc["Low"].astype(float)
+    c = df_ohlc["Close"].astype(float)
+    tr = pd.concat([
+        (h - l),
+        (h - c.shift(1)).abs(),
+        (l - c.shift(1)).abs(),
+    ], axis=1).max(axis=1)
+    atr_series = tr.ewm(alpha=1 / period, min_periods=period).mean()
+    atr_vals = atr_series.dropna()
+    if atr_vals.empty:
+        return None
+    atr_val = float(atr_vals.iloc[-1])
+    peak_20 = float(h.tail(20).max())
+    return round(peak_20 - atr_val * atr_mult, 2)
+
+
 def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
     """portfolio.xlsx를 읽어서 현재가·수익률을 계산하고 portfolio.json으로 저장.
 
@@ -703,10 +727,11 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
     tickers = df["ticker"].str.strip().tolist()
     print(f"  현재가 조회 중 ({len(tickers)}개 종목)...")
 
-    # yfinance 일괄 조회
+    # yfinance 일괄 조회 (60일 OHLC — ATR 계산에 필요)
     price_map: dict[str, float] = {}
+    raw = None
     try:
-        raw = yf.download(tickers, period="2d", auto_adjust=True, progress=False)
+        raw = yf.download(tickers, period="60d", auto_adjust=True, progress=False)
         close = raw["Close"] if "Close" in raw.columns else raw
         if isinstance(close, pd.Series):
             # 단일 종목
@@ -725,6 +750,36 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
                 price_map[t] = float(series.iloc[-1]) if not series.empty else None
             except Exception:
                 price_map[t] = None
+
+    # ATR 스톱 계산 (균형형 기준 ATR×2.0, 추세 이탈 판단용)
+    ATR_PORTFOLIO_MULT = 2.0
+    atr_stop_map: dict[str, "float | None"] = {}
+    if raw is not None:
+        try:
+            close_df = raw["Close"] if "Close" in raw.columns else None
+            is_single = isinstance(close_df, pd.Series)
+            for t in tickers:
+                try:
+                    if is_single and t == tickers[0]:
+                        df_t = pd.DataFrame({
+                            "High": raw["High"],
+                            "Low": raw["Low"],
+                            "Close": raw["Close"],
+                        }).dropna(subset=["High", "Low", "Close"])
+                    elif not is_single and close_df is not None and t in close_df.columns:
+                        df_t = pd.DataFrame({
+                            "High": raw["High"][t],
+                            "Low": raw["Low"][t],
+                            "Close": raw["Close"][t],
+                        }).dropna(subset=["High", "Low", "Close"])
+                    else:
+                        atr_stop_map[t] = None
+                        continue
+                    atr_stop_map[t] = _calc_atr_stop(df_t, atr_mult=ATR_PORTFOLIO_MULT)
+                except Exception:
+                    atr_stop_map[t] = None
+        except Exception:
+            pass
 
     # 종목별 계산
     holdings = []
@@ -768,6 +823,13 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
 
         stop_triggered = bool(current_price and stop_loss and current_price < stop_loss)
 
+        atr_stop = atr_stop_map.get(ticker)
+        if current_price and atr_stop and current_price > 0:
+            atr_stop_dist_pct = round((current_price - atr_stop) / current_price * 100, 2)
+        else:
+            atr_stop_dist_pct = None
+        atr_stop_triggered = bool(current_price and atr_stop and current_price < atr_stop)
+
         holdings.append({
             "ticker": ticker,
             "name": name or ticker,
@@ -788,6 +850,9 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
             "current_value_krw": safe_float(current_krw),
             "invested_usd": safe_float(invested_usd),
             "current_value_usd": safe_float(current_usd),
+            "atr_stop": safe_float(atr_stop),
+            "atr_stop_dist_pct": safe_float(atr_stop_dist_pct),
+            "atr_stop_triggered": atr_stop_triggered,
         })
 
     # 전체 합계 (KRW 기준: KR 원화 그대로 + US 달러×환율)

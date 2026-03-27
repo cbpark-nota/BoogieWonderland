@@ -502,6 +502,10 @@ class _HoldingCard extends StatelessWidget {
                   ],
                 ),
               ),
+            if (holding.atrStop != null) ...[
+              const SizedBox(height: 6),
+              _AtrStopRow(holding: holding),
+            ],
             if (holding.memo.isNotEmpty)
               Align(
                 alignment: Alignment.centerLeft,
@@ -543,6 +547,125 @@ class _PriceChip extends StatelessWidget {
                     highlight ? FontWeight.bold : FontWeight.normal,
                 color: color)),
       ],
+    );
+  }
+}
+
+// ── ATR 스톱 행 ───────────────────────────────────────────────
+
+class _AtrStopRow extends StatelessWidget {
+  const _AtrStopRow({required this.holding});
+  final PortfolioHolding holding;
+
+  @override
+  Widget build(BuildContext context) {
+    final atrStop = holding.atrStop!;
+    final distPct = holding.atrStopDistPct;
+    final triggered = holding.atrStopTriggered;
+
+    Color statusColor;
+    String statusLabel;
+    IconData statusIcon;
+    if (triggered || (distPct != null && distPct <= 0)) {
+      statusColor = Colors.red;
+      statusLabel = '추세 이탈';
+      statusIcon = Icons.trending_down;
+    } else if (distPct != null && distPct <= 3) {
+      statusColor = Colors.red;
+      statusLabel = '위험 ${distPct.toStringAsFixed(1)}%';
+      statusIcon = Icons.warning_amber_rounded;
+    } else if (distPct != null && distPct <= 7) {
+      statusColor = Colors.orange;
+      statusLabel = '주의 ${distPct.toStringAsFixed(1)}%';
+      statusIcon = Icons.info_outline;
+    } else {
+      statusColor = Colors.green;
+      statusLabel = distPct != null ? '안전 ${distPct.toStringAsFixed(1)}%' : '안전';
+      statusIcon = Icons.check_circle_outline;
+    }
+
+    // 0~20% 범위로 진행바 정규화
+    final barFill = distPct == null
+        ? 0.0
+        : (distPct.clamp(0.0, 20.0) / 20.0);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: statusColor.withAlpha(12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: statusColor.withAlpha(50)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(statusIcon, size: 13, color: statusColor),
+              const SizedBox(width: 4),
+              Text(
+                'ATR 스톱 (균형형×2.0)',
+                style: TextStyle(
+                    fontSize: 11,
+                    color: statusColor,
+                    fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              Text(
+                holding.formatPrice(atrStop),
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: statusColor),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: statusColor.withAlpha(30),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: statusColor),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          LayoutBuilder(
+            builder: (ctx, constraints) => Stack(
+              children: [
+                Container(
+                  height: 4,
+                  width: constraints.maxWidth,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withAlpha(40),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Container(
+                  height: 4,
+                  width: constraints.maxWidth * barFill,
+                  decoration: BoxDecoration(
+                    color: statusColor.withAlpha(180),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            '현재가 ${holding.formatPrice(holding.currentPrice)}  →  스톱 ${holding.formatPrice(atrStop)}  │  20일 고점 기준',
+            style: const TextStyle(fontSize: 10, color: Colors.grey),
+          ),
+        ],
+      ),
     );
   }
 }
