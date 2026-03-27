@@ -242,6 +242,124 @@ def fetch_kr_tickers(kospi_n=200, kosdaq_n=150):
         return _fetch_kr_from_naver(kospi_n, kosdaq_n)
 
 
+def fetch_usdkrw() -> float:
+    """yfinance로 USD/KRW 현재 환율 조회."""
+    try:
+        import yfinance as yf
+        df = yf.download("USDKRW=X", period="5d", auto_adjust=True, progress=False)
+        if df.empty:
+            print("  환율 조회 결과 없음, 기본값 1380 사용")
+            return 1380.0
+        rate = float(df["Close"].dropna().iloc[-1])
+        print(f"  USD/KRW 환율: {rate:,.2f}")
+        return rate
+    except Exception as e:
+        print(f"  환율 조회 실패 ({e}), 기본값 1380 사용")
+        return 1380.0
+
+
+def portfolio_to_json(holdings_file: str | Path, output_dir: Path):
+    """holdings.json을 읽어 현재가 조회 + 환율 변환 후 portfolio.json 저장.
+
+    KR 종목은 원화 기준, US 종목은 달러 기준으로 개별 계산.
+    전체 합계는 KRW 기준(US 달러×환율 변환)과 USD 기준(KR 원화÷환율 변환) 모두 산출.
+    """
+    import yfinance as yf
+
+    p = Path(holdings_file)
+    if not p.exists():
+        print(f"  {p} 없음, 포트폴리오 JSON 생략")
+        return
+
+    with open(p, encoding="utf-8") as f:
+        raw_holdings: dict = json.load(f)
+
+    if not raw_holdings:
+        print("  보유 종목 없음, 포트폴리오 JSON 생략")
+        return
+
+    now = datetime.now()
+    usdkrw = fetch_usdkrw()
+
+    total_invested_krw = 0.0
+    total_current_krw = 0.0
+    total_invested_usd = 0.0
+    total_current_usd = 0.0
+    result_holdings = []
+
+    for ticker, info in raw_holdings.items():
+        entry_price = float(info.get("entry_price", 0))
+        entry_date = info.get("entry_date", "")
+        peak_price = float(info.get("peak_price", entry_price))
+        is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
+        market = "KR" if is_kr else "US"
+
+        # 현재가 조회
+        try:
+            df_cur = yf.download(ticker, period="5d", auto_adjust=True, progress=False)
+            current_price = float(df_cur["Close"].dropna().iloc[-1]) if not df_cur.empty else entry_price
+        except Exception:
+            current_price = entry_price
+
+        ret_pct = (current_price - entry_price) / entry_price * 100 if entry_price > 0 else 0.0
+
+        if is_kr:
+            invested_krw = entry_price
+            current_krw = current_price
+            invested_usd = entry_price / usdkrw
+            current_usd = current_price / usdkrw
+        else:
+            invested_usd = entry_price
+            current_usd = current_price
+            invested_krw = entry_price * usdkrw
+            current_krw = current_price * usdkrw
+
+        total_invested_krw += invested_krw
+        total_current_krw += current_krw
+        total_invested_usd += invested_usd
+        total_current_usd += current_usd
+
+        name = KR_NAMES.get(ticker) if is_kr else None
+        result_holdings.append({
+            "ticker": ticker,
+            "market": market,
+            "name": name,
+            "entry_price": round(entry_price, 2),
+            "current_price": round(current_price, 2),
+            "peak_price": round(peak_price, 2),
+            "entry_date": entry_date,
+            "ret_pct": round(ret_pct, 2),
+            "invested_krw": round(invested_krw),
+            "current_value_krw": round(current_krw),
+            "invested_usd": round(invested_usd, 2),
+            "current_value_usd": round(current_usd, 2),
+        })
+
+    total_return_pct = (
+        (total_current_krw - total_invested_krw) / total_invested_krw * 100
+        if total_invested_krw > 0 else 0.0
+    )
+
+    output = {
+        "run_date": now.isoformat(timespec="seconds"),
+        "exchange_rate": {
+            "usdkrw": round(usdkrw, 2),
+            "updated_at": now.isoformat(timespec="seconds"),
+        },
+        "total_invested_krw": round(total_invested_krw),
+        "total_current_krw": round(total_current_krw),
+        "total_return_pct": round(total_return_pct, 2),
+        "total_invested_usd": round(total_invested_usd, 2),
+        "total_current_usd": round(total_current_usd, 2),
+        "holdings": result_holdings,
+    }
+
+    out_path = output_dir / "portfolio.json"
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+    print(f"  포트폴리오 JSON 저장: {out_path} ({len(result_holdings)}종목)")
+
+
 def run_screening_with_atr(all_data_ind, etf_data, atr_mult):
     """특정 ATR 승수로 스크리닝 실행."""
     # ATR_MULT를 임시 변경
@@ -599,10 +717,15 @@ def export_all_strategies(output_dir: Path):
     print(f"  {s['label']}: {len(s['results'])}종목 선정 / {s['total_passed']}개 통과 "
           f"(현재 국면: {STRATEGIES[adaptive_regime]['label']})")
 
+    return output_dir
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="4전략 스크리닝 결과 JSON 내보내기")
     parser.add_argument("--output", type=str, default="frontend/web/data/",
                         help="JSON 출력 디렉토리")
+    parser.add_argument("--holdings", type=str, default="holdings.json",
+                        help="보유 종목 파일 경로 (portfolio.json 생성용)")
     args = parser.parse_args()
-    export_all_strategies(Path(args.output))
+    out_dir = export_all_strategies(Path(args.output))
+    portfolio_to_json(args.holdings, out_dir)
