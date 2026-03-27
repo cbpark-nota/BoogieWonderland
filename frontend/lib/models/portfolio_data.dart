@@ -18,6 +18,9 @@ class PortfolioHolding {
   final double? currentValueKrw;
   final double? investedUsd;
   final double? currentValueUsd;
+  final double? atrStop;
+  final double? atrStopDistPct;
+  final bool atrStopTriggered;
 
   PortfolioHolding({
     required this.ticker,
@@ -39,6 +42,9 @@ class PortfolioHolding {
     this.currentValueKrw,
     this.investedUsd,
     this.currentValueUsd,
+    this.atrStop,
+    this.atrStopDistPct,
+    this.atrStopTriggered = false,
   });
 
   factory PortfolioHolding.fromJson(Map<String, dynamic> json) {
@@ -62,6 +68,9 @@ class PortfolioHolding {
       currentValueKrw: (json['current_value_krw'] as num?)?.toDouble(),
       investedUsd: (json['invested_usd'] as num?)?.toDouble(),
       currentValueUsd: (json['current_value_usd'] as num?)?.toDouble(),
+      atrStop: (json['atr_stop'] as num?)?.toDouble(),
+      atrStopDistPct: (json['atr_stop_dist_pct'] as num?)?.toDouble(),
+      atrStopTriggered: json['atr_stop_triggered'] as bool? ?? false,
     );
   }
 
