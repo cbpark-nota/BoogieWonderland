@@ -14,6 +14,10 @@ class PortfolioHolding {
   final double? returnPct;
   final double? weightPct;
   final bool stopTriggered;
+  final double? investedKrw;
+  final double? currentValueKrw;
+  final double? investedUsd;
+  final double? currentValueUsd;
 
   PortfolioHolding({
     required this.ticker,
@@ -31,6 +35,10 @@ class PortfolioHolding {
     this.returnPct,
     this.weightPct,
     required this.stopTriggered,
+    this.investedKrw,
+    this.currentValueKrw,
+    this.investedUsd,
+    this.currentValueUsd,
   });
 
   factory PortfolioHolding.fromJson(Map<String, dynamic> json) {
@@ -50,6 +58,10 @@ class PortfolioHolding {
       returnPct: (json['return_pct'] as num?)?.toDouble(),
       weightPct: (json['weight_pct'] as num?)?.toDouble(),
       stopTriggered: json['stop_triggered'] as bool? ?? false,
+      investedKrw: (json['invested_krw'] as num?)?.toDouble(),
+      currentValueKrw: (json['current_value_krw'] as num?)?.toDouble(),
+      investedUsd: (json['invested_usd'] as num?)?.toDouble(),
+      currentValueUsd: (json['current_value_usd'] as num?)?.toDouble(),
     );
   }
 
@@ -70,6 +82,11 @@ class PortfolioData {
   final double totalInvested;
   final double totalCurrent;
   final double totalReturnPct;
+  final double usdkrw;
+  final double totalInvestedKrw;
+  final double totalCurrentKrw;
+  final double totalInvestedUsd;
+  final double totalCurrentUsd;
   final List<PortfolioHolding> holdings;
 
   PortfolioData({
@@ -77,6 +94,11 @@ class PortfolioData {
     required this.totalInvested,
     required this.totalCurrent,
     required this.totalReturnPct,
+    required this.usdkrw,
+    required this.totalInvestedKrw,
+    required this.totalCurrentKrw,
+    required this.totalInvestedUsd,
+    required this.totalCurrentUsd,
     required this.holdings,
   });
 
@@ -84,11 +106,24 @@ class PortfolioData {
     final list = (json['holdings'] as List? ?? [])
         .map((h) => PortfolioHolding.fromJson(h as Map<String, dynamic>))
         .toList();
+    final er = json['exchange_rate'] as Map<String, dynamic>? ?? {};
+    // total_invested_krw 없으면 total_invested로 fallback (하위 호환)
+    final investedKrw = (json['total_invested_krw'] as num?)?.toDouble()
+        ?? (json['total_invested'] as num?)?.toDouble()
+        ?? 0;
+    final currentKrw = (json['total_current_krw'] as num?)?.toDouble()
+        ?? (json['total_current'] as num?)?.toDouble()
+        ?? 0;
     return PortfolioData(
       updatedAt: json['updated_at'] as String? ?? '',
       totalInvested: (json['total_invested'] as num?)?.toDouble() ?? 0,
       totalCurrent: (json['total_current'] as num?)?.toDouble() ?? 0,
       totalReturnPct: (json['total_return_pct'] as num?)?.toDouble() ?? 0,
+      usdkrw: (er['usdkrw'] as num?)?.toDouble() ?? 1380.0,
+      totalInvestedKrw: investedKrw,
+      totalCurrentKrw: currentKrw,
+      totalInvestedUsd: (json['total_invested_usd'] as num?)?.toDouble() ?? 0,
+      totalCurrentUsd: (json['total_current_usd'] as num?)?.toDouble() ?? 0,
       holdings: list,
     );
   }

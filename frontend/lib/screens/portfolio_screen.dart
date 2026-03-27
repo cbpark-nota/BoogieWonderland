@@ -85,15 +85,26 @@ class PortfolioScreen extends ConsumerWidget {
 
 // ── 요약 카드 ─────────────────────────────────────────────────
 
-class _SummaryCard extends StatelessWidget {
+class _SummaryCard extends StatefulWidget {
   const _SummaryCard({required this.portfolio});
   final PortfolioData portfolio;
 
   @override
+  State<_SummaryCard> createState() => _SummaryCardState();
+}
+
+class _SummaryCardState extends State<_SummaryCard> {
+  bool _showKrw = true; // true: 원화(₩), false: 달러($)
+
+  @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isPositive = portfolio.totalReturnPct >= 0;
+    final p = widget.portfolio;
+    final isPositive = p.totalReturnPct >= 0;
     final returnColor = isPositive ? Colors.green : Colors.red;
+
+    final invested = _showKrw ? p.totalInvestedKrw : p.totalInvestedUsd;
+    final current = _showKrw ? p.totalCurrentKrw : p.totalCurrentUsd;
 
     return Card(
       elevation: 2,
@@ -102,29 +113,44 @@ class _SummaryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('포트폴리오 요약',
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: cs.primary)),
+            // 헤더 + 통화 토글
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('포트폴리오 요약',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: cs.primary)),
+                _CurrencyToggle(
+                  showKrw: _showKrw,
+                  onChanged: (v) => setState(() => _showKrw = v),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                     child: _MetricTile(
                         label: '총 투자금액',
-                        value: _formatMixed(portfolio.totalInvested))),
+                        value: _formatAmount(invested))),
                 Expanded(
                     child: _MetricTile(
                         label: '현재 평가금액',
-                        value: _formatMixed(portfolio.totalCurrent))),
+                        value: _formatAmount(current))),
                 Expanded(
                     child: _MetricTile(
                         label: '전체 수익률',
                         value:
-                            '${isPositive ? '+' : ''}${portfolio.totalReturnPct.toStringAsFixed(2)}%',
+                            '${isPositive ? '+' : ''}${p.totalReturnPct.toStringAsFixed(2)}%',
                         valueColor: returnColor)),
               ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '환율 USD/KRW: ${p.usdkrw.toStringAsFixed(0)}원',
+              style: const TextStyle(fontSize: 11, color: Colors.grey),
             ),
           ],
         ),
@@ -132,10 +158,65 @@ class _SummaryCard extends StatelessWidget {
     );
   }
 
-  String _formatMixed(double v) {
-    if (v >= 1000000) return '\$${(v / 1000000).toStringAsFixed(1)}M';
-    if (v >= 1000) return '\$${(v / 1000).toStringAsFixed(1)}K';
-    return '\$${v.toStringAsFixed(0)}';
+  String _formatAmount(double v) {
+    if (_showKrw) {
+      if (v >= 100000000) return '₩${(v / 100000000).toStringAsFixed(1)}억';
+      if (v >= 10000) return '₩${(v / 10000).toStringAsFixed(0)}만';
+      return '₩${v.toStringAsFixed(0)}';
+    } else {
+      if (v >= 1000000) return '\$${(v / 1000000).toStringAsFixed(1)}M';
+      if (v >= 1000) return '\$${(v / 1000).toStringAsFixed(1)}K';
+      return '\$${v.toStringAsFixed(0)}';
+    }
+  }
+}
+
+class _CurrencyToggle extends StatelessWidget {
+  const _CurrencyToggle({required this.showKrw, required this.onChanged});
+  final bool showKrw;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _ToggleBtn(label: '₩', selected: showKrw, onTap: () => onChanged(true)),
+        const SizedBox(width: 4),
+        _ToggleBtn(label: '\$', selected: !showKrw, onTap: () => onChanged(false)),
+      ],
+    );
+  }
+}
+
+class _ToggleBtn extends StatelessWidget {
+  const _ToggleBtn({required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        decoration: BoxDecoration(
+          color: selected ? cs.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? cs.primary : Colors.grey),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: selected ? cs.onPrimary : Colors.grey,
+          ),
+        ),
+      ),
+    );
   }
 }
 

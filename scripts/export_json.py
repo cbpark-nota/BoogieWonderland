@@ -603,10 +603,28 @@ def export_all_strategies(output_dir: Path):
           f"(현재 국면: {STRATEGIES[adaptive_regime]['label']})")
 
 
+def fetch_usdkrw() -> float:
+    """yfinance로 USD/KRW 현재 환율 조회. 실패 시 기본값 1380 반환."""
+    try:
+        import yfinance as yf
+        df = yf.download("USDKRW=X", period="5d", auto_adjust=True, progress=False)
+        if df.empty:
+            print("  환율 조회 결과 없음, 기본값 1380 사용")
+            return 1380.0
+        rate = float(df["Close"].dropna().iloc[-1])
+        print(f"  USD/KRW 환율: {rate:,.2f}")
+        return rate
+    except Exception as e:
+        print(f"  환율 조회 실패 ({e}), 기본값 1380 사용")
+        return 1380.0
+
+
 def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
     """portfolio.xlsx를 읽어서 현재가·수익률을 계산하고 portfolio.json으로 저장.
 
     엑셀이 없으면 빈 포트폴리오를 저장한다 (에러 없음).
+    KR 종목(원화)·US 종목(달러)를 각각 기준으로 계산하고,
+    전체 합계는 KRW·USD 양방향 환율 변환으로 산출한다.
     """
     import yfinance as yf
 
@@ -619,11 +637,18 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
     found = next((p for p in candidates if p and p.exists()), None)
 
     now_str = datetime.now().isoformat(timespec="seconds")
+    usdkrw = fetch_usdkrw()
+
     empty_output = {
         "updated_at": now_str,
+        "exchange_rate": {"usdkrw": round(usdkrw, 2), "updated_at": now_str},
         "total_invested": 0.0,
         "total_current": 0.0,
         "total_return_pct": 0.0,
+        "total_invested_krw": 0.0,
+        "total_current_krw": 0.0,
+        "total_invested_usd": 0.0,
+        "total_current_usd": 0.0,
         "holdings": [],
     }
 
@@ -667,6 +692,8 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
         with open(output_dir / "portfolio.json", "w", encoding="utf-8") as f:
             json.dump(empty_output, f, ensure_ascii=False, indent=2)
         return
+
+    # empty_output 갱신 (환율 포함)은 이미 위에서 처리됨
 
     # 숫자 변환
     for col in ("entry_price", "shares", "stop_loss", "target_price"):
@@ -714,6 +741,8 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
 
         current_price = price_map.get(ticker)
 
+        is_kr = market == "KR"
+
         if entry_price and entry_price > 0:
             invested = round(entry_price * shares, 2)
             current_value = round(current_price * shares, 2) if current_price else None
@@ -722,6 +751,20 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
             invested = 0.0
             current_value = None
             return_pct = None
+
+        # 환율 변환: KR=원화 기준, US=달러 기준
+        inv_val = invested or 0.0
+        cur_val = current_value or inv_val
+        if is_kr:
+            invested_krw = inv_val
+            current_krw = cur_val
+            invested_usd = round(inv_val / usdkrw, 2)
+            current_usd = round(cur_val / usdkrw, 2)
+        else:
+            invested_usd = inv_val
+            current_usd = cur_val
+            invested_krw = round(inv_val * usdkrw)
+            current_krw = round(cur_val * usdkrw)
 
         stop_triggered = bool(current_price and stop_loss and current_price < stop_loss)
 
@@ -741,23 +784,38 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
             "return_pct": safe_float(return_pct),
             "weight_pct": None,  # 나중에 계산
             "stop_triggered": stop_triggered,
+            "invested_krw": safe_float(invested_krw),
+            "current_value_krw": safe_float(current_krw),
+            "invested_usd": safe_float(invested_usd),
+            "current_value_usd": safe_float(current_usd),
         })
 
-    # 전체 합계
-    total_invested = sum(h["invested"] or 0 for h in holdings)
-    total_current = sum(h["current_value"] or h["invested"] or 0 for h in holdings)
-    total_return_pct = round((total_current - total_invested) / total_invested * 100, 2) if total_invested > 0 else 0.0
+    # 전체 합계 (KRW 기준: KR 원화 그대로 + US 달러×환율)
+    total_invested_krw = sum(h["invested_krw"] or 0 for h in holdings)
+    total_current_krw = sum(h["current_value_krw"] or h["invested_krw"] or 0 for h in holdings)
+    total_invested_usd = sum(h["invested_usd"] or 0 for h in holdings)
+    total_current_usd = sum(h["current_value_usd"] or h["invested_usd"] or 0 for h in holdings)
 
-    # 비중 계산
+    # 하위 호환: total_invested/total_current는 KRW 기준
+    total_invested = total_invested_krw
+    total_current = total_current_krw
+    total_return_pct = round((total_current_krw - total_invested_krw) / total_invested_krw * 100, 2) if total_invested_krw > 0 else 0.0
+
+    # 비중 계산 (투자금 기준)
     for h in holdings:
-        invested_val = h["invested"] or 0
-        h["weight_pct"] = round(invested_val / total_invested * 100, 1) if total_invested > 0 else 0.0
+        invested_val = h["invested_krw"] or 0
+        h["weight_pct"] = round(invested_val / total_invested_krw * 100, 1) if total_invested_krw > 0 else 0.0
 
     output = {
         "updated_at": now_str,
+        "exchange_rate": {"usdkrw": round(usdkrw, 2), "updated_at": now_str},
         "total_invested": round(total_invested, 2),
         "total_current": round(total_current, 2),
         "total_return_pct": total_return_pct,
+        "total_invested_krw": round(total_invested_krw),
+        "total_current_krw": round(total_current_krw),
+        "total_invested_usd": round(total_invested_usd, 2),
+        "total_current_usd": round(total_current_usd, 2),
         "holdings": holdings,
     }
 
