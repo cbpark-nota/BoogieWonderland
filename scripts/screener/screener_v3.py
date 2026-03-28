@@ -6,46 +6,22 @@ v2 대비 추가 개선:
   ② 복합점수 비례 포지션 사이징 (동일비중 → 점수 가중 배분)
 ══════════════════════════════════════════════════════════
 """
+import logging
+import sys
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings("ignore", message=".*yfinance.*")
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
 import pandas_ta as ta
 from datetime import datetime
+from pathlib import Path
 
-# ── 유니버스 ──────────────────────────────────────────────────
-US_UNIVERSE = {
-    "NVDA":"Technology","AAPL":"Technology","MSFT":"Technology","AVGO":"Technology",
-    "AMD":"Technology","QCOM":"Technology","AMAT":"Technology","LRCX":"Technology",
-    "MU":"Technology","KLAC":"Technology","ORCL":"Technology","ADBE":"Technology",
-    "CRM":"Technology","NOW":"Technology","PANW":"Technology","SNPS":"Technology",
-    "META":"Communication","GOOGL":"Communication","NFLX":"Communication","TMUS":"Communication",
-    "AMZN":"Consumer Disc","TSLA":"Consumer Disc","HD":"Consumer Disc","LULU":"Consumer Disc",
-    "LLY":"Health Care","UNH":"Health Care","ABBV":"Health Care","ISRG":"Health Care","VRTX":"Health Care",
-    "V":"Financials","MA":"Financials","JPM":"Financials","GS":"Financials",
-    "XOM":"Energy","CVX":"Energy","SLB":"Energy",
-    "CAT":"Industrials","GE":"Industrials","ETN":"Industrials","LMT":"Industrials",
-    "FCX":"Materials","NEM":"Materials",
-}
-KR_UNIVERSE = {
-    "005930.KS":"Technology","000660.KS":"Technology","009150.KS":"Technology",
-    "006400.KS":"Technology","373220.KS":"Technology",
-    "207940.KS":"Health Care","068270.KS":"Health Care",
-    "051910.KS":"Materials","247540.KS":"Materials",
-    "005380.KS":"Consumer Disc","000270.KS":"Consumer Disc",
-    "035420.KS":"Communication","035720.KS":"Communication",
-    "105560.KS":"Financials","055550.KS":"Financials",
-    "096770.KS":"Energy","011200.KS":"Industrials",
-}
-ALL_UNIVERSE = {**US_UNIVERSE, **KR_UNIVERSE}
-
-SECTOR_ETF = {
-    "Technology":"XLK","Health Care":"XLV","Financials":"XLF",
-    "Consumer Disc":"XLY","Industrials":"XLI","Energy":"XLE",
-    "Materials":"XLB","Communication":"XLC",
-}
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.constants import US_UNIVERSE, KR_UNIVERSE, ALL_UNIVERSE, SECTOR_ETF
 
 ATR_PERIOD   = 14
 ATR_MULT     = 2.5
@@ -75,13 +51,14 @@ def download(tickers, period="1y"):
                     df = raw.xs(t, axis=1, level=1).dropna(how="all")
                     if len(df) >= 60:
                         result[t] = df
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug("screener_v3 download: %s 슬라이스 실패 — %s", t, e)
         else:
             if len(raw) >= 60:
                 result[tickers[0]] = raw
         return result
-    except Exception:
+    except Exception as e:
+        logging.debug("screener_v3 download: 배치 다운로드 실패 — %s", e)
         return {}
 
 
@@ -276,16 +253,40 @@ def check_market():
         gap   = (ma20 - ma60) / ma60 * 100
         return {"price": price, "ma20": ma20, "ma60": ma60,
                 "gap_pct": gap, "is_golden": ma20 > ma60}
-    except Exception:
+    except Exception as e:
+        logging.debug("screener_v3 check_market: SPY 다운로드 실패 — %s", e)
         return None
 
 
 # ── 메인 ──────────────────────────────────────────────────────
 if __name__ == "__main__":
+    from data_cache import fetch_sp500_tickers, fetch_nasdaq100_tickers, fetch_kr_tickers
+
     today = datetime.now().strftime("%Y-%m-%d")
+
+    # ── 동적 유니버스 수집 (CLAUDE.md 규칙 8: 풀 유니버스 사용) ──
+    print("유니버스 수집 중...")
+    _us_tickers, _us_sectors = fetch_sp500_tickers()
+    _ndx_tickers, _ndx_sectors = fetch_nasdaq100_tickers()
+    _sp500_set = set(_us_tickers)
+    _ndx_new = [t for t in _ndx_tickers if t not in _sp500_set]
+    _ndx_new_sec = {t: s for t, s in _ndx_sectors.items() if t not in _sp500_set}
+    print(f"  NASDAQ-100 신규 추가: {len(_ndx_new)}개 (S&P500 중복 {len(_ndx_tickers) - len(_ndx_new)}개 제거)")
+    _us_tickers = _us_tickers + _ndx_new
+    _us_sectors = {**_us_sectors, **_ndx_new_sec}
+    _kr_tickers = fetch_kr_tickers()
+    _kr_sectors = {t: "Unknown" for t in _kr_tickers}
+
+    # 모듈 레벨 유니버스를 동적 수집 결과로 교체 (rank_stocks가 참조)
+    ALL_UNIVERSE.clear()
+    ALL_UNIVERSE.update({**_us_sectors, **_kr_sectors})
+
+    _all_tickers = list(ALL_UNIVERSE.keys())
+    print(f"  유니버스 합계: US {len(_us_tickers)}종목 + KR {len(_kr_tickers)}종목 = {len(_all_tickers)}종목")
+
     print("=" * 64)
     print(f"  모멘텀 종목 스크리너 v3   기준일: {today}")
-    print(f"  유니버스: 미국 {len(US_UNIVERSE)}개 + 국내 {len(KR_UNIVERSE)}개")
+    print(f"  유니버스: 미국 {len(_us_tickers)}개 + 국내 {len(_kr_tickers)}개 (동적 수집)")
     print(f"  스톱로스: ATR({ATR_PERIOD}) × {ATR_MULT}  │  "
           f"포지션: {SIZING_MODE} (상한 {MAX_WEIGHT:.0%})")
     print("=" * 64)
@@ -308,10 +309,10 @@ if __name__ == "__main__":
     # 다운로드
     print("\n[1/3] 데이터 다운로드 중...")
     us_data, kr_data, etf_data = {}, {}, {}
-    for i in range(0, len(US_UNIVERSE), 30):
-        us_data.update(download(list(US_UNIVERSE.keys())[i:i+30]))
-    for i in range(0, len(KR_UNIVERSE), 30):
-        kr_data.update(download(list(KR_UNIVERSE.keys())[i:i+30]))
+    for i in range(0, len(_us_tickers), 50):
+        us_data.update(download(_us_tickers[i:i+50]))
+    for i in range(0, len(_kr_tickers), 30):
+        kr_data.update(download(_kr_tickers[i:i+30]))
     etf_raw = download(list(set(SECTOR_ETF.values())))
     for t, df in etf_raw.items():
         etf_data[t] = calc_indicators(df)

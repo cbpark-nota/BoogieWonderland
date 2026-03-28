@@ -24,21 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent / "screener"))
 sys.path.insert(0, str(Path(__file__).parent / "crypto"))
 
 import screener_v3 as sc
-
-# ICB Industry (Wikipedia NASDAQ-100) → GICS Sector 매핑
-_ICB_TO_GICS = {
-    "Technology":              "Information Technology",
-    "Consumer Discretionary":  "Consumer Discretionary",
-    "Health Care":             "Health Care",
-    "Utilities":               "Utilities",
-    "Industrials":             "Industrials",
-    "Energy":                  "Energy",
-    "Telecommunications":      "Communication Services",
-    "Consumer Staples":        "Consumer Staples",
-    "Real Estate":             "Real Estate",
-    "Basic Materials":         "Materials",
-    "Financials":              "Financials",
-}
+from data_cache import fetch_sp500_tickers, fetch_nasdaq100_tickers
 
 # 4가지 전략 프리셋 — v3 최적 ATR 승수 + 전략별 종목 수
 # top_n: 공격적(15) > 균형형(10) > 보수적(7) — 위험선호도에 따라 포트폴리오 집중도 차별화
@@ -77,60 +63,7 @@ def detect_adaptive_regime(mkt):
 
 
 # ── 동적 유니버스 수집 ────────────────────────────────────────
-
-def fetch_sp500_tickers():
-    """S&P500 구성 종목 및 GICS 섹터 가져오기."""
-    try:
-        url = ("https://raw.githubusercontent.com/datasets/"
-               "s-and-p-500-companies/main/data/constituents.csv")
-        df = pd.read_csv(url)
-        tickers = df["Symbol"].str.replace(".", "-", regex=False).tolist()
-        sectors = dict(zip(
-            df["Symbol"].str.replace(".", "-", regex=False),
-            df["GICS Sector"],
-        ))
-        print(f"  S&P500 {len(tickers)}개 종목 수집 완료")
-        return tickers, sectors
-    except Exception as e:
-        print(f"  S&P500 수집 실패 ({e}), 기본 유니버스 사용")
-        return list(sc.US_UNIVERSE.keys()), dict(sc.US_UNIVERSE)
-
-
-def fetch_nasdaq100_tickers():
-    """NASDAQ-100 구성 종목 및 섹터 가져오기 (Wikipedia).
-
-    Wikipedia의 NASDAQ-100 페이지에서 종목 리스트를 수집한다.
-    ICB Industry를 GICS 섹터로 변환해서 S&P500과 동일한 형식으로 반환.
-    """
-    try:
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-            )
-        }
-        r = requests.get(
-            "https://en.wikipedia.org/wiki/Nasdaq-100",
-            headers=headers,
-            timeout=15,
-        )
-        r.raise_for_status()
-        tables = pd.read_html(io.StringIO(r.text))
-        # Table 4: Ticker | Company | ICB Industry[14] | ICB Subsector[14]
-        ndx = tables[4]
-        tickers = ndx["Ticker"].str.replace(".", "-", regex=False).tolist()
-        sectors = {
-            row["Ticker"].replace(".", "-"): _ICB_TO_GICS.get(
-                row["ICB Industry[14]"], row["ICB Industry[14]"]
-            )
-            for _, row in ndx.iterrows()
-        }
-        print(f"  NASDAQ-100 {len(tickers)}개 종목 수집 완료")
-        return tickers, sectors
-    except Exception as e:
-        print(f"  NASDAQ-100 수집 실패 ({e})")
-        return [], {}
-
+# fetch_sp500_tickers, fetch_nasdaq100_tickers는 data_cache 모듈에서 import
 
 def _fetch_kr_from_naver(kospi_n: int, kosdaq_n: int) -> list[str]:
     """네이버 금융 시가총액 페이지에서 KR 종목 수집 (fallback).

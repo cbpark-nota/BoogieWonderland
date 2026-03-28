@@ -22,6 +22,7 @@ Thumbs.db
 # Project outputs
 holdings.json
 scripts/backtest/results/
+*.csv
 
 # Data cache (로컬 주가 캐시)
 data/
