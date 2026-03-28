@@ -315,8 +315,8 @@ void main() {
     });
 
     // 입력: exchange_rate.usdkrw = null (환율 조회 실패 시 Python에서 None 출력)
-    // 확인: 기본값 1380.0으로 fallback (프론트엔드 null 처리)
-    test('exchange_rate.usdkrw가 null이면 기본값 1380.0이 사용된다', () {
+    // 확인: null이 반환된다 — UI에서 "환율 조회 실패" 표시로 이어짐
+    test('exchange_rate.usdkrw가 null이면 null이 반환된다', () {
       final json = {
         'updated_at': '',
         'exchange_rate': {'usdkrw': null},
@@ -326,12 +326,12 @@ void main() {
         'holdings': [],
       };
       final data = PortfolioData.fromJson(json);
-      expect(data.usdkrw, 1380.0);
+      expect(data.usdkrw, isNull);
     });
 
-    // 입력: exchange_rate 키 자체 없음 (구버전 JSON 하위 호환)
-    // 확인: 기본값 1380.0 적용
-    test('exchange_rate 키 자체가 없으면 기본값 1380.0이 사용된다', () {
+    // 입력: exchange_rate 키 자체 없음
+    // 확인: null이 반환된다 — 환율 정보 없음으로 처리
+    test('exchange_rate 키 자체가 없으면 null이 반환된다', () {
       final json = {
         'updated_at': '',
         'total_invested': 0.0,
@@ -340,7 +340,7 @@ void main() {
         'holdings': [],
       };
       final data = PortfolioData.fromJson(json);
-      expect(data.usdkrw, 1380.0);
+      expect(data.usdkrw, isNull);
     });
 
     // 입력: exchange_rate.usdkrw를 int로 전달
