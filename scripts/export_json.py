@@ -612,19 +612,21 @@ def export_all_strategies(output_dir: Path):
 
 
 def fetch_usdkrw() -> float:
-    """yfinance로 USD/KRW 현재 환율 조회. 실패 시 기본값 1380 반환."""
+    """yfinance로 USD/KRW 현재 환율 조회. 실패 시 기본값 1500 반환."""
     try:
         import yfinance as yf
         df = yf.download("USDKRW=X", period="5d", auto_adjust=True, progress=False)
         if df.empty:
-            print("  환율 조회 결과 없음, 기본값 1380 사용")
-            return 1380.0
-        rate = float(df["Close"].dropna().iloc[-1])
+            print("  환율 조회 결과 없음, 기본값 1500 사용")
+            return 1500.0
+        # yfinance 최신 버전은 단일 ticker도 multi-level column을 반환하므로 squeeze() 필요
+        close = df["Close"].squeeze()
+        rate = float(close.dropna().iloc[-1])
         print(f"  USD/KRW 환율: {rate:,.2f}")
         return rate
     except Exception as e:
-        print(f"  환율 조회 실패 ({e}), 기본값 1380 사용")
-        return 1380.0
+        print(f"  환율 조회 실패 ({e}), 기본값 1500 사용")
+        return 1500.0
 
 
 def _calc_atr_stop(df_ohlc: pd.DataFrame, period: int = 14, atr_mult: float = 2.0) -> "float | None":
