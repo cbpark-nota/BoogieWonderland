@@ -158,8 +158,8 @@ void main() {
       final json = {
         'spy_price': 450.5,
         'is_golden_cross': true,
-        'ma50': 440.0,
-        'ma200': 420.0,
+        'ma20': 440.0,
+        'ma60': 420.0,
         'gap_pct': 4.76,
         'next_rebalance': '2026-04-01',
       };
@@ -168,8 +168,8 @@ void main() {
 
       expect(status.spyPrice, 450.5);
       expect(status.isGoldenCross, true);
-      expect(status.ma50, 440.0);
-      expect(status.ma200, 420.0);
+      expect(status.ma20, 440.0);
+      expect(status.ma60, 420.0);
       expect(status.gapPct, 4.76);
       expect(status.nextRebalance, '2026-04-01');
     });
@@ -178,8 +178,8 @@ void main() {
       final json = {
         'spy_price': 450.0,
         'is_golden_cross': true,
-        'ma50': 440.0,
-        'ma200': 420.0,
+        'ma20': 440.0,
+        'ma60': 420.0,
         'gap_pct': 4.0,
         'next_rebalance': null,
       };
@@ -192,8 +192,8 @@ void main() {
       final json = {
         'spy_price': 400.0,
         'is_golden_cross': null,
-        'ma50': 410.0,
-        'ma200': 420.0,
+        'ma20': 410.0,
+        'ma60': 420.0,
         'gap_pct': -2.38,
       };
 
@@ -204,8 +204,8 @@ void main() {
     test('is_golden_cross 키가 없을 때 false 기본값이다', () {
       final json = {
         'spy_price': 400.0,
-        'ma50': 410.0,
-        'ma200': 420.0,
+        'ma20': 410.0,
+        'ma60': 420.0,
         'gap_pct': -2.38,
       };
 
@@ -225,8 +225,8 @@ void main() {
         'market_status': {
           'spy_price': 450.0,
           'is_golden_cross': true,
-          'ma50': 440.0,
-          'ma200': 420.0,
+          'ma20': 440.0,
+          'ma60': 420.0,
           'gap_pct': 4.76,
           'next_rebalance': '2026-04-01',
         },
@@ -447,19 +447,19 @@ void main() {
     test('aggressive 전략의 key, label, description이 올바르다', () {
       expect(StrategyType.aggressive.key, 'aggressive');
       expect(StrategyType.aggressive.label, '공격적');
-      expect(StrategyType.aggressive.description, 'ATR 2.0 / 주간');
+      expect(StrategyType.aggressive.description, 'ATR 1.5 / 주간 / TOP15');
     });
 
     test('balanced 전략의 key, label, description이 올바르다', () {
       expect(StrategyType.balanced.key, 'balanced');
       expect(StrategyType.balanced.label, '균형형');
-      expect(StrategyType.balanced.description, 'ATR 2.5 / 격주');
+      expect(StrategyType.balanced.description, 'ATR 2.0 / 격주 / TOP10');
     });
 
     test('conservative 전략의 key, label, description이 올바르다', () {
       expect(StrategyType.conservative.key, 'conservative');
       expect(StrategyType.conservative.label, '보수적');
-      expect(StrategyType.conservative.description, 'ATR 3.5 / 월간');
+      expect(StrategyType.conservative.description, 'ATR 2.5 / 월간 / TOP7');
     });
 
     test('adaptive 전략의 key, label, description이 올바르다', () {
@@ -515,8 +515,8 @@ void main() {
         'market_status': {
           'spy_price': 450.0,
           'is_golden_cross': true,
-          'ma50': 440.0,
-          'ma200': 420.0,
+          'ma20': 440.0,
+          'ma60': 420.0,
           'gap_pct': 4.76,
         },
         'strategies': {
@@ -566,8 +566,8 @@ void main() {
         'market_status': {
           'spy_price': 450.0,
           'is_golden_cross': true,
-          'ma50': 440.0,
-          'ma200': 420.0,
+          'ma20': 440.0,
+          'ma60': 420.0,
           'gap_pct': 4.76,
         },
         'strategies': {
