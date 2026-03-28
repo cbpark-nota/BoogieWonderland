@@ -138,8 +138,7 @@ final historyScreeningProvider =
     FutureProvider<StrategyScreeningData?>((ref) async {
   final date = ref.watch(selectedHistoryDateProvider);
   if (date == null) {
-    // 최신 데이터 사용 (Riverpod 3.x: valueOrNull → value)
-    return ref.watch(strategyDataProvider).value;
+    return await ref.watch(strategyDataProvider.future);
   }
   try {
     final data = await StaticDataSource().getScreeningByDate(date);
