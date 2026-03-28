@@ -167,8 +167,13 @@ class _SummaryCardState extends State<_SummaryCard> {
             ),
             const SizedBox(height: 8),
             Text(
-              '환율 USD/KRW: ${p.usdkrw.toStringAsFixed(0)}원',
-              style: const TextStyle(fontSize: 11, color: Colors.grey),
+              p.usdkrw != null
+                  ? '환율 USD/KRW: ${p.usdkrw!.toStringAsFixed(0)}원'
+                  : '환율 조회 실패',
+              style: TextStyle(
+                fontSize: 11,
+                color: p.usdkrw != null ? Colors.grey : Colors.orange,
+              ),
             ),
           ],
         ),

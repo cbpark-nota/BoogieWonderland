@@ -11,6 +11,7 @@ v3 최적 파라미터 적용:
 import argparse
 import io
 import json
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -242,6 +243,46 @@ def fetch_kr_tickers(kospi_n=200, kosdaq_n=150):
         return _fetch_kr_from_naver(kospi_n, kosdaq_n)
 
 
+def download_for_date(tickers, end_date: str | None = None):
+    """특정 날짜 기준으로 주가 데이터 다운로드.
+
+    end_date(YYYY-MM-DD)가 지정되면 그 날 종가까지의 1년치 데이터를,
+    지정하지 않으면 최근 1년치 데이터를 다운로드한다.
+    """
+    import yfinance as yf
+
+    try:
+        if end_date:
+            end_dt = pd.Timestamp(end_date) + pd.Timedelta(days=1)
+            start_dt = pd.Timestamp(end_date) - pd.Timedelta(days=400)
+            raw = yf.download(
+                tickers,
+                start=start_dt.strftime("%Y-%m-%d"),
+                end=end_dt.strftime("%Y-%m-%d"),
+                auto_adjust=True,
+                progress=False,
+                threads=True,
+            )
+        else:
+            raw = yf.download(tickers, period="1y", auto_adjust=True, progress=False, threads=True)
+
+        result = {}
+        if isinstance(raw.columns, pd.MultiIndex):
+            for t in tickers:
+                try:
+                    df = raw.xs(t, axis=1, level=1).dropna(how="all")
+                    if len(df) >= 60:
+                        result[t] = df
+                except Exception:
+                    pass
+        else:
+            if len(raw) >= 60:
+                result[tickers[0]] = raw
+        return result
+    except Exception:
+        return {}
+
+
 def run_screening_with_atr(all_data_ind, etf_data, atr_mult):
     """특정 ATR 승수로 스크리닝 실행."""
     # ATR_MULT를 임시 변경
@@ -464,10 +505,18 @@ def check_kospi_market() -> dict | None:
         return None
 
 
-def export_all_strategies(output_dir: Path):
-    """4전략 스크리닝 실행 후 단일 JSON으로 저장."""
+def export_all_strategies(output_dir: Path, screening_date: str | None = None):
+    """4전략 스크리닝 실행 후 단일 JSON으로 저장.
+
+    screening_date(YYYY-MM-DD)가 지정되면 그 날 종가 기준 히스토리 파일만 생성하고
+    screening_latest.json / screening_strategies.json은 갱신하지 않는다.
+    지정하지 않으면 오늘 날짜로 모든 파일을 갱신한다.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     now = datetime.now()
+    is_history_only = screening_date is not None
+    if is_history_only:
+        print(f"히스토리 모드: {screening_date} 날짜 기준 데이터 생성")
 
     # 시장 상태 (SPY)
     mkt = sc.check_market()
@@ -520,13 +569,14 @@ def export_all_strategies(output_dir: Path):
     sc.ALL_UNIVERSE = {**sc.US_UNIVERSE, **sc.KR_UNIVERSE}
 
     # 데이터 다운로드 (1회)
+    # screening_date가 지정된 경우 해당 날짜까지의 데이터를 다운로드
     print("데이터 다운로드 중...")
     us_data, kr_data, etf_data = {}, {}, {}
     for i in range(0, len(us_tickers), 50):
-        us_data.update(sc.download(us_tickers[i:i + 50]))
+        us_data.update(download_for_date(us_tickers[i:i + 50], screening_date))
     for i in range(0, len(kr_tickers), 30):
-        kr_data.update(sc.download(kr_tickers[i:i + 30]))
-    etf_raw = sc.download(list(set(sc.SECTOR_ETF.values())))
+        kr_data.update(download_for_date(kr_tickers[i:i + 30], screening_date))
+    etf_raw = download_for_date(list(set(sc.SECTOR_ETF.values())), screening_date)
     for t, df in etf_raw.items():
         etf_data[t] = sc.calc_indicators(df)
 
@@ -571,38 +621,46 @@ def export_all_strategies(output_dir: Path):
     # BTC V10 시그널 계산
     btc_signal = calculate_btc_signal()
 
+    # 날짜 결정: 히스토리 모드면 screening_date, 아니면 오늘
+    if is_history_only:
+        run_dt = datetime.strptime(screening_date, "%Y-%m-%d")
+    else:
+        run_dt = now
+
     output = {
-        "run_id": int(now.strftime("%Y%m%d")),
-        "run_date": now.isoformat(timespec="seconds"),
+        "run_id": int(run_dt.strftime("%Y%m%d")),
+        "run_date": run_dt.strftime("%Y-%m-%dT%H:%M:%S"),
         "market_status": market_status,
         "btc_signal": btc_signal,
         "strategies": strategies_output,
     }
 
-    # screening_latest.json (하위 호환: 균형형을 기본으로)
-    balanced = strategies_output["balanced"]
-    compat_output = {
-        "run_id": output["run_id"],
-        "run_date": output["run_date"],
-        "market_status": market_status,
-        "btc_signal": btc_signal,
-        "total_screened": balanced["total_screened"],
-        "total_passed": balanced["total_passed"],
-        "results": balanced["results"],
-    }
-    compat_path = output_dir / "screening_latest.json"
-    with open(compat_path, "w", encoding="utf-8") as f:
-        json.dump(compat_output, f, ensure_ascii=False, indent=2)
+    if not is_history_only:
+        # screening_latest.json (하위 호환: 균형형을 기본으로)
+        balanced = strategies_output["balanced"]
+        compat_output = {
+            "run_id": output["run_id"],
+            "run_date": output["run_date"],
+            "market_status": market_status,
+            "btc_signal": btc_signal,
+            "total_screened": balanced["total_screened"],
+            "total_passed": balanced["total_passed"],
+            "results": balanced["results"],
+        }
+        compat_path = output_dir / "screening_latest.json"
+        with open(compat_path, "w", encoding="utf-8") as f:
+            json.dump(compat_output, f, ensure_ascii=False, indent=2)
 
-    # screening_strategies.json (4전략 전체)
-    full_path = output_dir / "screening_strategies.json"
-    with open(full_path, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
+        # screening_strategies.json (4전략 전체)
+        full_path = output_dir / "screening_strategies.json"
+        with open(full_path, "w", encoding="utf-8") as f:
+            json.dump(output, f, ensure_ascii=False, indent=2)
 
     # history/{date}.json 저장 및 index.json 업데이트
-    save_history(output_dir, output, now)
+    save_history(output_dir, output, run_dt)
 
-    print(f"\n완료: {full_path}")
+    date_label = screening_date or run_dt.strftime("%Y-%m-%d")
+    print(f"\n완료 ({date_label}):")
     for k in ("aggressive", "balanced", "conservative"):
         s = strategies_output[k]
         print(f"  {s['label']}: {len(s['results'])}종목 선정 / {s['total_passed']}개 통과")
@@ -611,20 +669,22 @@ def export_all_strategies(output_dir: Path):
           f"(현재 국면: {STRATEGIES[adaptive_regime]['label']})")
 
 
-def fetch_usdkrw() -> float:
-    """yfinance로 USD/KRW 현재 환율 조회. 실패 시 기본값 1380 반환."""
+def fetch_usdkrw() -> "float | None":
+    """yfinance로 USD/KRW 현재 환율 조회. 실패 시 None 반환."""
     try:
         import yfinance as yf
         df = yf.download("USDKRW=X", period="5d", auto_adjust=True, progress=False)
         if df.empty:
-            print("  환율 조회 결과 없음, 기본값 1380 사용")
-            return 1380.0
-        rate = float(df["Close"].dropna().iloc[-1])
+            print("  환율 조회 결과 없음")
+            return None
+        # yfinance 최신 버전은 단일 ticker도 multi-level column을 반환하므로 squeeze() 필요
+        close = df["Close"].squeeze()
+        rate = float(close.dropna().iloc[-1])
         print(f"  USD/KRW 환율: {rate:,.2f}")
         return rate
     except Exception as e:
-        print(f"  환율 조회 실패 ({e}), 기본값 1380 사용")
-        return 1380.0
+        print(f"  환율 조회 실패 ({e})")
+        return None
 
 
 def _calc_atr_stop(df_ohlc: pd.DataFrame, period: int = 14, atr_mult: float = 2.0) -> "float | None":
@@ -673,7 +733,7 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
 
     empty_output = {
         "updated_at": now_str,
-        "exchange_rate": {"usdkrw": round(usdkrw, 2), "updated_at": now_str},
+        "exchange_rate": {"usdkrw": round(usdkrw, 2) if usdkrw is not None else None, "updated_at": now_str},
         "total_invested": 0.0,
         "total_current": 0.0,
         "total_return_pct": 0.0,
@@ -821,13 +881,13 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
         if is_kr:
             invested_krw = inv_val
             current_krw = cur_val
-            invested_usd = round(inv_val / usdkrw, 2)
-            current_usd = round(cur_val / usdkrw, 2)
+            invested_usd = round(inv_val / usdkrw, 2) if usdkrw else None
+            current_usd = round(cur_val / usdkrw, 2) if usdkrw else None
         else:
             invested_usd = inv_val
             current_usd = cur_val
-            invested_krw = round(inv_val * usdkrw)
-            current_krw = round(cur_val * usdkrw)
+            invested_krw = round(inv_val * usdkrw) if usdkrw else None
+            current_krw = round(cur_val * usdkrw) if usdkrw else None
 
         stop_triggered = bool(current_price and stop_loss and current_price < stop_loss)
 
@@ -881,7 +941,7 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
 
     output = {
         "updated_at": now_str,
-        "exchange_rate": {"usdkrw": round(usdkrw, 2), "updated_at": now_str},
+        "exchange_rate": {"usdkrw": round(usdkrw, 2) if usdkrw is not None else None, "updated_at": now_str},
         "total_invested": round(total_invested, 2),
         "total_current": round(total_current, 2),
         "total_return_pct": total_return_pct,
@@ -913,9 +973,13 @@ def _sanitize_nan(obj):
 
 
 def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int = 30) -> None:
-    """일자별 스크리닝 결과를 history/ 폴더에 저장하고 최근 keep_days일치만 유지."""
+    """일자별 스크리닝 결과를 history/ 폴더에 저장하고 최근 keep_days일치만 유지.
+
+    keep_days 초과 파일은 삭제하지 않고 history/archive/ 로 이동하여 영구 보존한다.
+    """
     history_dir = output_dir / "history"
     history_dir.mkdir(parents=True, exist_ok=True)
+    archive_dir = history_dir / "archive"
 
     today = now.strftime("%Y-%m-%d")
 
@@ -946,11 +1010,13 @@ def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int =
         reverse=True,
     )
 
-    # keep_days 초과 파일 삭제
+    # keep_days 초과 파일은 archive/로 이동 (영구 보존)
     for old_date in existing[keep_days:]:
         old_path = history_dir / f"{old_date}.json"
-        old_path.unlink(missing_ok=True)
-        print(f"  history 삭제 (오래된 파일): {old_date}.json")
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        dest = archive_dir / f"{old_date}.json"
+        shutil.move(str(old_path), str(dest))
+        print(f"  history 아카이브 이동: {old_date}.json → archive/")
 
     # 최신 날짜 목록으로 index.json 갱신
     dates = sorted(
@@ -963,6 +1029,134 @@ def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int =
     print(f"  history index 갱신: {dates}")
 
 
+def generate_history_batch(output_dir: Path, dates: list[str]) -> None:
+    """여러 날짜의 히스토리를 한 번의 다운로드로 효율적으로 생성.
+
+    최신 날짜(dates 중 가장 늦은 날짜)까지의 데이터를 한 번 다운로드한 후,
+    각 날짜별로 데이터를 슬라이싱하여 스크리닝을 실행한다.
+    """
+    if not dates:
+        print("생성할 날짜 목록이 없습니다.")
+        return
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    history_dir = output_dir / "history"
+    history_dir.mkdir(parents=True, exist_ok=True)
+
+    # 이미 생성된 날짜는 건너뜀
+    existing = {p.stem for p in history_dir.glob("????-??-??.json")}
+    dates_to_gen = [d for d in dates if d not in existing]
+    if not dates_to_gen:
+        print("모든 날짜의 히스토리가 이미 존재합니다.")
+        return
+
+    print(f"배치 히스토리 생성: {dates_to_gen}")
+    latest_date = max(dates_to_gen)
+
+    # 유니버스 수집
+    print("유니버스 수집 중...")
+    us_tickers, us_sectors = fetch_sp500_tickers()
+    ndx_tickers, ndx_sectors = fetch_nasdaq100_tickers()
+    sp500_set = set(us_tickers)
+    ndx_new = [t for t in ndx_tickers if t not in sp500_set]
+    ndx_new_sectors = {t: s for t, s in ndx_sectors.items() if t not in sp500_set}
+    us_tickers = us_tickers + ndx_new
+    us_sectors = {**us_sectors, **ndx_new_sectors}
+    kr_tickers = fetch_kr_tickers()
+
+    sc.US_UNIVERSE = us_sectors
+    sc.KR_UNIVERSE = {t: "Unknown" for t in kr_tickers}
+    sc.ALL_UNIVERSE = {**sc.US_UNIVERSE, **sc.KR_UNIVERSE}
+
+    # 최신 날짜 기준으로 데이터 1회 다운로드
+    print(f"데이터 다운로드 중 (기준일: {latest_date})...")
+    us_data_raw, kr_data_raw, etf_data_raw = {}, {}, {}
+    for i in range(0, len(us_tickers), 50):
+        us_data_raw.update(download_for_date(us_tickers[i:i + 50], latest_date))
+    for i in range(0, len(kr_tickers), 30):
+        kr_data_raw.update(download_for_date(kr_tickers[i:i + 30], latest_date))
+    etf_raw = download_for_date(list(set(sc.SECTOR_ETF.values())), latest_date)
+
+    # 각 날짜별 처리
+    for target_date in sorted(dates_to_gen):
+        print(f"\n=== {target_date} 스크리닝 ===")
+        cutoff = pd.Timestamp(target_date)
+
+        # 해당 날짜까지 데이터 슬라이싱
+        us_data = {t: df[df.index <= cutoff] for t, df in us_data_raw.items()
+                   if len(df[df.index <= cutoff]) >= 60}
+        kr_data = {t: df[df.index <= cutoff] for t, df in kr_data_raw.items()
+                   if len(df[df.index <= cutoff]) >= 60}
+        etf_data = {}
+        for t, df in etf_raw.items():
+            sliced = df[df.index <= cutoff]
+            if len(sliced) >= 60:
+                etf_data[t] = sc.calc_indicators(sliced)
+
+        all_data = {**us_data, **kr_data}
+        print(f"  지표 계산 중 ({len(all_data)}개 종목)...")
+        all_data_ind = {t: sc.calc_indicators(df) for t, df in all_data.items()}
+
+        # 시장 상태 (SPY 기준 해당 날짜)
+        market_status = None
+        spy_df = us_data_raw.get("SPY") or us_data_raw.get("SPY.US")
+        if spy_df is not None:
+            spy_sliced = spy_df[spy_df.index <= cutoff]
+            if len(spy_sliced) >= 60:
+                spy_ind = sc.calc_indicators(spy_sliced)
+                row = spy_ind.iloc[-1]
+                ma20 = float(row.get("MA20", float("nan")))
+                ma60 = float(spy_sliced["Close"].rolling(60).mean().iloc[-1])
+                price = float(row["Close"])
+                if not any(pd.isna(v) for v in [price, ma20, ma60]):
+                    gap = (ma20 - ma60) / ma60 * 100
+                    market_status = {
+                        "spy_price": round(price, 2),
+                        "is_golden_cross": ma20 > ma60,
+                        "ma20": round(ma20, 2),
+                        "ma60": round(ma60, 2),
+                        "gap_pct": round(gap, 2),
+                    }
+
+        # 적응형 국면 판별
+        adaptive_regime, adaptive_atr = detect_adaptive_regime(market_status)
+
+        # 4전략 스크리닝
+        strategies_output = {}
+        for key, preset in STRATEGIES.items():
+            atr_mult = preset["atr_mult"]
+            top_n = preset["top_n"]
+            passed = run_screening_with_atr(all_data_ind, etf_data, atr_mult)
+            results = build_results(passed, etf_data, top_n)
+            strategy_info = {
+                "key": key,
+                "label": preset["label"],
+                "atr_mult": atr_mult,
+                "rebal_freq": preset["rebal_freq"],
+                "top_n": top_n,
+                "total_screened": len(all_data),
+                "total_passed": len(passed),
+                "results": results,
+            }
+            if key == "adaptive":
+                strategy_info["current_regime"] = adaptive_regime
+                strategy_info["regime_label"] = STRATEGIES[adaptive_regime]["label"]
+            strategies_output[key] = strategy_info
+            print(f"  {preset['label']}: {len(results)}종목 선정 / {len(passed)}개 통과")
+
+        run_dt = datetime.strptime(target_date, "%Y-%m-%d")
+        output = {
+            "run_id": int(run_dt.strftime("%Y%m%d")),
+            "run_date": run_dt.strftime("%Y-%m-%dT00:00:00"),
+            "market_status": market_status,
+            "btc_signal": None,
+            "strategies": strategies_output,
+        }
+        save_history(output_dir, output, run_dt)
+
+    print("\n배치 히스토리 생성 완료!")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="4전략 스크리닝 결과 JSON 내보내기")
     parser.add_argument("--output", type=str, default="frontend/web/data/",
@@ -971,6 +1165,11 @@ if __name__ == "__main__":
                         help="포트폴리오 JSON만 생성 (스크리닝 생략)")
     parser.add_argument("--xlsx", type=str, default=None,
                         help="portfolio.xlsx 경로 (기본: scripts/portfolio.xlsx)")
+    parser.add_argument("--date", type=str, default=None,
+                        help="히스토리 모드: YYYY-MM-DD 날짜 기준으로 history/{date}.json만 생성 "
+                             "(screening_latest.json, screening_strategies.json은 갱신하지 않음)")
+    parser.add_argument("--batch-dates", type=str, default=None,
+                        help="배치 히스토리 모드: 쉼표로 구분된 날짜 목록 (예: 2026-03-23,2026-03-24)")
     args = parser.parse_args()
 
     output_path = Path(args.output)
@@ -979,7 +1178,11 @@ if __name__ == "__main__":
     if args.portfolio_only:
         print("포트폴리오 JSON 생성 중...")
         portfolio_to_json(output_path, xlsx_path)
+    elif args.batch_dates:
+        dates_list = [d.strip() for d in args.batch_dates.split(",")]
+        generate_history_batch(output_path, dates_list)
     else:
-        export_all_strategies(output_path)
-        print("\n포트폴리오 JSON 생성 중...")
-        portfolio_to_json(output_path, xlsx_path)
+        export_all_strategies(output_path, screening_date=args.date)
+        if not args.date:
+            print("\n포트폴리오 JSON 생성 중...")
+            portfolio_to_json(output_path, xlsx_path)

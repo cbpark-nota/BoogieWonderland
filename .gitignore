@@ -23,8 +23,11 @@ Thumbs.db
 holdings.json
 scripts/backtest/results/
 
-# Data cache
+# Data cache (로컬 주가 캐시)
 data/
+# GitHub Pages 배포용 정적 데이터는 추적
+!frontend/web/data/
+!frontend/web/data/**
 
 # Byte-compiled
 *.egg-info/
