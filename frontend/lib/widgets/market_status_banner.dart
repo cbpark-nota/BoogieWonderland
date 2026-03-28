@@ -1,6 +1,16 @@
 import 'package:flutter/material.dart';
 import '../models/screening_result.dart';
 
+Widget _metric(String label, String value) {
+  return Column(
+    children: [
+      Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+      Text(value,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+    ],
+  );
+}
+
 class MarketStatusBanner extends StatelessWidget {
   final MarketStatus status;
 
@@ -46,17 +56,6 @@ class MarketStatusBanner extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _metric(String label, String value) {
-    return Column(
-      children: [
-        Text(label,
-            style: const TextStyle(fontSize: 11, color: Colors.grey)),
-        Text(value,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-      ],
     );
   }
 }
@@ -115,17 +114,6 @@ class KospiStatusBanner extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _metric(String label, String value) {
-    return Column(
-      children: [
-        Text(label,
-            style: const TextStyle(fontSize: 11, color: Colors.grey)),
-        Text(value,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-      ],
     );
   }
 }

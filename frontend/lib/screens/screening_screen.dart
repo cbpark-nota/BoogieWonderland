@@ -34,34 +34,32 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
   Widget _buildServerlessView() {
     final historyAsync = ref.watch(historyScreeningProvider);
 
-    return Scaffold(
-      body: Column(
-        children: [
-          _buildDateSelector(),
-          _buildStrategySelector(),
-          _buildMarketFilter(),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {
-                ref.invalidate(strategyDataProvider);
-                ref.invalidate(historyScreeningProvider);
-                ref.invalidate(historyDatesProvider);
+    return Column(
+      children: [
+        _buildDateSelector(),
+        _buildStrategySelector(),
+        _buildMarketFilter(),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(strategyDataProvider);
+              ref.invalidate(historyScreeningProvider);
+              ref.invalidate(historyDatesProvider);
+            },
+            child: historyAsync.when(
+              data: (data) {
+                if (data == null) return _buildEmpty();
+                final run = data.toScreeningRun(_selected);
+                final sr = data.strategies[_selected];
+                return _buildResultList(_filterRun(run), sr);
               },
-              child: historyAsync.when(
-                data: (data) {
-                  if (data == null) return _buildEmpty();
-                  final run = data.toScreeningRun(_selected);
-                  final sr = data.strategies[_selected];
-                  return _buildResultList(_filterRun(run), sr);
-                },
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text('오류: $e')),
-              ),
+              loading: () =>
+                  const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('오류: $e')),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -250,25 +248,9 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
     final filtered = run.results
         .where((r) => r.market == marketCode)
         .toList();
-    final reranked = filtered.asMap().entries.map((e) {
-      final r = e.value;
-      return ScreeningResult(
-        rank: e.key + 1,
-        ticker: r.ticker,
-        market: r.market,
-        name: r.name,
-        sector: r.sector,
-        score: r.score,
-        weightPct: r.weightPct,
-        price: r.price,
-        adx: r.adx,
-        rsi: r.rsi,
-        ret3m: r.ret3m,
-        stopPrice: r.stopPrice,
-        stopDistPct: r.stopDistPct,
-        atr: r.atr,
-      );
-    }).toList();
+    final reranked = filtered.asMap().entries
+        .map((e) => e.value.copyWith(rank: e.key + 1))
+        .toList();
     return ScreeningRun(
       runId: run.runId,
       runDate: run.runDate,
@@ -347,7 +329,12 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(text,
-          style: const TextStyle(fontSize: 11, color: Colors.black)),
+          style: TextStyle(
+            fontSize: 11,
+            color: color != null
+                ? Colors.white
+                : Theme.of(context).colorScheme.onSurface,
+          )),
     );
   }
 

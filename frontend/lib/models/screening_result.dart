@@ -50,6 +50,25 @@ class ScreeningResult {
     );
   }
 
+  ScreeningResult copyWith({int? rank}) {
+    return ScreeningResult(
+      rank: rank ?? this.rank,
+      ticker: ticker,
+      market: market,
+      name: name,
+      sector: sector,
+      score: score,
+      weightPct: weightPct,
+      price: price,
+      adx: adx,
+      rsi: rsi,
+      ret3m: ret3m,
+      stopPrice: stopPrice,
+      stopDistPct: stopDistPct,
+      atr: atr,
+    );
+  }
+
   String get flag => market == 'KR' ? '🇰🇷' : '🇺🇸';
   String get displayName => (market == 'KR' && name != null) ? name! : ticker;
   String get currencySymbol => market == 'KR' ? '₩' : '\$';

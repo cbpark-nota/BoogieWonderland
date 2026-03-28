@@ -804,7 +804,9 @@ class _RebalanceModeSelector extends ConsumerWidget {
   }
 }
 
-// ── 비서버리스 모드 플레이스홀더 ──────────────────────────────
+// ── 풀스택 모드 플레이스홀더 ──────────────────────────────────
+// 풀스택(백엔드 연결) 모드에서는 포트폴리오 기능이 미구현 상태입니다.
+// 해당 모드의 포트폴리오 화면이 구현되면 이 클래스를 대체하세요.
 
 class _LegacyPortfolioPlaceholder extends StatelessWidget {
   const _LegacyPortfolioPlaceholder();
