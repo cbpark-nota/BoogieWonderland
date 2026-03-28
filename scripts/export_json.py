@@ -611,22 +611,22 @@ def export_all_strategies(output_dir: Path):
           f"(현재 국면: {STRATEGIES[adaptive_regime]['label']})")
 
 
-def fetch_usdkrw() -> float:
-    """yfinance로 USD/KRW 현재 환율 조회. 실패 시 기본값 1500 반환."""
+def fetch_usdkrw() -> "float | None":
+    """yfinance로 USD/KRW 현재 환율 조회. 실패 시 None 반환."""
     try:
         import yfinance as yf
         df = yf.download("USDKRW=X", period="5d", auto_adjust=True, progress=False)
         if df.empty:
-            print("  환율 조회 결과 없음, 기본값 1500 사용")
-            return 1500.0
+            print("  환율 조회 결과 없음")
+            return None
         # yfinance 최신 버전은 단일 ticker도 multi-level column을 반환하므로 squeeze() 필요
         close = df["Close"].squeeze()
         rate = float(close.dropna().iloc[-1])
         print(f"  USD/KRW 환율: {rate:,.2f}")
         return rate
     except Exception as e:
-        print(f"  환율 조회 실패 ({e}), 기본값 1500 사용")
-        return 1500.0
+        print(f"  환율 조회 실패 ({e})")
+        return None
 
 
 def _calc_atr_stop(df_ohlc: pd.DataFrame, period: int = 14, atr_mult: float = 2.0) -> "float | None":
@@ -675,7 +675,7 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
 
     empty_output = {
         "updated_at": now_str,
-        "exchange_rate": {"usdkrw": round(usdkrw, 2), "updated_at": now_str},
+        "exchange_rate": {"usdkrw": round(usdkrw, 2) if usdkrw is not None else None, "updated_at": now_str},
         "total_invested": 0.0,
         "total_current": 0.0,
         "total_return_pct": 0.0,
@@ -823,13 +823,13 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
         if is_kr:
             invested_krw = inv_val
             current_krw = cur_val
-            invested_usd = round(inv_val / usdkrw, 2)
-            current_usd = round(cur_val / usdkrw, 2)
+            invested_usd = round(inv_val / usdkrw, 2) if usdkrw else None
+            current_usd = round(cur_val / usdkrw, 2) if usdkrw else None
         else:
             invested_usd = inv_val
             current_usd = cur_val
-            invested_krw = round(inv_val * usdkrw)
-            current_krw = round(cur_val * usdkrw)
+            invested_krw = round(inv_val * usdkrw) if usdkrw else None
+            current_krw = round(cur_val * usdkrw) if usdkrw else None
 
         stop_triggered = bool(current_price and stop_loss and current_price < stop_loss)
 
@@ -883,7 +883,7 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
 
     output = {
         "updated_at": now_str,
-        "exchange_rate": {"usdkrw": round(usdkrw, 2), "updated_at": now_str},
+        "exchange_rate": {"usdkrw": round(usdkrw, 2) if usdkrw is not None else None, "updated_at": now_str},
         "total_invested": round(total_invested, 2),
         "total_current": round(total_current, 2),
         "total_return_pct": total_return_pct,
