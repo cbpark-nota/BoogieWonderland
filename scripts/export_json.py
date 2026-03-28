@@ -444,10 +444,18 @@ def check_kospi_market() -> dict | None:
     try:
         import yfinance as yf
         ks = yf.download("^KS11", period="1y", auto_adjust=True, progress=False)
-        close = ks["Close"].squeeze()
+        # pre-market/장 개장 직전 시각에 마지막 행이 NaN으로 반환될 수 있으므로 dropna 적용
+        close = ks["Close"].squeeze().dropna()
+        if close.empty:
+            print("  KOSPI 데이터 없음")
+            return None
         ma20 = float(close.rolling(20).mean().iloc[-1])
         ma60 = float(close.rolling(60).mean().iloc[-1])
         price = float(close.iloc[-1])
+        import math
+        if any(math.isnan(v) for v in [price, ma20, ma60]):
+            print("  KOSPI 데이터 NaN — 조회 건너뜀")
+            return None
         gap = (ma20 - ma60) / ma60 * 100
         return {"price": price, "ma20": ma20, "ma60": ma60,
                 "gap_pct": gap, "is_golden": ma20 > ma60}
