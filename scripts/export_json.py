@@ -972,7 +972,7 @@ def _sanitize_nan(obj):
     return obj
 
 
-def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int = 5) -> None:
+def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int = 30) -> None:
     """일자별 스크리닝 결과를 history/ 폴더에 저장하고 최근 keep_days일치만 유지.
 
     keep_days 초과 파일은 삭제하지 않고 history/archive/ 로 이동하여 영구 보존한다.

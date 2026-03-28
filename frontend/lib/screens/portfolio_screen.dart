@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_config.dart';
 import '../models/portfolio_data.dart';
 import '../providers/serverless_providers.dart';
+// RebalanceMode, RebalanceSignal, selectedRebalanceModeProvider,
+// rebalanceSignalProvider 는 serverless_providers.dart 에서 export
 
 class PortfolioScreen extends ConsumerWidget {
   const PortfolioScreen({super.key});
@@ -14,14 +16,18 @@ class PortfolioScreen extends ConsumerWidget {
     }
 
     final portfolioAsync = ref.watch(portfolioDataProvider);
+    final signalAsync = ref.watch(rebalanceSignalProvider);
 
     return Scaffold(
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(portfolioDataProvider),
+        onRefresh: () async {
+          ref.invalidate(portfolioDataProvider);
+          ref.invalidate(rebalanceSignalProvider);
+        },
         child: portfolioAsync.when(
           data: (portfolio) => portfolio.isEmpty
               ? _buildEmpty(context)
-              : _buildPortfolio(context, portfolio),
+              : _buildPortfolio(context, portfolio, signalAsync.asData?.value),
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => _buildEmpty(context),
         ),
@@ -60,15 +66,27 @@ class PortfolioScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPortfolio(BuildContext context, PortfolioData portfolio) {
+  Widget _buildPortfolio(
+      BuildContext context, PortfolioData portfolio, RebalanceSignal? signal) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         _SummaryCard(portfolio: portfolio),
         const SizedBox(height: 16),
+        const _RebalanceModeSelector(),
+        if (signal?.rebalanceDate != null) ...[
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              '리밸런싱 기준일: ${signal!.rebalanceDate}',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
         _WeightChart(holdings: portfolio.holdings),
         const SizedBox(height: 16),
-        _HoldingsList(holdings: portfolio.holdings),
+        _HoldingsList(holdings: portfolio.holdings, signal: signal),
         const SizedBox(height: 8),
         if (portfolio.updatedAt.isNotEmpty)
           Center(
@@ -349,8 +367,9 @@ class _WeightChart extends StatelessWidget {
 // ── 종목 리스트 ───────────────────────────────────────────────
 
 class _HoldingsList extends StatelessWidget {
-  const _HoldingsList({required this.holdings});
+  const _HoldingsList({required this.holdings, this.signal});
   final List<PortfolioHolding> holdings;
+  final RebalanceSignal? signal;
 
   @override
   Widget build(BuildContext context) {
@@ -360,15 +379,18 @@ class _HoldingsList extends StatelessWidget {
         Text('보유 종목 (${holdings.length})',
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        ...holdings.map((h) => _HoldingCard(holding: h)),
+        ...holdings.map((h) => _HoldingCard(holding: h, signal: signal)),
       ],
     );
   }
 }
 
 class _HoldingCard extends StatelessWidget {
-  const _HoldingCard({required this.holding});
+  const _HoldingCard({required this.holding, this.signal});
   final PortfolioHolding holding;
+  final RebalanceSignal? signal;
+
+  bool get _shouldSell => signal?.shouldSell(holding.ticker) ?? false;
 
   @override
   Widget build(BuildContext context) {
@@ -486,6 +508,27 @@ class _HoldingCard extends StatelessWidget {
                   ),
               ],
             ),
+            if (_shouldSell)
+              Container(
+                margin: const EdgeInsets.only(top: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withAlpha(20),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.orange.withAlpha(80)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.swap_horiz_rounded,
+                        size: 14, color: Colors.orange),
+                    SizedBox(width: 4),
+                    Text('매도 검토',
+                        style: TextStyle(fontSize: 12, color: Colors.orange)),
+                  ],
+                ),
+              ),
             if (holding.stopTriggered)
               Container(
                 margin: const EdgeInsets.only(top: 6),
@@ -670,6 +713,92 @@ class _AtrStopRow extends StatelessWidget {
             style: const TextStyle(fontSize: 10, color: Colors.grey),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── 리밸런싱 주기 선택기 ───────────────────────────────────────
+
+class _RebalanceModeSelector extends ConsumerWidget {
+  const _RebalanceModeSelector();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selected = ref.watch(selectedRebalanceModeProvider);
+    final cs = Theme.of(context).colorScheme;
+
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('리밸런싱 주기',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: cs.primary)),
+            const SizedBox(height: 8),
+            Row(
+              children: RebalanceMode.values.map((mode) {
+                final isSelected = mode == selected;
+                final color = switch (mode) {
+                  RebalanceMode.aggressive => Colors.red.shade600,
+                  RebalanceMode.balanced => Colors.blue.shade600,
+                  RebalanceMode.conservative => Colors.amber.shade700,
+                };
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: GestureDetector(
+                      onTap: () => ref
+                          .read(selectedRebalanceModeProvider.notifier)
+                          .state = mode,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? color.withAlpha(220)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isSelected ? color : Colors.grey.withAlpha(80),
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              mode.label,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: isSelected ? Colors.white : null,
+                              ),
+                            ),
+                            Text(
+                              mode.description,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isSelected
+                                    ? Colors.white.withAlpha(200)
+                                    : Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
       ),
     );
   }
