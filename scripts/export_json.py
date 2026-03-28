@@ -892,6 +892,18 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
     print(f"  포트폴리오 JSON 저장 완료: {out_path} ({len(holdings)}개 종목)")
 
 
+def _sanitize_nan(obj):
+    """dict/list 내 float NaN/Inf를 None으로 재귀 변환 (JSON 표준 준수)."""
+    import math
+    if isinstance(obj, float):
+        return None if (math.isnan(obj) or math.isinf(obj)) else obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_nan(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_nan(v) for v in obj]
+    return obj
+
+
 def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int = 5) -> None:
     """일자별 스크리닝 결과를 history/ 폴더에 저장하고 최근 keep_days일치만 유지."""
     history_dir = output_dir / "history"
@@ -899,11 +911,26 @@ def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int =
 
     today = now.strftime("%Y-%m-%d")
 
-    # 오늘 날짜 파일 저장
+    # 오늘 날짜 파일 저장 (NaN → null 정규화로 유효한 JSON 보장)
     day_path = history_dir / f"{today}.json"
     with open(day_path, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
+        json.dump(_sanitize_nan(output), f, ensure_ascii=False, indent=2)
     print(f"  history 저장: {day_path}")
+
+    # 기존 history 파일 NaN 정규화 (Python json은 NaN 읽기 허용하나 Dart는 불가)
+    for existing_path in history_dir.glob("????-??-??.json"):
+        if existing_path == day_path:
+            continue
+        try:
+            with open(existing_path, encoding="utf-8") as f:
+                existing_data = json.load(f)
+            sanitized = _sanitize_nan(existing_data)
+            if sanitized != existing_data:
+                with open(existing_path, "w", encoding="utf-8") as f:
+                    json.dump(sanitized, f, ensure_ascii=False, indent=2)
+                print(f"  history NaN 정규화: {existing_path.name}")
+        except Exception as e:
+            print(f"  history 정규화 실패 ({existing_path.name}): {e}")
 
     # 기존 날짜 파일 목록 수집 (YYYY-MM-DD.json 패턴)
     existing = sorted(
