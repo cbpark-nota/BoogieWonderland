@@ -1,285 +1,220 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/short_squeeze.dart';
+import '../providers/serverless_providers.dart';
 
-class ShortSqueezeScreen extends StatelessWidget {
+class ShortSqueezeScreen extends ConsumerWidget {
   const ShortSqueezeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dataAsync = ref.watch(shortSqueezeProvider);
 
-    return Scaffold(
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // 상단 안내 배너
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline,
-                    color: colorScheme.onPrimaryContainer, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    '숏 스퀴즈 스크리너는 준비 중입니다.\n데이터 소스 연동 후 공매도 비율 상위 종목을 제공합니다.',
-                    style: TextStyle(
-                      color: colorScheme.onPrimaryContainer,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // 주요 지표 카드들
-          Text(
-            '주요 스크리닝 지표',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _IndicatorCard(
-            icon: Icons.trending_down,
-            iconColor: Colors.red.shade600,
-            title: 'Short Interest (%)',
-            description: '발행 주식 대비 공매도 잔량 비율. 높을수록 숏 스퀴즈 가능성 증가.',
-            threshold: '기준: ≥ 20%',
-          ),
-          const SizedBox(height: 8),
-          _IndicatorCard(
-            icon: Icons.calendar_today,
-            iconColor: Colors.orange.shade600,
-            title: 'Days to Cover',
-            description: '공매도 잔량을 평균 거래량으로 나눈 값. 높을수록 청산 압박 강화.',
-            threshold: '기준: ≥ 5일',
-          ),
-          const SizedBox(height: 8),
-          _IndicatorCard(
-            icon: Icons.attach_money,
-            iconColor: Colors.amber.shade700,
-            title: 'Cost to Borrow (%)',
-            description: '주식 대여 연간 비용. 높은 비용은 공매도 포지션 유지 부담 증가 의미.',
-            threshold: '기준: ≥ 50% (annualized)',
-          ),
-          const SizedBox(height: 8),
-          _IndicatorCard(
-            icon: Icons.bar_chart,
-            iconColor: Colors.blue.shade600,
-            title: '거래량 스파이크',
-            description: '최근 거래량이 20일 평균 거래량 대비 급등한 종목. 숏 커버링 신호.',
-            threshold: '기준: ≥ 3× 20일 평균',
-          ),
-          const SizedBox(height: 8),
-          _IndicatorCard(
-            icon: Icons.show_chart,
-            iconColor: Colors.green.shade600,
-            title: 'RSI 반등 신호',
-            description: '과매도 구간에서 반등하는 RSI 패턴. 숏 스퀴즈 진입 타이밍 확인.',
-            threshold: 'RSI 30 이하 → 상향 돌파',
-          ),
-          const SizedBox(height: 24),
-
-          // 작동 방식 안내
-          Text(
-            '스크리닝 프로세스',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _ProcessCard(
-            steps: [
-              (
-                '1단계',
-                '공매도 잔량 필터',
-                'Short Interest ≥ 20% AND Days to Cover ≥ 5'
-              ),
-              (
-                '2단계',
-                '촉매 신호 확인',
-                '거래량 스파이크 OR Cost to Borrow 급등 OR RSI 반등'
-              ),
-              (
-                '3단계',
-                '종합 스퀴즈 점수',
-                'SI × DTC × 촉매 강도 종합 산출'
-              ),
-              (
-                '4단계',
-                'TOP N 선정',
-                '점수 상위 종목 출력 (기본: TOP 10)'
-              ),
-            ],
-            colorScheme: colorScheme,
-          ),
-          const SizedBox(height: 80),
-        ],
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(shortSqueezeProvider),
+      child: dataAsync.when(
+        data: (data) {
+          if (data == null || data.results.isEmpty) {
+            return _buildEmpty();
+          }
+          return _buildContent(context, data);
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('오류: $e')),
       ),
     );
   }
-}
 
-class _IndicatorCard extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String description;
-  final String threshold;
+  Widget _buildContent(BuildContext context, ShortSqueezeData data) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _buildHeader(context, data),
+        const SizedBox(height: 12),
+        ...data.results.asMap().entries.map(
+              (e) => _buildCard(context, e.key + 1, e.value),
+            ),
+        const SizedBox(height: 80),
+      ],
+    );
+  }
 
-  const _IndicatorCard({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.description,
-    required this.threshold,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+  Widget _buildHeader(BuildContext context, ShortSqueezeData data) {
     return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.outlineVariant),
-      ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
+        padding: const EdgeInsets.all(12),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: iconColor, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(height: 4),
-                  Text(description,
-                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                  const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(Icons.compress, color: Colors.orange),
+                const SizedBox(width: 8),
+                Text(
+                  '숏스퀴즈 후보 ${data.totalCandidates}종목',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                if (data.isSample) ...[
+                  const SizedBox(width: 8),
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: iconColor.withValues(alpha: 0.1),
+                      color: Colors.amber.shade700,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(
-                      threshold,
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: iconColor,
-                          fontWeight: FontWeight.w600),
-                    ),
+                    child: const Text('샘플',
+                        style: TextStyle(fontSize: 10, color: Colors.white)),
                   ),
                 ],
-              ),
+              ],
+            ),
+            if (data.criteriaDescription.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(data.criteriaDescription,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+            if (data.generatedAt.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text('업데이트: ${data.generatedAt.replaceFirst('T', ' ')}',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCard(
+      BuildContext context, int rank, ShortSqueezeResult result) {
+    final change5dColor =
+        result.change5dPct >= 0 ? Colors.green.shade400 : Colors.red.shade400;
+    final change1dColor =
+        result.change1dPct >= 0 ? Colors.green.shade400 : Colors.red.shade400;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Colors.orange.shade700,
+                  child: Text('$rank',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(result.ticker,
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.bold)),
+                      Text(result.name,
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('\$${result.price.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.bold)),
+                    Text(result.sector,
+                        style:
+                            const TextStyle(fontSize: 10, color: Colors.grey)),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _statChip('공매도 비율', '${result.shortFloatPct.toStringAsFixed(1)}%',
+                    Colors.red.shade700),
+                const SizedBox(width: 8),
+                _statChip('커버 일수', '${result.daysToCover.toStringAsFixed(1)}일',
+                    Colors.blue.shade700),
+                const SizedBox(width: 8),
+                _statChip('거래량비',
+                    '${result.volumeRatio.toStringAsFixed(1)}x', Colors.purple.shade700),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                _changeChip('1일', result.change1dPct, change1dColor),
+                const SizedBox(width: 8),
+                _changeChip('5일', result.change5dPct, change5dColor),
+              ],
             ),
           ],
         ),
       ),
     );
   }
-}
 
-class _ProcessCard extends StatelessWidget {
-  final List<(String, String, String)> steps;
-  final ColorScheme colorScheme;
-
-  const _ProcessCard({required this.steps, required this.colorScheme});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.outlineVariant),
+  Widget _statChip(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: steps.map((step) {
-            final isLast = step == steps.last;
-            return Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 48,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        step.$1,
-                        style: TextStyle(
-                            color: colorScheme.onPrimary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(step.$2,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 13)),
-                          const SizedBox(height: 2),
-                          Text(step.$3,
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.grey)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                if (!isLast) ...[
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 22),
-                    child: Row(
-                      children: [
-                        Icon(Icons.arrow_downward,
-                            size: 14, color: colorScheme.outline),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ],
-            );
-          }).toList(),
+      child: Column(
+        children: [
+          Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey)),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+        ],
+      ),
+    );
+  }
+
+  Widget _changeChip(String period, double pct, Color color) {
+    final sign = pct >= 0 ? '+' : '';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        '$period: $sign${pct.toStringAsFixed(1)}%',
+        style:
+            TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
+      ),
+    );
+  }
+
+  Widget _buildEmpty() {
+    return ListView(
+      children: const [
+        SizedBox(height: 200),
+        Center(
+          child: Column(
+            children: [
+              Icon(Icons.compress, size: 64, color: Colors.grey),
+              SizedBox(height: 16),
+              Text('숏스퀴즈 데이터가 없습니다',
+                  style: TextStyle(fontSize: 16, color: Colors.grey)),
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }
