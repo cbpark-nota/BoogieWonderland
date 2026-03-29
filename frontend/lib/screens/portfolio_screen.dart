@@ -1,8 +1,12 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_config.dart';
 import '../models/portfolio_data.dart';
+import '../providers/portfolio_upload_provider.dart';
 import '../providers/serverless_providers.dart';
+import '../services/portfolio_download.dart';
+import '../services/portfolio_xlsx_service.dart';
 
 class PortfolioScreen extends ConsumerWidget {
   const PortfolioScreen({super.key});
@@ -14,26 +18,28 @@ class PortfolioScreen extends ConsumerWidget {
     }
 
     final portfolioAsync = ref.watch(portfolioDataProvider);
+    final isUploaded = ref.watch(portfolioUploadProvider) != null;
 
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(portfolioDataProvider),
         child: portfolioAsync.when(
           data: (portfolio) => portfolio.isEmpty
-              ? _buildEmpty(context)
-              : _buildPortfolio(context, portfolio),
+              ? _buildEmpty(context, ref)
+              : _buildPortfolio(context, ref, portfolio, isUploaded),
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => _buildEmpty(context),
+          error: (e, _) => _buildEmpty(context, ref),
         ),
       ),
     );
   }
 
-  Widget _buildEmpty(BuildContext context) {
+  Widget _buildEmpty(BuildContext context, WidgetRef ref) {
     return ListView(
       children: [
+        _UploadToolbar(portfolio: null, isUploaded: false, onUpload: () => _handleUpload(context, ref)),
         SizedBox(
-          height: MediaQuery.of(context).size.height * 0.6,
+          height: MediaQuery.of(context).size.height * 0.5,
           child: const Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -47,7 +53,8 @@ class PortfolioScreen extends ConsumerWidget {
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 32),
                   child: Text(
-                    'scripts/portfolio.xlsx를 작성 후\nGitHub Actions를 실행하세요.',
+                    '위 "파일 업로드" 버튼으로 xlsx 파일을 업로드하거나\n'
+                    'scripts/portfolio.xlsx를 작성 후 GitHub Actions를 실행하세요.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 13, color: Colors.grey),
                   ),
@@ -60,10 +67,19 @@ class PortfolioScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPortfolio(BuildContext context, PortfolioData portfolio) {
+  Widget _buildPortfolio(
+      BuildContext context, WidgetRef ref, PortfolioData portfolio, bool isUploaded) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _UploadToolbar(
+          portfolio: portfolio,
+          isUploaded: isUploaded,
+          onUpload: () => _handleUpload(context, ref),
+          onClear: isUploaded ? () => _handleClear(context, ref) : null,
+          onDownloadPortfolio: () => _handleDownloadPortfolio(context, portfolio),
+        ),
+        const SizedBox(height: 12),
         _SummaryCard(portfolio: portfolio),
         const SizedBox(height: 16),
         _WeightChart(holdings: portfolio.holdings),
@@ -79,6 +95,197 @@ class PortfolioScreen extends ConsumerWidget {
           ),
         const SizedBox(height: 80),
       ],
+    );
+  }
+
+  // ── 업로드 핸들러 ─────────────────────────────────────────
+
+  Future<void> _handleUpload(BuildContext context, WidgetRef ref) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xlsx'],
+        withData: true,
+      );
+
+      if (result == null || result.files.single.bytes == null) return;
+
+      final bytes = result.files.single.bytes!;
+
+      if (bytes.length > PortfolioXlsxService.maxFileSizeBytes) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('파일 크기 초과 (최대 1MB)'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      final service = PortfolioXlsxService();
+      final portfolio = service.parseXlsx(bytes);
+
+      ref.read(portfolioUploadProvider.notifier).setPortfolio(portfolio);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                '포트폴리오 업로드 완료 (${portfolio.holdings.length}개 종목)'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('파일 파싱 실패: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _handleClear(BuildContext context, WidgetRef ref) {
+    ref.read(portfolioUploadProvider.notifier).clearPortfolio();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('업로드 초기화 — 서버 데이터로 전환')),
+    );
+  }
+
+  void _handleDownloadPortfolio(BuildContext context, PortfolioData portfolio) {
+    try {
+      final bytes = PortfolioXlsxService().exportPortfolio(portfolio);
+      final date = DateTime.now().toIso8601String().substring(0, 10);
+      triggerFileDownload(bytes, 'portfolio_$date.xlsx');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('다운로드 실패: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+}
+
+// ── 업로드/다운로드 툴바 ──────────────────────────────────────
+
+class _UploadToolbar extends StatelessWidget {
+  const _UploadToolbar({
+    required this.portfolio,
+    required this.isUploaded,
+    required this.onUpload,
+    this.onClear,
+    this.onDownloadPortfolio,
+  });
+
+  final PortfolioData? portfolio;
+  final bool isUploaded;
+  final VoidCallback onUpload;
+  final VoidCallback? onClear;
+  final VoidCallback? onDownloadPortfolio;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              // 템플릿 다운로드
+              _ToolbarButton(
+                icon: Icons.download_outlined,
+                label: '템플릿 다운로드',
+                onTap: () => _downloadTemplate(context),
+              ),
+              // 파일 업로드
+              _ToolbarButton(
+                icon: Icons.upload_file_outlined,
+                label: '파일 업로드',
+                primary: true,
+                onTap: onUpload,
+              ),
+              // 현재 포트폴리오 다운로드 (데이터 있을 때만)
+              if (onDownloadPortfolio != null)
+                _ToolbarButton(
+                  icon: Icons.table_chart_outlined,
+                  label: '포트폴리오 다운로드',
+                  onTap: onDownloadPortfolio!,
+                ),
+              // 업로드 초기화 (업로드 상태일 때만)
+              if (onClear != null)
+                _ToolbarButton(
+                  icon: Icons.clear,
+                  label: '업로드 초기화',
+                  onTap: onClear!,
+                ),
+            ],
+          ),
+          if (isUploaded)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 13, color: Colors.blue),
+                  const SizedBox(width: 4),
+                  Text(
+                    '로컬 파일 사용 중 — 현재가·수익률은 미반영',
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.blue.shade700),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _downloadTemplate(BuildContext context) {
+    try {
+      final bytes = PortfolioXlsxService().generateTemplate();
+      triggerFileDownload(bytes, 'portfolio_template.xlsx');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('템플릿 생성 실패: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+}
+
+class _ToolbarButton extends StatelessWidget {
+  const _ToolbarButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.primary = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return OutlinedButton.icon(
+      icon: Icon(icon, size: 16),
+      label: Text(label, style: const TextStyle(fontSize: 13)),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: primary ? cs.primary : null,
+        side: primary ? BorderSide(color: cs.primary) : null,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        visualDensity: VisualDensity.compact,
+      ),
+      onPressed: onTap,
     );
   }
 }

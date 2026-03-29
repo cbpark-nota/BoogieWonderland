@@ -4,6 +4,7 @@ import '../models/portfolio_data.dart';
 import '../models/screening_result.dart';
 import '../services/local_portfolio_service.dart';
 import '../services/static_data_source.dart';
+import 'portfolio_upload_provider.dart';
 import 'screening_provider.dart';
 import 'portfolio_provider.dart';
 
@@ -98,8 +99,13 @@ final strategyDataProvider =
 });
 
 // ── 서버리스 포트폴리오 데이터 (엑셀 기반) ──────────────────────
+// 우선순위: 사용자 업로드 파일 > 서버 portfolio.json
 
 final portfolioDataProvider = FutureProvider<PortfolioData>((ref) async {
+  // 업로드된 포트폴리오가 있으면 즉시 반환
+  final uploaded = ref.watch(portfolioUploadProvider);
+  if (uploaded != null) return uploaded;
+
   try {
     final data = await StaticDataSource().getPortfolio();
     return PortfolioData.fromJson(data);
