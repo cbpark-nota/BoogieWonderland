@@ -10,6 +10,7 @@ import 'screens/screening_screen.dart';
 import 'screens/portfolio_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/strategy_guide_screen.dart';
+import 'screens/market_cap_screen.dart';
 
 void main() {
   if (AppConfig.isServerless) {
@@ -65,12 +66,14 @@ class _MainNavigationState extends State<MainNavigation> {
   final _screens = const [
     DashboardScreen(),
     ScreeningScreen(),
+    MarketCapScreen(),
     PortfolioScreen(),
   ];
 
   static const _menuItems = [
     (label: 'Dashboard', icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard),
     (label: 'Screening', icon: Icons.search_outlined, selectedIcon: Icons.search),
+    (label: '시총 Top 20', icon: Icons.leaderboard_outlined, selectedIcon: Icons.leaderboard),
     (label: 'Portfolio', icon: Icons.account_balance_wallet_outlined, selectedIcon: Icons.account_balance_wallet),
   ];
 

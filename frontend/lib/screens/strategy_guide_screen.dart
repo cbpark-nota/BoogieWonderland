@@ -83,6 +83,10 @@ class StrategyGuideScreen extends StatelessWidget {
         const SizedBox(height: 12),
         const _BacktestResultTable(),
         const SizedBox(height: 24),
+        _SectionHeader(title: '시총 Top 20 신규 진입 전략', colorScheme: colorScheme),
+        const SizedBox(height: 12),
+        const _MarketCapStrategyCard(),
+        const SizedBox(height: 24),
         _SectionHeader(title: '비트코인 V10 전략', colorScheme: colorScheme),
         const SizedBox(height: 12),
         const _BtcStrategyCard(),
@@ -1119,6 +1123,127 @@ class _GlossaryCard extends StatelessWidget {
             );
           }).toList(),
         ),
+      ),
+    );
+  }
+}
+
+// ── 시총 Top 20 신규 진입 전략 카드 ───────────────────────
+
+class _MarketCapStrategyCard extends StatelessWidget {
+  const _MarketCapStrategyCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = const Color(0xFFFF7043);
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.leaderboard, color: color, size: 22),
+                const SizedBox(width: 8),
+                Text(
+                  '시총 Top 20 신규 진입',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: color),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              '시장 메타 트렌드 변경 신호 포착 전략',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '시가총액 상위 20위 안에 새롭게 진입한 종목은 시장 참여자들의 자금이 집중되는 '
+              '"메타 트렌드 변경"을 나타냅니다. 기존 Top 20에서 밀려난 자리를 꿰찬 종목은 '
+              '강력한 구조적 모멘텀을 보유했을 가능성이 높습니다.',
+              style: TextStyle(fontSize: 12, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 8),
+            const Text(
+              '전략 파라미터',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 6),
+            _paramRow('대상 시장', 'US (S&P500 + NASDAQ-100) + KR (KOSPI200 + KOSDAQ150)'),
+            _paramRow('진입 조건', '시총 Top 20 신규 진입 → 다음 영업일 시가 매수'),
+            _paramRow('청산 조건', 'ATR 기반 스톱로스 (20d High − ATR × 2.0)'),
+            _paramRow('리밸런싱', '매월 보유 종목 시총 가중 비중 재조정'),
+            _paramRow('포지션', '시총 가중 배분 (시총 클수록 높은 비중)'),
+            _paramRow('수수료', '편도 0.2% (왕복 0.4%)'),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 14, color: Colors.orange.shade700),
+                      const SizedBox(width: 4),
+                      Text('데이터 한계',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: Colors.orange.shade700)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    '과거 시총은 "일봉 Close × 현재 발행주식수"로 근사합니다.\n'
+                    '실제 과거 발행주식수가 아니므로 순위 시뮬레이션에 오차가 있을 수 있습니다.',
+                    style: TextStyle(fontSize: 11, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _paramRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 70,
+            child: Text(label,
+                style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w500)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(value,
+                style: const TextStyle(fontSize: 12)),
+          ),
+        ],
       ),
     );
   }

@@ -963,12 +963,62 @@ def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int =
     print(f"  history index 갱신: {dates}")
 
 
+def export_market_cap(output_dir: Path, atr_mult: float = 2.0) -> None:
+    """시총 Top 20 신규 진입 스크리닝 결과를 JSON으로 저장."""
+    import importlib.util
+
+    screener_path = Path(__file__).parent / "screener" / "market_cap_screener.py"
+    spec = importlib.util.spec_from_file_location("market_cap_screener", screener_path)
+    mcs = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mcs)
+
+    print("\n시총 Top 20 스크리닝 실행 중...")
+    result = mcs.run_market_cap_screening(save_result=True, atr_mult=atr_mult)
+
+    now_str = datetime.now().isoformat(timespec="seconds")
+
+    # market_cap.json 저장
+    output = {
+        "run_date": datetime.now().strftime("%Y-%m-%d"),
+        "updated_at": now_str,
+        "atr_mult": atr_mult,
+        "us": {
+            "top20": result["us"]["top20"],
+            "new_entrants": result["us"]["new_entrants"],
+            "exits": result["us"]["exits"],
+            "caps": {t: round(v / 1e8, 2) for t, v in result["us"]["caps"].items()},  # 억$ 단위
+        },
+        "kr": {
+            "top20": result["kr"]["top20"],
+            "new_entrants": result["kr"]["new_entrants"],
+            "exits": result["kr"]["exits"],
+            "caps": {t: round(v / 1e8, 2) for t, v in result["kr"]["caps"].items()},  # 억원 단위
+        },
+        "atr_stops": result.get("atr_stops", {}),
+    }
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / "market_cap.json"
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(_sanitize_nan(output), f, ensure_ascii=False, indent=2)
+
+    us_new = result["us"]["new_entrants"]
+    kr_new = result["kr"]["new_entrants"]
+    print(f"\n  시총 Top 20 JSON 저장: {out_path}")
+    print(f"  US Top 20: {len(result['us']['top20'])}개 | 신규: {us_new or '없음'}")
+    print(f"  KR Top 20: {len(result['kr']['top20'])}개 | 신규: {kr_new or '없음'}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="4전략 스크리닝 결과 JSON 내보내기")
     parser.add_argument("--output", type=str, default="frontend/web/data/",
                         help="JSON 출력 디렉토리")
     parser.add_argument("--portfolio-only", action="store_true",
                         help="포트폴리오 JSON만 생성 (스크리닝 생략)")
+    parser.add_argument("--market-cap", action="store_true",
+                        help="시총 Top 20 스크리닝 JSON 생성 (market_cap.json)")
+    parser.add_argument("--atr-mult", type=float, default=2.0,
+                        help="시총 Top 20 스크리닝 ATR 승수 (기본: 2.0)")
     parser.add_argument("--xlsx", type=str, default=None,
                         help="portfolio.xlsx 경로 (기본: scripts/portfolio.xlsx)")
     args = parser.parse_args()
@@ -979,6 +1029,8 @@ if __name__ == "__main__":
     if args.portfolio_only:
         print("포트폴리오 JSON 생성 중...")
         portfolio_to_json(output_path, xlsx_path)
+    elif args.market_cap:
+        export_market_cap(output_path, atr_mult=args.atr_mult)
     else:
         export_all_strategies(output_path)
         print("\n포트폴리오 JSON 생성 중...")
