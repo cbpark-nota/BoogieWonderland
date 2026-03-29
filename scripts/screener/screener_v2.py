@@ -1,5 +1,10 @@
 """
 모멘텀 종목 스크리너 v2 — 5단계 개선 적용
+
+.. deprecated::
+    이 파일은 알고리즘 개발 과정 참고용입니다. 프로덕션에서는 screener_v3.py를 사용하세요.
+    ATR 기반 동적 스톱로스 및 점수 비례 포지션 사이징은 v3에서 지원합니다.
+
 ══════════════════════════════════════════════
 개선사항:
   Step1  트레일링 스톱로스 기준 출력 (매도 신호 표시)
@@ -9,6 +14,8 @@
   Step5  52주 신고가 20% 이내 필터
 ══════════════════════════════════════════════
 """
+import logging
+import sys
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -17,38 +24,10 @@ import pandas as pd
 import yfinance as yf
 import pandas_ta as ta
 from datetime import datetime
+from pathlib import Path
 
-# ── 유니버스 ──────────────────────────────────────────────────
-US_UNIVERSE = {
-    "NVDA":"Technology","AAPL":"Technology","MSFT":"Technology","AVGO":"Technology",
-    "AMD":"Technology","QCOM":"Technology","AMAT":"Technology","LRCX":"Technology",
-    "MU":"Technology","KLAC":"Technology","ORCL":"Technology","ADBE":"Technology",
-    "CRM":"Technology","NOW":"Technology","PANW":"Technology","SNPS":"Technology",
-    "META":"Communication","GOOGL":"Communication","NFLX":"Communication","TMUS":"Communication",
-    "AMZN":"Consumer Disc","TSLA":"Consumer Disc","HD":"Consumer Disc","LULU":"Consumer Disc",
-    "LLY":"Health Care","UNH":"Health Care","ABBV":"Health Care","ISRG":"Health Care","VRTX":"Health Care",
-    "V":"Financials","MA":"Financials","JPM":"Financials","GS":"Financials",
-    "XOM":"Energy","CVX":"Energy","SLB":"Energy",
-    "CAT":"Industrials","GE":"Industrials","ETN":"Industrials","LMT":"Industrials",
-    "FCX":"Materials","NEM":"Materials",
-}
-KR_UNIVERSE = {
-    "005930.KS":"Technology","000660.KS":"Technology","009150.KS":"Technology",
-    "006400.KS":"Technology","373220.KS":"Technology",
-    "207940.KS":"Health Care","068270.KS":"Health Care",
-    "051910.KS":"Materials","247540.KS":"Materials",
-    "005380.KS":"Consumer Disc","000270.KS":"Consumer Disc",
-    "035420.KS":"Communication","035720.KS":"Communication",
-    "105560.KS":"Financials","055550.KS":"Financials",
-    "096770.KS":"Energy","011200.KS":"Industrials",
-}
-ALL_UNIVERSE = {**US_UNIVERSE, **KR_UNIVERSE}
-
-SECTOR_ETF = {
-    "Technology":"XLK","Health Care":"XLV","Financials":"XLF",
-    "Consumer Disc":"XLY","Industrials":"XLI","Energy":"XLE",
-    "Materials":"XLB","Communication":"XLC",
-}
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.constants import US_UNIVERSE, KR_UNIVERSE, ALL_UNIVERSE, SECTOR_ETF
 
 STOP_PCT  = -0.10   # 트레일링 스톱 기준 (-10%)
 WEIGHTS   = dict(adx=0.4, ret3m=0.3, sector=0.2, vol_stab=0.1)
@@ -67,13 +46,14 @@ def download(tickers, period="1y"):
                     df = raw.xs(t, axis=1, level=1).dropna(how="all")
                     if len(df) >= 60:
                         result[t] = df
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug("screener_v2 download: %s 슬라이스 실패 — %s", t, e)
         else:
             if len(raw) >= 60:
                 result[tickers[0]] = raw
         return result
-    except Exception:
+    except Exception as e:
+        logging.debug("screener_v2 download: 배치 다운로드 실패 — %s", e)
         return {}
 
 
@@ -213,7 +193,8 @@ def check_market():
         gap   = (ma50 - ma200) / ma200 * 100
         return {"price": price, "ma50": ma50, "ma200": ma200,
                 "gap_pct": gap, "is_golden": ma50 > ma200}
-    except Exception:
+    except Exception as e:
+        logging.debug("screener_v2 check_market: SPY 다운로드 실패 — %s", e)
         return None
 
 

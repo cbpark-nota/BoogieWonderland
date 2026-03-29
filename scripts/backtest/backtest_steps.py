@@ -14,6 +14,8 @@ Step 5      : 52주 신고가 필터 추가  (신고가 20% 이내)
 ══════════════════════════════════════════════════════════════
 """
 
+import logging
+import sys
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -29,6 +31,8 @@ from pathlib import Path
 RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 # ═══════════════════════════════════════════════════════════════
 # 0. 공통 설정
 # ═══════════════════════════════════════════════════════════════
@@ -37,41 +41,7 @@ END     = "2024-12-31"
 TOP_N   = 10
 WEIGHTS = dict(adx=0.4, ret3m=0.3, sector=0.2, vol_stab=0.1)
 
-SECTOR_ETF = {
-    "Technology"    : "XLK",
-    "Health Care"   : "XLV",
-    "Financials"    : "XLF",
-    "Consumer Disc" : "XLY",
-    "Industrials"   : "XLI",
-    "Energy"        : "XLE",
-    "Materials"     : "XLB",
-    "Communication" : "XLC",
-}
-
-US_UNIVERSE = {
-    "NVDA":"Technology","AAPL":"Technology","MSFT":"Technology","AVGO":"Technology",
-    "AMD":"Technology","QCOM":"Technology","AMAT":"Technology","LRCX":"Technology",
-    "MU":"Technology","KLAC":"Technology","ORCL":"Technology","ADBE":"Technology",
-    "CRM":"Technology","NOW":"Technology","PANW":"Technology","SNPS":"Technology",
-    "META":"Communication","GOOGL":"Communication","NFLX":"Communication","TMUS":"Communication",
-    "AMZN":"Consumer Disc","TSLA":"Consumer Disc","HD":"Consumer Disc","LULU":"Consumer Disc",
-    "LLY":"Health Care","UNH":"Health Care","ABBV":"Health Care","ISRG":"Health Care","VRTX":"Health Care",
-    "V":"Financials","MA":"Financials","JPM":"Financials","GS":"Financials",
-    "XOM":"Energy","CVX":"Energy","SLB":"Energy",
-    "CAT":"Industrials","GE":"Industrials","ETN":"Industrials","LMT":"Industrials",
-    "FCX":"Materials","NEM":"Materials",
-}
-KR_UNIVERSE = {
-    "005930.KS":"Technology","000660.KS":"Technology","009150.KS":"Technology",
-    "006400.KS":"Technology","373220.KS":"Technology",
-    "207940.KS":"Health Care","068270.KS":"Health Care",
-    "051910.KS":"Materials","247540.KS":"Materials",
-    "005380.KS":"Consumer Disc","000270.KS":"Consumer Disc",
-    "035420.KS":"Communication","035720.KS":"Communication",
-    "105560.KS":"Financials","055550.KS":"Financials",
-    "096770.KS":"Energy","011200.KS":"Industrials",
-}
-ALL_UNIVERSE = {**US_UNIVERSE, **KR_UNIVERSE}
+from core.constants import US_UNIVERSE, KR_UNIVERSE, ALL_UNIVERSE, SECTOR_ETF
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -98,8 +68,8 @@ def download_all(tickers, start, end):
             else:
                 if len(raw) >= 220:
                     data[chunk[0]] = raw
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug("backtest_steps download_all: 배치(offset=%d) 다운로드 실패 — %s", i, e)
     return data
 
 
