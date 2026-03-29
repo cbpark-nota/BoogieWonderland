@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/holding.dart';
 import '../models/portfolio_data.dart';
 import '../models/screening_result.dart';
+import '../models/short_squeeze.dart';
 import '../services/local_portfolio_service.dart';
 import '../services/static_data_source.dart';
 import 'screening_provider.dart';
@@ -111,6 +112,17 @@ final portfolioDataProvider = FutureProvider<PortfolioData>((ref) async {
       'total_return_pct': 0.0,
       'holdings': [],
     });
+  }
+});
+
+// ── 숏스퀴즈 데이터 ────────────────────────────────────────
+
+final shortSqueezeProvider = FutureProvider<ShortSqueezeData?>((ref) async {
+  try {
+    final data = await StaticDataSource().getShortSqueeze();
+    return ShortSqueezeData.fromJson(data);
+  } catch (_) {
+    return null;
   }
 });
 

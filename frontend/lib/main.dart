@@ -10,6 +10,7 @@ import 'screens/screening_screen.dart';
 import 'screens/portfolio_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/strategy_guide_screen.dart';
+import 'screens/short_squeeze_screen.dart';
 
 void main() {
   if (AppConfig.isServerless) {
@@ -66,12 +67,14 @@ class _MainNavigationState extends State<MainNavigation> {
     DashboardScreen(),
     ScreeningScreen(),
     PortfolioScreen(),
+    ShortSqueezeScreen(),
   ];
 
   static const _menuItems = [
     (label: 'Dashboard', icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard),
     (label: 'Screening', icon: Icons.search_outlined, selectedIcon: Icons.search),
     (label: 'Portfolio', icon: Icons.account_balance_wallet_outlined, selectedIcon: Icons.account_balance_wallet),
+    (label: '숏스퀴즈', icon: Icons.compress_outlined, selectedIcon: Icons.compress),
   ];
 
   void _selectMenu(int index) {
