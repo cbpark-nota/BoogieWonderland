@@ -45,4 +45,10 @@ class StaticDataSource {
     final res = await _dio.get('$_baseDataUrl/history/$date.json');
     return res.data as Map<String, dynamic>;
   }
+
+  /// 숏스퀴즈 스크리닝 결과
+  Future<Map<String, dynamic>> getShortSqueeze() async {
+    final res = await _dio.get('$_baseDataUrl/short_squeeze_latest.json');
+    return res.data as Map<String, dynamic>;
+  }
 }

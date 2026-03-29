@@ -963,12 +963,86 @@ def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int =
     print(f"  history index 갱신: {dates}")
 
 
+def export_short_squeeze(output_dir: Path) -> None:
+    """
+    숏스퀴즈 스크리닝 결과를 short_squeeze_latest.json으로 저장.
+
+    short_squeeze_screener.py의 run_us_screening / run_kr_screening을 호출하여
+    결과를 output_dir/short_squeeze_latest.json에 저장한다.
+    실패해도 예외를 발생시키지 않고 에러 로그만 출력한다.
+    """
+    try:
+        from screener.short_squeeze_screener import (
+            run_us_screening,
+            run_kr_screening,
+            build_output_records,
+            US_SI_FLOAT_MIN,
+            US_DTC_MIN,
+            US_CTB_MIN,
+            US_VOL_RATIO_MIN,
+            KR_SI_PCT_MIN,
+        )
+    except ImportError as e:
+        print(f"  숏스퀴즈 모듈 로드 실패 ({e}), 건너뜀")
+        return
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    now = datetime.now()
+    print("\n[숏스퀴즈 스크리닝]")
+
+    try:
+        # 유니버스 수집 (이미 export_all_strategies에서 수집했을 수 있으나 독립 실행 가능하게)
+        print("  유니버스 수집 중...")
+        us_sp500, _  = fetch_sp500_tickers()
+        us_ndx, _    = fetch_nasdaq100_tickers()
+        sp500_set    = set(us_sp500)
+        us_tickers   = us_sp500 + [t for t in us_ndx if t not in sp500_set]
+        kr_tickers   = fetch_kr_tickers()
+
+        us_df = run_us_screening(us_tickers)
+        kr_df = run_kr_screening(kr_tickers)
+
+        us_records = build_output_records(us_df)
+        kr_records = build_output_records(kr_df)
+
+        output = {
+            "run_id":            int(now.strftime("%Y%m%d")),
+            "run_date":          now.isoformat(timespec="seconds"),
+            "params": {
+                "us_si_float_min": US_SI_FLOAT_MIN,
+                "us_dtc_min":      US_DTC_MIN,
+                "us_ctb_min":      US_CTB_MIN,
+                "us_vol_ratio_min": US_VOL_RATIO_MIN,
+                "kr_si_pct_min":   KR_SI_PCT_MIN,
+            },
+            "total_us_screened": len(us_tickers),
+            "total_kr_screened": len(kr_tickers),
+            "total_us_passed":   len(us_records),
+            "total_kr_passed":   len(kr_records),
+            "us_results":        us_records,
+            "kr_results":        kr_records,
+        }
+
+        out_path = output_dir / "short_squeeze_latest.json"
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(_sanitize_nan(output), f, ensure_ascii=False, indent=2)
+        print(f"  완료: {out_path}  "
+              f"(US {len(us_records)}종목, KR {len(kr_records)}종목)")
+
+    except Exception as e:
+        print(f"  숏스퀴즈 스크리닝 실패 ({e})")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="4전략 스크리닝 결과 JSON 내보내기")
     parser.add_argument("--output", type=str, default="frontend/web/data/",
                         help="JSON 출력 디렉토리")
     parser.add_argument("--portfolio-only", action="store_true",
                         help="포트폴리오 JSON만 생성 (스크리닝 생략)")
+    parser.add_argument("--short-squeeze", action="store_true",
+                        help="숏스퀴즈 스크리닝도 함께 실행")
+    parser.add_argument("--short-squeeze-only", action="store_true",
+                        help="숏스퀴즈 스크리닝만 실행")
     parser.add_argument("--xlsx", type=str, default=None,
                         help="portfolio.xlsx 경로 (기본: scripts/portfolio.xlsx)")
     args = parser.parse_args()
@@ -976,10 +1050,14 @@ if __name__ == "__main__":
     output_path = Path(args.output)
     xlsx_path = Path(args.xlsx) if args.xlsx else None
 
-    if args.portfolio_only:
+    if args.short_squeeze_only:
+        export_short_squeeze(output_path)
+    elif args.portfolio_only:
         print("포트폴리오 JSON 생성 중...")
         portfolio_to_json(output_path, xlsx_path)
     else:
         export_all_strategies(output_path)
+        if args.short_squeeze:
+            export_short_squeeze(output_path)
         print("\n포트폴리오 JSON 생성 중...")
         portfolio_to_json(output_path, xlsx_path)
