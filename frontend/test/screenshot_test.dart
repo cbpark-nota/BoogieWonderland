@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:momentum_app/main.dart';
-import 'package:momentum_app/screens/screening_screen.dart';
+import 'package:momentum_app/screens/screening_tabs_screen.dart';
 import 'package:momentum_app/screens/portfolio_screen.dart';
 import 'package:momentum_app/screens/dashboard_screen.dart';
 import 'package:momentum_app/providers/screening_provider.dart';
@@ -106,7 +106,7 @@ void main() {
     await tester.pumpWidget(_wrapPhone(
       const Scaffold(
         appBar: _FakeAppBar(title: 'Screening'),
-        body: ScreeningScreen(),
+        body: ScreeningTabsScreen(),
         bottomNavigationBar: _FakeNavBar(selected: 1),
       ),
     ));
