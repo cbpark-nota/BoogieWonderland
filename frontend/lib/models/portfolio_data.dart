@@ -91,7 +91,7 @@ class PortfolioData {
   final double totalInvested;
   final double totalCurrent;
   final double totalReturnPct;
-  final double usdkrw;
+  final double? usdkrw;
   final double totalInvestedKrw;
   final double totalCurrentKrw;
   final double totalInvestedUsd;
@@ -103,7 +103,7 @@ class PortfolioData {
     required this.totalInvested,
     required this.totalCurrent,
     required this.totalReturnPct,
-    required this.usdkrw,
+    this.usdkrw,
     required this.totalInvestedKrw,
     required this.totalCurrentKrw,
     required this.totalInvestedUsd,
@@ -128,7 +128,7 @@ class PortfolioData {
       totalInvested: (json['total_invested'] as num?)?.toDouble() ?? 0,
       totalCurrent: (json['total_current'] as num?)?.toDouble() ?? 0,
       totalReturnPct: (json['total_return_pct'] as num?)?.toDouble() ?? 0,
-      usdkrw: (er['usdkrw'] as num?)?.toDouble() ?? 1380.0,
+      usdkrw: (er['usdkrw'] as num?)?.toDouble(),
       totalInvestedKrw: investedKrw,
       totalCurrentKrw: currentKrw,
       totalInvestedUsd: (json['total_invested_usd'] as num?)?.toDouble() ?? 0,
