@@ -3,6 +3,12 @@ import 'package:dio/dio.dart';
 /// 서버리스 모드 데이터 소스
 /// GitHub Pages에 배포된 정적 JSON 파일을 읽는다.
 class StaticDataSource {
+  static final StaticDataSource _instance = StaticDataSource._internal();
+
+  factory StaticDataSource() => _instance;
+
+  StaticDataSource._internal();
+
   final Dio _dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 10),

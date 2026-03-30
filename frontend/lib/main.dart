@@ -175,7 +175,10 @@ class _MainNavigationState extends State<MainNavigation> {
           ],
         ),
       ),
-      body: _screens[_currentIndex],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
+      ),
     );
   }
 }
