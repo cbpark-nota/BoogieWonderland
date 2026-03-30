@@ -45,4 +45,10 @@ class StaticDataSource {
     final res = await _dio.get('$_baseDataUrl/history/$date.json');
     return res.data as Map<String, dynamic>;
   }
+
+  /// 시총 Top 20 트렌드 데이터 (market_cap.json)
+  Future<Map<String, dynamic>> getMarketCapTop20() async {
+    final res = await _dio.get('$_baseDataUrl/market_cap.json');
+    return res.data as Map<String, dynamic>;
+  }
 }
