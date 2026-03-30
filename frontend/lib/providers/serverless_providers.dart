@@ -8,6 +8,87 @@ import '../services/static_data_source.dart';
 import 'screening_provider.dart';
 import 'portfolio_provider.dart';
 
+// ── 마켓 필터 enum (screening_screen에서 이동) ──────────────
+
+enum MarketFilter { all, kr, us }
+
+// ── 선택 상태 providers ────────────────────────────────────
+
+class _SelectedStrategyNotifier extends Notifier<StrategyType> {
+  @override
+  StrategyType build() => StrategyType.balanced;
+}
+
+final selectedStrategyProvider =
+    NotifierProvider<_SelectedStrategyNotifier, StrategyType>(
+  _SelectedStrategyNotifier.new,
+);
+
+class _SelectedMarketFilterNotifier extends Notifier<MarketFilter> {
+  @override
+  MarketFilter build() => MarketFilter.all;
+}
+
+final selectedMarketFilterProvider =
+    NotifierProvider<_SelectedMarketFilterNotifier, MarketFilter>(
+  _SelectedMarketFilterNotifier.new,
+);
+
+// ── 필터링된 스크리닝 결과 (메모이제이션) ────────────────────
+// historyScreeningProvider, selectedStrategyProvider,
+// selectedMarketFilterProvider 중 하나라도 변경될 때만 재계산된다.
+
+typedef _FilteredResult = ({ScreeningRun run, StrategyResult? sr, StrategyType selected});
+
+final filteredScreeningProvider =
+    Provider<AsyncValue<_FilteredResult?>>((ref) {
+  final historyAsync = ref.watch(historyScreeningProvider);
+  final selected = ref.watch(selectedStrategyProvider);
+  final marketFilter = ref.watch(selectedMarketFilterProvider);
+
+  return historyAsync.whenData((data) {
+    if (data == null) return null;
+    final run = data.toScreeningRun(selected);
+    final sr = data.strategies[selected];
+    return (run: _applyMarketFilter(run, marketFilter), sr: sr, selected: selected);
+  });
+});
+
+ScreeningRun _applyMarketFilter(ScreeningRun run, MarketFilter marketFilter) {
+  if (marketFilter == MarketFilter.all) return run;
+  final marketCode = marketFilter == MarketFilter.kr ? 'KR' : 'US';
+  final filtered =
+      run.results.where((r) => r.market == marketCode).toList();
+  final reranked = filtered.asMap().entries.map((e) {
+    final r = e.value;
+    return ScreeningResult(
+      rank: e.key + 1,
+      ticker: r.ticker,
+      market: r.market,
+      name: r.name,
+      sector: r.sector,
+      score: r.score,
+      weightPct: r.weightPct,
+      price: r.price,
+      adx: r.adx,
+      rsi: r.rsi,
+      ret3m: r.ret3m,
+      stopPrice: r.stopPrice,
+      stopDistPct: r.stopDistPct,
+      atr: r.atr,
+    );
+  }).toList();
+  return ScreeningRun(
+    runId: run.runId,
+    runDate: run.runDate,
+    marketStatus: run.marketStatus,
+    btcSignal: run.btcSignal,
+    totalScreened: run.totalScreened,
+    totalPassed: run.totalPassed,
+    results: reranked,
+  );
+}
+
 // ── 리밸런싱 주기 ──────────────────────────────────────────
 
 enum RebalanceMode {
