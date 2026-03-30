@@ -60,8 +60,14 @@ class ScreeningScreen extends ConsumerWidget {
     return datesAsync.when(
       data: (dates) {
         if (dates.isEmpty) return const SizedBox.shrink();
-        final effectiveDate = selectedDate ?? dates.first;
-        final idx = dates.indexOf(effectiveDate);
+        // 스크리닝 페이지는 최근 5일만 표시 (히스토리는 30일 저장되지만 UI는 5일)
+        final displayDates = dates.take(5).toList();
+        // null = 최신(오늘) / 5일 범위 밖 날짜 선택 시 최신으로 fallback
+        final effectiveDate =
+            (selectedDate != null && displayDates.contains(selectedDate))
+                ? selectedDate!
+                : displayDates.first;
+        final idx = displayDates.indexOf(effectiveDate);
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -74,10 +80,10 @@ class ScreeningScreen extends ConsumerWidget {
                 iconSize: 20,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
-                onPressed: idx < dates.length - 1
+                onPressed: idx < displayDates.length - 1
                     ? () => ref
                         .read(selectedHistoryDateProvider.notifier)
-                        .state = dates[idx + 1]
+                        .state = displayDates[idx + 1]
                     : null,
               ),
               const SizedBox(width: 4),
@@ -85,8 +91,8 @@ class ScreeningScreen extends ConsumerWidget {
                 value: effectiveDate,
                 underline: const SizedBox.shrink(),
                 isDense: true,
-                items: dates.map((d) {
-                  final isLatest = d == dates.first;
+                items: displayDates.map((d) {
+                  final isLatest = d == displayDates.first;
                   return DropdownMenuItem(
                     value: d,
                     child: Text(
@@ -108,7 +114,7 @@ class ScreeningScreen extends ConsumerWidget {
                 onPressed: idx > 0
                     ? () => ref
                         .read(selectedHistoryDateProvider.notifier)
-                        .state = dates[idx - 1]
+                        .state = displayDates[idx - 1]
                     : null,
               ),
             ],

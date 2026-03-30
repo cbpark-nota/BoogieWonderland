@@ -50,6 +50,8 @@ from pathlib import Path
 RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 START = "2010-01-01"  # 기본값 (윈도우별로 덮어씀)
 END   = "2024-12-31"
 TOP_N = 10
@@ -74,35 +76,7 @@ PRESETS = {
 GAP_STRONG_BULL = 0.05   # 50MA-200MA gap > 5% → 강한 상승
 VOL_HIGH_PCTILE = 80     # SPY ATR 상위 20% → 고변동성
 
-SECTOR_ETF = {
-    "Technology":"XLK","Health Care":"XLV","Financials":"XLF",
-    "Consumer Disc":"XLY","Industrials":"XLI","Energy":"XLE",
-    "Materials":"XLB","Communication":"XLC",
-}
-US_UNIVERSE = {
-    "NVDA":"Technology","AAPL":"Technology","MSFT":"Technology","AVGO":"Technology",
-    "AMD":"Technology","QCOM":"Technology","AMAT":"Technology","LRCX":"Technology",
-    "MU":"Technology","KLAC":"Technology","ORCL":"Technology","ADBE":"Technology",
-    "CRM":"Technology","NOW":"Technology","PANW":"Technology","SNPS":"Technology",
-    "META":"Communication","GOOGL":"Communication","NFLX":"Communication","TMUS":"Communication",
-    "AMZN":"Consumer Disc","TSLA":"Consumer Disc","HD":"Consumer Disc","LULU":"Consumer Disc",
-    "LLY":"Health Care","UNH":"Health Care","ABBV":"Health Care","ISRG":"Health Care","VRTX":"Health Care",
-    "V":"Financials","MA":"Financials","JPM":"Financials","GS":"Financials",
-    "XOM":"Energy","CVX":"Energy","SLB":"Energy",
-    "CAT":"Industrials","GE":"Industrials","ETN":"Industrials","LMT":"Industrials",
-    "FCX":"Materials","NEM":"Materials",
-}
-KR_UNIVERSE = {
-    "005930.KS":"Technology","000660.KS":"Technology","009150.KS":"Technology",
-    "006400.KS":"Technology","373220.KS":"Technology",
-    "207940.KS":"Health Care","068270.KS":"Health Care",
-    "051910.KS":"Materials","247540.KS":"Materials",
-    "005380.KS":"Consumer Disc","000270.KS":"Consumer Disc",
-    "035420.KS":"Communication","035720.KS":"Communication",
-    "105560.KS":"Financials","055550.KS":"Financials",
-    "096770.KS":"Energy","011200.KS":"Industrials",
-}
-ALL_UNIVERSE = {**US_UNIVERSE, **KR_UNIVERSE}
+from core.constants import US_UNIVERSE, KR_UNIVERSE, ALL_UNIVERSE, SECTOR_ETF
 
 
 # ══════════════════════════════════════════════════════════════════
