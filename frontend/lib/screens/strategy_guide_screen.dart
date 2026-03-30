@@ -83,6 +83,10 @@ class StrategyGuideScreen extends StatelessWidget {
         const SizedBox(height: 12),
         const _BacktestResultTable(),
         const SizedBox(height: 24),
+        _SectionHeader(title: '트렌드 분석 (참고용)', colorScheme: colorScheme),
+        const SizedBox(height: 12),
+        const _TrendMonitorCard(),
+        const SizedBox(height: 24),
         _SectionHeader(title: '비트코인 V10 전략', colorScheme: colorScheme),
         const SizedBox(height: 12),
         const _BtcStrategyCard(),
@@ -1119,6 +1123,185 @@ class _GlossaryCard extends StatelessWidget {
             );
           }).toList(),
         ),
+      ),
+    );
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// 트렌드 모니터링 카드 (시총 Top 20 — 매매 전략 아님)
+// ──────────────────────────────────────────────────────────────────────────
+
+class _TrendMonitorCard extends StatelessWidget {
+  const _TrendMonitorCard();
+
+  static const _trendColor = Color(0xFF26A69A); // 청록색 — 참고용 구분
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      elevation: 2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 헤더
+          Container(
+            decoration: BoxDecoration(
+              color: _trendColor.withValues(alpha: 0.15),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                const Icon(Icons.show_chart, color: _trendColor, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '시총 Top 20 트렌드 모니터링',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: _trendColor,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: Colors.orange.withValues(alpha: 0.4)),
+                  ),
+                  child: Text(
+                    '참고용 · 매매 아님',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: Colors.orange,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 본문
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 목적 설명
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _trendColor.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: _trendColor.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 16, color: _trendColor),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '시가총액 상위 20개 종목의 추세 지표를 집계해 '
+                          '시장 전반의 방향성(Bull / Bear / Sideways)을 '
+                          '파악하는 참고 도구입니다.\n'
+                          '실제 매매 종목 선정에는 사용하지 않습니다.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // 모니터링 항목
+                Text(
+                  '모니터링 지표',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _BulletRow('MA20 / MA60 위 여부 — 단·중기 추세 방향'),
+                _BulletRow('3개월 수익률 — 모멘텀 강도'),
+                _BulletRow('Bull 비율 ≥ 60% → Bull 국면 / Bear 비율 ≥ 50% → Bear 국면'),
+                const SizedBox(height: 12),
+
+                // 대상 유니버스
+                Text(
+                  '모니터링 대상',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _TagChip(label: '미국 Top 20', color: _trendColor),
+                    _TagChip(label: '한국 Top 20', color: _trendColor),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'AAPL · MSFT · NVDA · AMZN · GOOGL · META 등 '
+                  '/ 삼성전자 · SK하이닉스 · LG에너지솔루션 등',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // 실행 방법
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '실행 (로컬 Python 환경)',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'python scripts/screener/trend_momentum_screener.py\n'
+                        'python scripts/backtest/backtest_trend_momentum.py',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: _trendColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

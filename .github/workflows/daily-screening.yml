@@ -53,8 +53,23 @@ jobs:
             echo "이전 history 없음 — 오늘부터 시작"
           fi
 
-      - name: 스크리닝 + 포트폴리오 JSON 생성
-        run: python scripts/export_json.py --output frontend/web/data/
+      - name: 스크리닝 JSON 생성 (4전략)
+        run: |
+          # export_json.py: 스크리닝 실행 후 portfolio.json까지 한 번에 생성
+          # portfolio_to_json()은 yfinance로 보유 종목 현재가를 60d OHLCV로 조회하고
+          # ATR(14) × 2.0 기반 스톱로스를 실시간 재계산한다.
+          python scripts/export_json.py --output frontend/web/data/ || true
+
+      - name: 포트폴리오 현재가 업데이트 (스크리닝 실패 시 단독 실행)
+        run: |
+          # 스크리닝 단계가 실패해도 portfolio.json은 반드시 최신 가격으로 유지한다.
+          # scripts/portfolio.xlsx → yfinance 60일 OHLCV → 현재가 + ATR 스톱 재계산
+          if [ ! -f frontend/web/data/portfolio.json ]; then
+            echo "portfolio.json 없음 — portfolio-only 모드로 생성"
+            python scripts/export_json.py --portfolio-only --output frontend/web/data/
+          else
+            echo "portfolio.json 이미 존재 (스크리닝 단계에서 생성됨)"
+          fi
 
       # Flutter 웹 빌드 (서버리스 모드)
       - uses: subosito/flutter-action@v2
