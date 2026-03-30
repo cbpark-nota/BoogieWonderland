@@ -427,6 +427,11 @@ class _HoldingCard extends StatelessWidget {
                         style:
                             const TextStyle(fontSize: 11, color: Colors.grey),
                       ),
+                      if (holding.entryDate.isNotEmpty)
+                        Text(
+                          '진입: ${holding.entryDate}',
+                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
                     ],
                   ),
                 ),

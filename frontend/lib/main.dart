@@ -92,25 +92,30 @@ class _MainNavigationState extends State<MainNavigation> {
         ),
         title: Text(_menuItems[_currentIndex].label),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (ctx) => Scaffold(
-                    appBar: AppBar(
-                      leading: IconButton(
-                        icon: const Icon(Icons.arrow_back_ios),
-                        onPressed: () => Navigator.pop(ctx),
+          IgnorePointer(
+            child: Opacity(
+              opacity: 0,
+              child: IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (ctx) => Scaffold(
+                        appBar: AppBar(
+                          leading: IconButton(
+                            icon: const Icon(Icons.arrow_back_ios),
+                            onPressed: () => Navigator.pop(ctx),
+                          ),
+                          title: const Text('설정'),
+                        ),
+                        body: const SettingsScreen(),
                       ),
-                      title: const Text('설정'),
                     ),
-                    body: const SettingsScreen(),
-                  ),
-                ),
-              );
-            },
+                  );
+                },
+              ),
+            ),
           ),
         ],
       ),
@@ -121,7 +126,7 @@ class _MainNavigationState extends State<MainNavigation> {
             DrawerHeader(
               decoration: BoxDecoration(color: colorScheme.primary),
               child: Text(
-                'Momentum Screener',
+                'Stock Screener',
                 style: TextStyle(
                   color: colorScheme.onPrimary,
                   fontSize: 20,
@@ -152,7 +157,7 @@ class _MainNavigationState extends State<MainNavigation> {
             const Divider(),
             ListTile(
               leading: const Icon(Icons.auto_stories_outlined),
-              title: const Text('전략 설명'),
+              title: const Text('Strategy'),
               onTap: () {
                 _scaffoldKey.currentState?.closeDrawer();
                 Navigator.push(
@@ -164,7 +169,7 @@ class _MainNavigationState extends State<MainNavigation> {
                           icon: const Icon(Icons.arrow_back_ios),
                           onPressed: () => Navigator.pop(ctx),
                         ),
-                        title: const Text('전략 설명'),
+                        title: const Text('Strategy'),
                       ),
                       body: const StrategyGuideScreen(),
                     ),
