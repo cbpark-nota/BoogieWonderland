@@ -1,0 +1,131 @@
+{
+  "generated_at": "2026-03-29T22:35:35",
+  "is_sample": true,
+  "total_candidates": 10,
+  "criteria": {
+    "min_short_float_pct": 15.0,
+    "description": "공매도 비율 15% 이상, 5일 가격 상승 종목 (숏스퀴즈 압력 높음)"
+  },
+  "results": [
+    {
+      "ticker": "BBBY",
+      "name": "Bed Bath & Beyond",
+      "short_float_pct": 40.2,
+      "days_to_cover": 3.1,
+      "price": 0.83,
+      "change_1d_pct": 8.1,
+      "change_5d_pct": 22.5,
+      "volume_ratio": 6.2,
+      "market_cap": 120000000,
+      "sector": "Consumer Discretionary"
+    },
+    {
+      "ticker": "BYND",
+      "name": "Beyond Meat",
+      "short_float_pct": 35.6,
+      "days_to_cover": 2.5,
+      "price": 8.21,
+      "change_1d_pct": 5.9,
+      "change_5d_pct": 16.4,
+      "volume_ratio": 3.8,
+      "market_cap": 580000000,
+      "sector": "Consumer Staples"
+    },
+    {
+      "ticker": "UPST",
+      "name": "Upstart Holdings",
+      "short_float_pct": 28.3,
+      "days_to_cover": 3.7,
+      "price": 52.6,
+      "change_1d_pct": 2.8,
+      "change_5d_pct": 7.2,
+      "volume_ratio": 1.9,
+      "market_cap": 4500000000,
+      "sector": "Financials"
+    },
+    {
+      "ticker": "GME",
+      "name": "GameStop Corp",
+      "short_float_pct": 25.4,
+      "days_to_cover": 2.8,
+      "price": 25.1,
+      "change_1d_pct": 4.8,
+      "change_5d_pct": 12.3,
+      "volume_ratio": 3.1,
+      "market_cap": 8500000000,
+      "sector": "Consumer Discretionary"
+    },
+    {
+      "ticker": "AMC",
+      "name": "AMC Entertainment",
+      "short_float_pct": 22.1,
+      "days_to_cover": 1.9,
+      "price": 4.32,
+      "change_1d_pct": 6.2,
+      "change_5d_pct": 18.7,
+      "volume_ratio": 4.5,
+      "market_cap": 1200000000,
+      "sector": "Communication Services"
+    },
+    {
+      "ticker": "RDFN",
+      "name": "Redfin Corp",
+      "short_float_pct": 21.4,
+      "days_to_cover": 4.8,
+      "price": 9.8,
+      "change_1d_pct": 3.7,
+      "change_5d_pct": 8.9,
+      "volume_ratio": 2.1,
+      "market_cap": 1100000000,
+      "sector": "Real Estate"
+    },
+    {
+      "ticker": "SPCE",
+      "name": "Virgin Galactic",
+      "short_float_pct": 19.7,
+      "days_to_cover": 2.1,
+      "price": 2.14,
+      "change_1d_pct": 7.3,
+      "change_5d_pct": 20.1,
+      "volume_ratio": 5.1,
+      "market_cap": 460000000,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "CVNA",
+      "name": "Carvana Co",
+      "short_float_pct": 17.8,
+      "days_to_cover": 4.2,
+      "price": 215.4,
+      "change_1d_pct": 3.4,
+      "change_5d_pct": 9.8,
+      "volume_ratio": 2.3,
+      "market_cap": 41000000000,
+      "sector": "Consumer Discretionary"
+    },
+    {
+      "ticker": "PLUG",
+      "name": "Plug Power",
+      "short_float_pct": 16.9,
+      "days_to_cover": 3.3,
+      "price": 3.45,
+      "change_1d_pct": 4.1,
+      "change_5d_pct": 11.6,
+      "volume_ratio": 2.7,
+      "market_cap": 2100000000,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "W",
+      "name": "Wayfair Inc",
+      "short_float_pct": 15.2,
+      "days_to_cover": 5.2,
+      "price": 45.3,
+      "change_1d_pct": 2.2,
+      "change_5d_pct": 6.1,
+      "volume_ratio": 1.7,
+      "market_cap": 5900000000,
+      "sector": "Consumer Discretionary"
+    }
+  ]
+}
