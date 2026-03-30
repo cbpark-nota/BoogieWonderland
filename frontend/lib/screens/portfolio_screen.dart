@@ -604,7 +604,7 @@ class _AtrStopRow extends StatelessWidget {
               Icon(statusIcon, size: 13, color: statusColor),
               const SizedBox(width: 4),
               Text(
-                'ATR 스톱 (균형형×2.0)',
+                'ATR 스톱',
                 style: TextStyle(
                     fontSize: 11,
                     color: statusColor,
@@ -660,10 +660,6 @@ class _AtrStopRow extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 3),
-          Text(
-            '현재가 ${holding.formatPrice(holding.currentPrice)}  →  스톱 ${holding.formatPrice(atrStop)}  │  20일 고점 기준',
-            style: const TextStyle(fontSize: 10, color: Colors.grey),
-          ),
         ],
       ),
     );
