@@ -215,6 +215,16 @@ final shortSqueezeProvider = FutureProvider<ShortSqueezeData?>((ref) async {
   }
 });
 
+// ── 시총 Top 20 (트렌드 모니터링) ────────────────────────────
+
+final marketCapTop20Provider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  try {
+    return await StaticDataSource().getMarketCapTop20();
+  } catch (_) {
+    return null;
+  }
+});
+
 // ── 히스토리 날짜 목록 ──────────────────────────────────────
 
 final historyDatesProvider = FutureProvider<List<String>>((ref) async {

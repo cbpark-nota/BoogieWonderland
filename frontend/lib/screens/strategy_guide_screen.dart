@@ -83,6 +83,10 @@ class StrategyGuideScreen extends StatelessWidget {
         const SizedBox(height: 12),
         const _BacktestResultTable(),
         const SizedBox(height: 24),
+        _SectionHeader(title: '시총 Top 20 트렌드 모니터링', colorScheme: colorScheme),
+        const SizedBox(height: 12),
+        const _MarketCapTrendCard(),
+        const SizedBox(height: 24),
         _SectionHeader(title: '비트코인 V10 전략', colorScheme: colorScheme),
         const SizedBox(height: 12),
         const _BtcStrategyCard(),
@@ -1049,6 +1053,132 @@ const _glossaryTerms = [
     '시장 국면. Bull(상승) / Bear(하락) / Neutral(중립)으로 분류',
   ),
 ];
+
+class _MarketCapTrendCard extends StatelessWidget {
+  const _MarketCapTrendCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Card(
+      elevation: 2,
+      color: colorScheme.tertiaryContainer.withValues(alpha: 0.3),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.trending_up, color: colorScheme.tertiary, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  '매매 전략이 아닌 시장 트렌드 참고 도구',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.tertiary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '시총 Top 20은 현재 시장에서 자금이 집중되는 대형주를 파악하기 위한 '
+              '트렌드 모니터링 도구입니다. 이 목록 자체를 매매 신호로 사용하지 않습니다.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            _buildFeatureRow(
+              context,
+              icon: Icons.format_list_numbered,
+              title: '현재 Top 20 목록',
+              desc: 'S&P500 + NASDAQ100 기준 시가총액 상위 20개 종목',
+              colorScheme: colorScheme,
+              theme: theme,
+            ),
+            const SizedBox(height: 8),
+            _buildFeatureRow(
+              context,
+              icon: Icons.new_releases_outlined,
+              title: '신규 진입 하이라이트',
+              desc: '전일 대비 새로 Top 20에 진입한 종목 강조 표시',
+              colorScheme: colorScheme,
+              theme: theme,
+            ),
+            const SizedBox(height: 8),
+            _buildFeatureRow(
+              context,
+              icon: Icons.pie_chart_outline,
+              title: '섹터 분포',
+              desc: 'Top 20 종목의 섹터 구성 비율 — 어떤 업종에 자금이 집중됐는지 파악',
+              colorScheme: colorScheme,
+              theme: theme,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      size: 14, color: colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '드로어 메뉴 → 트렌드 분석에서 확인할 수 있습니다.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureRow(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String desc,
+    required ColorScheme colorScheme,
+    required ThemeData theme,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: colorScheme.tertiary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(fontWeight: FontWeight.bold)),
+              Text(desc,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _GlossaryCard extends StatelessWidget {
   const _GlossaryCard();

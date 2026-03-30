@@ -438,6 +438,85 @@ def check_kospi_market() -> dict | None:
         return None
 
 
+def fetch_market_cap_top20(
+    us_tickers: list[str],
+    us_sectors: dict[str, str],
+    output_dir: Path | None = None,
+) -> dict:
+    """S&P500+NASDAQ100 종목의 시가총액 Top 20 계산 (트렌드 모니터링용).
+
+    ThreadPoolExecutor로 병렬 조회. 실패 시 해당 종목 제외.
+    이전 market_cap.json이 output_dir에 있으면 신규 진입 종목을 하이라이트한다.
+    """
+    import yfinance as yf
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    print("시총 Top 20 수집 중...")
+
+    def _get_mc(ticker: str) -> tuple[str, float | None]:
+        try:
+            mc = yf.Ticker(ticker).fast_info.market_cap
+            return ticker, mc
+        except Exception:
+            return ticker, None
+
+    market_caps: dict[str, float] = {}
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        futures = {executor.submit(_get_mc, t): t for t in us_tickers}
+        for fut in as_completed(futures):
+            ticker, mc = fut.result()
+            if mc and mc > 0:
+                market_caps[ticker] = mc
+
+    sorted_tickers = sorted(market_caps, key=lambda t: market_caps[t], reverse=True)[:20]
+
+    # 이전 Top 20 읽기 (신규 진입 하이라이트용)
+    prev_tickers: list[str] = []
+    if output_dir:
+        prev_path = output_dir / "market_cap.json"
+        if prev_path.exists():
+            try:
+                with open(prev_path, encoding="utf-8") as f:
+                    prev_data = json.load(f)
+                prev_tickers = [r["ticker"] for r in prev_data.get("top20", [])]
+            except Exception:
+                pass
+    prev_set = set(prev_tickers)
+
+    now = datetime.now().isoformat(timespec="seconds")
+    results = []
+    for rank, ticker in enumerate(sorted_tickers, 1):
+        sector = us_sectors.get(ticker, "Unknown")
+        mc = market_caps[ticker]
+        is_new = bool(prev_tickers) and (ticker not in prev_set)
+        results.append({
+            "rank": rank,
+            "ticker": ticker,
+            "market_cap_b": round(mc / 1e9, 1),  # 십억 달러(Billion) 단위
+            "sector": sector,
+            "is_new_entrant": is_new,
+        })
+
+    # 섹터 분포
+    sector_count: dict[str, int] = {}
+    for r in results:
+        s = r["sector"]
+        sector_count[s] = sector_count.get(s, 0) + 1
+    sector_dist = [
+        {"sector": s, "count": c}
+        for s, c in sorted(sector_count.items(), key=lambda x: -x[1])
+    ]
+
+    new_entrants = [r["ticker"] for r in results if r["is_new_entrant"]]
+    print(f"  시총 Top 20 수집 완료 ({len(results)}개), 신규 진입: {new_entrants or '없음'}")
+    return {
+        "updated_at": now,
+        "note": "매매 전략이 아닌 시장 트렌드 모니터링 참고 도구입니다.",
+        "top20": results,
+        "sector_distribution": sector_dist,
+    }
+
+
 def export_all_strategies(output_dir: Path, screening_date: str | None = None):
     """4전략 스크리닝 실행 후 단일 JSON으로 저장.
 
@@ -588,6 +667,16 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
         full_path = output_dir / "screening_strategies.json"
         with open(full_path, "w", encoding="utf-8") as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
+
+    # 시총 Top 20 (트렌드 모니터링)
+    try:
+        mc_data = fetch_market_cap_top20(us_tickers, us_sectors, output_dir)
+        mc_path = output_dir / "market_cap.json"
+        with open(mc_path, "w", encoding="utf-8") as f:
+            json.dump(mc_data, f, ensure_ascii=False, indent=2)
+        print(f"  시총 Top 20 저장: {mc_path}")
+    except Exception as e:
+        print(f"  시총 Top 20 수집 실패 ({e}), 건너뜀")
 
     # history/{date}.json 저장 및 index.json 업데이트
     save_history(output_dir, output, run_dt)
@@ -1115,7 +1204,11 @@ if __name__ == "__main__":
         dates_list = [d.strip() for d in args.batch_dates.split(",")]
         generate_history_batch(output_path, dates_list)
     else:
-        export_all_strategies(output_path, screening_date=args.date)
+        try:
+            export_all_strategies(output_path, screening_date=args.date)
+        except Exception as e:
+            print(f"\n[경고] 스크리닝 실패: {e}")
+            print("스크리닝은 건너뛰고 포트폴리오 현재가 업데이트를 계속합니다.")
         if not args.date:
             print("\n포트폴리오 JSON 생성 중...")
             portfolio_to_json(output_path, xlsx_path)

@@ -11,6 +11,7 @@ import 'screens/settings_screen.dart';
 import 'screens/screening_tabs_screen.dart';
 import 'screens/strategy_guide_tabs_screen.dart';
 import 'screens/short_squeeze_screen.dart';
+import 'screens/market_cap_screen.dart';
 
 void main() {
   if (AppConfig.isServerless) {
@@ -154,6 +155,31 @@ class _MainNavigationState extends State<MainNavigation> {
                 onTap: () => _selectMenu(i),
               );
             }),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.bar_chart_outlined),
+              title: const Text('트렌드 분석'),
+              subtitle: const Text('시총 Top 20 모니터링',
+                  style: TextStyle(fontSize: 11)),
+              onTap: () {
+                _scaffoldKey.currentState?.closeDrawer();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (ctx) => Scaffold(
+                      appBar: AppBar(
+                        leading: IconButton(
+                          icon: const Icon(Icons.arrow_back_ios),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                        title: const Text('트렌드 분석'),
+                      ),
+                      body: const MarketCapScreen(),
+                    ),
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
