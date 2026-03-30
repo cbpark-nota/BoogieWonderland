@@ -1,6 +1,11 @@
 """
-오늘 기준 모멘텀 종목 스크리닝
+오늘 기준 모멘텀 종목 스크리닝 (v1 베이스라인)
+
+.. deprecated::
+    이 파일은 참고용 베이스라인입니다. 프로덕션에서는 screener_v3.py를 사용하세요.
+    하드코딩 유니버스(~80개)만 스크리닝하며 ATR 스톱로스, 점수 비례 포지션 사이징 미지원.
 """
+import logging
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -86,8 +91,8 @@ def download(tickers, period="1y"):
                     df = raw.xs(t, axis=1, level=1).dropna(how="all")
                     if len(df) >= 60:
                         result[t] = df
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug("screener_v1 download: %s 슬라이스 실패 — %s", t, e)
         else:
             if len(raw) >= 60:
                 result[tickers[0]] = raw
@@ -305,11 +310,11 @@ if __name__ == "__main__":
     out = top10[["score","ADX","RSI","ret3m","vol_stab","sector","price"]].copy()
     out.columns = ["복합점수","ADX","RSI","3M수익률","거래량안정성","섹터","현재가"]
     out.index.name = "종목코드"
-    out.to_csv("/home/claude/screening_result.csv", encoding="utf-8-sig")
+    out.to_csv("screener_v1_result.csv", encoding="utf-8-sig")
 
     # 전체 통과 종목도 저장
     ranked[["score","ADX","RSI","ret3m","sector","price"]].to_csv(
-        "/home/claude/screening_all.csv", encoding="utf-8-sig"
+        "screener_v1_all.csv", encoding="utf-8-sig"
     )
     print(f"\n  전체 통과 종목 ({len(passed)}개): screening_all.csv")
     print(f"  상위 {TOP_N}개 결과: screening_result.csv")

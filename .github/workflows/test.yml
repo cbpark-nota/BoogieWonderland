@@ -15,9 +15,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: uv 설치
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: 의존성 설치
         working-directory: backend
-        run: pip install uv && uv pip install --system -r pyproject.toml
+        run: uv pip install --system -r pyproject.toml
 
       - name: 백엔드 테스트
         working-directory: backend
@@ -27,18 +32,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('frontend/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.41.5'
           channel: 'stable'
+          cache: true
 
       - name: 의존성 설치
         working-directory: frontend
         run: flutter pub get
-
-      - name: Golden 파일 갱신 (CI 환경 렌더링 기준)
-        working-directory: frontend
-        run: flutter test test/screenshot_test.dart --update-goldens
 
       - name: 프론트엔드 테스트
         working-directory: frontend

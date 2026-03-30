@@ -35,6 +35,9 @@ RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
 DATA_DIR = Path(__file__).parent.parent.parent / "data" / "full_universe"
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from data_cache import fetch_sp500_tickers
+
 # 백테스트 기간 (윈도우별로 덮어씀)
 START = "2015-01-01"
 END   = "2024-12-31"
@@ -72,18 +75,6 @@ SECTOR_ETF = {
 # ══════════════════════════════════════════════════════════════════
 # STEP 1: 유니버스 구축 및 데이터 다운로드
 # ══════════════════════════════════════════════════════════════════
-
-def fetch_sp500_tickers():
-    """S&P500 구성 종목 가져오기."""
-    url = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv"
-    df = pd.read_csv(url)
-    tickers = df["Symbol"].str.replace(".", "-", regex=False).tolist()
-    sectors = dict(zip(
-        df["Symbol"].str.replace(".", "-", regex=False),
-        df["GICS Sector"]
-    ))
-    return tickers, sectors
-
 
 def fetch_kr_tickers():
     """KRX에서 KOSPI/KOSDAQ 전체 종목 가져오기."""
