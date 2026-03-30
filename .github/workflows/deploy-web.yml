@@ -58,8 +58,12 @@ jobs:
             echo "이전 history 없음 — 오늘부터 시작"
           fi
 
-      - name: 스크리닝 + 포트폴리오 JSON 생성
+      - name: 스크리닝 JSON 생성
         run: python scripts/export_json.py --output frontend/web/data/
+        continue-on-error: true  # 스크리닝 실패 시에도 포트폴리오 재조회는 반드시 실행
+
+      - name: 포트폴리오 현재가 재조회
+        run: python scripts/export_json.py --portfolio-only --output frontend/web/data/
 
       # Flutter 웹 빌드 (서버리스 모드)
       - uses: subosito/flutter-action@v2
