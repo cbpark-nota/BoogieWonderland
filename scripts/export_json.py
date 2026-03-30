@@ -980,6 +980,10 @@ if __name__ == "__main__":
         print("포트폴리오 JSON 생성 중...")
         portfolio_to_json(output_path, xlsx_path)
     else:
-        export_all_strategies(output_path)
+        try:
+            export_all_strategies(output_path)
+        except Exception as e:
+            print(f"\n[경고] 스크리닝 실패: {e}")
+            print("스크리닝은 건너뛰고 포트폴리오 현재가 업데이트를 계속합니다.")
         print("\n포트폴리오 JSON 생성 중...")
         portfolio_to_json(output_path, xlsx_path)
