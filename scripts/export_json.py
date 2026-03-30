@@ -619,7 +619,7 @@ def fetch_usdkrw() -> float:
         if df.empty:
             print("  환율 조회 결과 없음, 기본값 1380 사용")
             return 1380.0
-        rate = float(df["Close"].dropna().iloc[-1])
+        rate = float(df["Close"].squeeze().dropna().iloc[-1])
         print(f"  USD/KRW 환율: {rate:,.2f}")
         return rate
     except Exception as e:

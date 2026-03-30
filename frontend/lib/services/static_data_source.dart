@@ -23,8 +23,10 @@ class StaticDataSource {
   }
 
   /// 엑셀 기반 포트폴리오 데이터
+  /// 배포 후 브라우저 캐시로 인한 구 데이터 표시를 방지하기 위해 캐시 버스팅 파라미터 사용
   Future<Map<String, dynamic>> getPortfolio() async {
-    final res = await _dio.get('$_baseDataUrl/portfolio.json');
+    final bust = DateTime.now().millisecondsSinceEpoch ~/ 60000; // 1분 단위
+    final res = await _dio.get('$_baseDataUrl/portfolio.json?v=$bust');
     return res.data as Map<String, dynamic>;
   }
 
