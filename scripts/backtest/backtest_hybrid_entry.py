@@ -26,6 +26,7 @@
 기간  : 2015-01-01 ~ 현재
 ══════════════════════════════════════════════════════════════
 """
+import logging
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -155,8 +156,8 @@ def download_all(tickers: list, start: str, end: str) -> dict:
             else:
                 if len(raw) >= 220:
                     data[chunk[0]] = raw
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug("backtest_hybrid_entry download_all: 배치(offset=%d) 다운로드 실패 — %s", i, e)
     return data
 
 

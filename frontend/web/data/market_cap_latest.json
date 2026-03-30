@@ -1,0 +1,188 @@
+{
+  "generated_at": "2026-03-29T22:35:56",
+  "is_sample": true,
+  "total": 20,
+  "description": "시가총액 기준 상위 20개 종목 (S&P 500 기준)",
+  "results": [
+    {
+      "rank": 1,
+      "ticker": "NVDA",
+      "name": "NVIDIA Corporation",
+      "market_cap": 2870000000000,
+      "price": 116.78,
+      "change_1d_pct": 1.2,
+      "sector": "Information Technology"
+    },
+    {
+      "rank": 2,
+      "ticker": "AAPL",
+      "name": "Apple Inc.",
+      "market_cap": 2820000000000,
+      "price": 183.5,
+      "change_1d_pct": 0.8,
+      "sector": "Information Technology"
+    },
+    {
+      "rank": 3,
+      "ticker": "MSFT",
+      "name": "Microsoft Corporation",
+      "market_cap": 2760000000000,
+      "price": 371.2,
+      "change_1d_pct": 0.5,
+      "sector": "Information Technology"
+    },
+    {
+      "rank": 4,
+      "ticker": "AMZN",
+      "name": "Amazon.com Inc.",
+      "market_cap": 2100000000000,
+      "price": 201.4,
+      "change_1d_pct": 1.5,
+      "sector": "Consumer Discretionary"
+    },
+    {
+      "rank": 5,
+      "ticker": "GOOGL",
+      "name": "Alphabet Inc.",
+      "market_cap": 1980000000000,
+      "price": 160.3,
+      "change_1d_pct": 0.3,
+      "sector": "Communication Services"
+    },
+    {
+      "rank": 6,
+      "ticker": "META",
+      "name": "Meta Platforms Inc.",
+      "market_cap": 1520000000000,
+      "price": 598.6,
+      "change_1d_pct": 1.8,
+      "sector": "Communication Services"
+    },
+    {
+      "rank": 7,
+      "ticker": "TSLA",
+      "name": "Tesla Inc.",
+      "market_cap": 840000000000,
+      "price": 262.3,
+      "change_1d_pct": 2.4,
+      "sector": "Consumer Discretionary"
+    },
+    {
+      "rank": 8,
+      "ticker": "BRK-B",
+      "name": "Berkshire Hathaway Inc.",
+      "market_cap": 760000000000,
+      "price": 519.8,
+      "change_1d_pct": 0.2,
+      "sector": "Financials"
+    },
+    {
+      "rank": 9,
+      "ticker": "AVGO",
+      "name": "Broadcom Inc.",
+      "market_cap": 760000000000,
+      "price": 162.4,
+      "change_1d_pct": 0.9,
+      "sector": "Information Technology"
+    },
+    {
+      "rank": 10,
+      "ticker": "LLY",
+      "name": "Eli Lilly and Company",
+      "market_cap": 720000000000,
+      "price": 757.3,
+      "change_1d_pct": -0.4,
+      "sector": "Health Care"
+    },
+    {
+      "rank": 11,
+      "ticker": "TSM",
+      "name": "Taiwan Semiconductor Manufacturing",
+      "market_cap": 690000000000,
+      "price": 134.5,
+      "change_1d_pct": 1.1,
+      "sector": "Information Technology"
+    },
+    {
+      "rank": 12,
+      "ticker": "WMT",
+      "name": "Walmart Inc.",
+      "market_cap": 680000000000,
+      "price": 84.9,
+      "change_1d_pct": 0.3,
+      "sector": "Consumer Staples"
+    },
+    {
+      "rank": 13,
+      "ticker": "JPM",
+      "name": "JPMorgan Chase & Co.",
+      "market_cap": 670000000000,
+      "price": 219.6,
+      "change_1d_pct": 0.6,
+      "sector": "Financials"
+    },
+    {
+      "rank": 14,
+      "ticker": "V",
+      "name": "Visa Inc.",
+      "market_cap": 600000000000,
+      "price": 289.4,
+      "change_1d_pct": 0.4,
+      "sector": "Financials"
+    },
+    {
+      "rank": 15,
+      "ticker": "XOM",
+      "name": "Exxon Mobil Corporation",
+      "market_cap": 480000000000,
+      "price": 113.2,
+      "change_1d_pct": -0.3,
+      "sector": "Energy"
+    },
+    {
+      "rank": 16,
+      "ticker": "MA",
+      "name": "Mastercard Incorporated",
+      "market_cap": 460000000000,
+      "price": 485.7,
+      "change_1d_pct": 0.5,
+      "sector": "Financials"
+    },
+    {
+      "rank": 17,
+      "ticker": "UNH",
+      "name": "UnitedHealth Group Inc.",
+      "market_cap": 450000000000,
+      "price": 482.3,
+      "change_1d_pct": -0.6,
+      "sector": "Health Care"
+    },
+    {
+      "rank": 18,
+      "ticker": "COST",
+      "name": "Costco Wholesale Corporation",
+      "market_cap": 420000000000,
+      "price": 944.8,
+      "change_1d_pct": 0.7,
+      "sector": "Consumer Staples"
+    },
+    {
+      "rank": 19,
+      "ticker": "HD",
+      "name": "The Home Depot Inc.",
+      "market_cap": 380000000000,
+      "price": 381.2,
+      "change_1d_pct": 0.2,
+      "sector": "Consumer Discretionary"
+    },
+    {
+      "rank": 20,
+      "ticker": "ORCL",
+      "name": "Oracle Corporation",
+      "market_cap": 360000000000,
+      "price": 131.4,
+      "change_1d_pct": 0.8,
+      "sector": "Information Technology"
+    }
+  ]
+}
