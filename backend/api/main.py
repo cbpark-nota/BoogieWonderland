@@ -1,0 +1,43 @@
+"""SQLite 기반 경량 FastAPI 앱 엔트리포인트.
+
+PostgreSQL 없이 SQLite만으로 스크리닝 결과 API를 제공한다.
+기존 backend/app/main.py(PostgreSQL 풀스택)와 별개로 운영 가능.
+
+실행:
+    uvicorn backend.api.main:app --reload --port 8001
+"""
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from backend.api.screening import router as screening_router
+from backend.db.database import init_db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(
+    title="스크리닝 결과 API (SQLite)",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(screening_router)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}

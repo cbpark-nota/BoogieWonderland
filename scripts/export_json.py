@@ -464,10 +464,11 @@ def check_kospi_market() -> dict | None:
         return None
 
 
-def export_all_strategies(output_dir: Path):
-    """4전략 스크리닝 실행 후 단일 JSON으로 저장."""
+def export_all_strategies(output_dir: Path, now: datetime | None = None) -> dict:
+    """4전략 스크리닝 실행 후 단일 JSON으로 저장. output dict를 반환한다."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    now = datetime.now()
+    if now is None:
+        now = datetime.now()
 
     # 시장 상태 (SPY)
     mkt = sc.check_market()
@@ -609,6 +610,7 @@ def export_all_strategies(output_dir: Path):
     s = strategies_output["adaptive"]
     print(f"  {s['label']}: {len(s['results'])}종목 선정 / {s['total_passed']}개 통과 "
           f"(현재 국면: {STRATEGIES[adaptive_regime]['label']})")
+    return output
 
 
 def fetch_usdkrw() -> float:
@@ -963,6 +965,68 @@ def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int =
     print(f"  history index 갱신: {dates}")
 
 
+def save_to_db(output: dict, now: datetime) -> None:
+    """스크리닝 결과를 SQLite DB에 저장한다.
+
+    export_all_strategies()가 반환한 output dict를 그대로 받아
+    screening_history(전체 JSON)와 screening_result(종목별 행)를 INSERT/REPLACE 한다.
+    """
+    import os
+    import sys
+
+    # 프로젝트 루트(backend 패키지가 있는 위치)를 sys.path에 추가
+    project_root = Path(__file__).parents[1]
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
+    from backend.db.database import SessionLocal, init_db
+    from backend.db.models import ScreeningHistory, ScreeningResult
+
+    init_db()
+    today = now.strftime("%Y-%m-%d")
+
+    db = SessionLocal()
+    try:
+        # screening_history — 날짜 UNIQUE, 이미 있으면 업데이트
+        existing = db.query(ScreeningHistory).filter_by(date=today).first()
+        sanitized_json = json.dumps(_sanitize_nan(output), ensure_ascii=False)
+        if existing:
+            existing.data_json = sanitized_json
+            existing.created_at = datetime.utcnow().isoformat(timespec="seconds")
+        else:
+            db.add(ScreeningHistory(date=today, data_json=sanitized_json))
+
+        # screening_result — 오늘 날짜 기존 행 삭제 후 재삽입
+        db.query(ScreeningResult).filter_by(date=today).delete()
+
+        for strategy_key, strategy_info in output.get("strategies", {}).items():
+            for item in strategy_info.get("results", []):
+                ticker = item.get("ticker", "")
+                market = "KR" if ticker.endswith(".KS") else "US"
+                # 핵심 필드 외 나머지를 data_json으로 저장
+                extra = {k: v for k, v in item.items()
+                         if k not in ("ticker", "name", "rank", "score")}
+                db.add(ScreeningResult(
+                    date=today,
+                    strategy=strategy_key,
+                    ticker=ticker,
+                    name=item.get("name"),
+                    rank=item.get("rank"),
+                    score=item.get("score"),
+                    market=market,
+                    data_json=json.dumps(_sanitize_nan(extra), ensure_ascii=False) if extra else None,
+                ))
+
+        db.commit()
+        print(f"  DB 저장 완료: {today} ({len(output.get('strategies', {}))}개 전략)")
+    except Exception as exc:
+        db.rollback()
+        print(f"  DB 저장 실패: {exc}", file=sys.stderr)
+        raise
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="4전략 스크리닝 결과 JSON 내보내기")
     parser.add_argument("--output", type=str, default="frontend/web/data/",
@@ -971,6 +1035,8 @@ if __name__ == "__main__":
                         help="포트폴리오 JSON만 생성 (스크리닝 생략)")
     parser.add_argument("--xlsx", type=str, default=None,
                         help="portfolio.xlsx 경로 (기본: scripts/portfolio.xlsx)")
+    parser.add_argument("--db", action="store_true",
+                        help="스크리닝 결과를 SQLite DB에도 저장")
     args = parser.parse_args()
 
     output_path = Path(args.output)
@@ -980,6 +1046,10 @@ if __name__ == "__main__":
         print("포트폴리오 JSON 생성 중...")
         portfolio_to_json(output_path, xlsx_path)
     else:
-        export_all_strategies(output_path)
+        _now = datetime.now()
+        _output = export_all_strategies(output_path, _now)
+        if args.db:
+            print("\nDB 저장 중...")
+            save_to_db(_output, _now)
         print("\n포트폴리오 JSON 생성 중...")
         portfolio_to_json(output_path, xlsx_path)
