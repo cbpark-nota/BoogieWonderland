@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.api.portfolio import router as portfolio_router
 from backend.api.screening import router as screening_router
 from backend.db.database import init_db
 
@@ -36,6 +37,7 @@ app.add_middleware(
 )
 
 app.include_router(screening_router)
+app.include_router(portfolio_router)
 
 
 @app.get("/health")

@@ -1,16 +1,148 @@
 """포트폴리오 API"""
 from datetime import datetime
 
+import yfinance as yf
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.portfolio import Holding, StopLossEvent
-from app.schemas.portfolio import HoldingCreate, HoldingOut, StopCheckResult, StopCheckResponse
+from app.models.portfolio import Holding, StopLossEvent, Portfolio
+from app.schemas.portfolio import (
+    HoldingCreate, HoldingOut, StopCheckResult, StopCheckResponse,
+    PortfolioCreate, PortfolioUpdate, PortfolioOut, PortfolioSummary,
+)
 from app.services.monitor import check_stop_loss
 
 router = APIRouter(prefix="/api/v1/portfolio", tags=["portfolio"])
+
+# ─── /api/portfolio CRUD 라우터 ────────────────────────────────────────────────
+
+portfolio_router = APIRouter(prefix="/api/portfolio", tags=["portfolio-crud"])
+
+
+def _fetch_prices(tickers: list[str]) -> dict[str, float]:
+    """yfinance로 현재가 일괄 조회. 실패 시 빈 dict."""
+    if not tickers:
+        return {}
+    try:
+        data = yf.download(tickers, period="1d", progress=False, auto_adjust=True)
+        if data.empty:
+            return {}
+        close = data["Close"] if "Close" in data.columns else data
+        result: dict[str, float] = {}
+        if len(tickers) == 1:
+            val = close.iloc[-1]
+            if hasattr(val, "item"):
+                val = val.item()
+            result[tickers[0]] = float(val)
+        else:
+            for ticker in tickers:
+                if ticker in close.columns:
+                    val = close[ticker].iloc[-1]
+                    if hasattr(val, "item"):
+                        val = val.item()
+                    import math
+                    if not math.isnan(float(val)):
+                        result[ticker] = float(val)
+        return result
+    except Exception:
+        return {}
+
+
+@portfolio_router.get("", response_model=list[PortfolioOut])
+async def list_portfolio(db: AsyncSession = Depends(get_db)):
+    """전체 포트폴리오 조회."""
+    result = await db.execute(select(Portfolio).order_by(Portfolio.id))
+    return result.scalars().all()
+
+
+@portfolio_router.post("", response_model=PortfolioOut, status_code=201)
+async def create_portfolio(data: PortfolioCreate, db: AsyncSession = Depends(get_db)):
+    """종목 추가."""
+    item = Portfolio(**data.model_dump())
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+@portfolio_router.put("/{item_id}", response_model=PortfolioOut)
+async def update_portfolio(item_id: int, data: PortfolioUpdate, db: AsyncSession = Depends(get_db)):
+    """종목 수정."""
+    result = await db.execute(select(Portfolio).where(Portfolio.id == item_id))
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(404, f"id={item_id} 종목 없음")
+
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(item, field, value)
+    item.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+@portfolio_router.delete("/{item_id}", status_code=204)
+async def delete_portfolio(item_id: int, db: AsyncSession = Depends(get_db)):
+    """종목 삭제."""
+    result = await db.execute(select(Portfolio).where(Portfolio.id == item_id))
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(404, f"id={item_id} 종목 없음")
+    await db.delete(item)
+    await db.commit()
+
+
+@portfolio_router.get("/summary", response_model=PortfolioSummary)
+async def portfolio_summary(db: AsyncSession = Depends(get_db)):
+    """포트폴리오 요약 (총 투자금액, 현재 평가액 등)."""
+    result = await db.execute(select(Portfolio).order_by(Portfolio.id))
+    items = result.scalars().all()
+
+    if not items:
+        return PortfolioSummary(
+            total_items=0, total_invested=0.0,
+            total_current_value=0.0, total_pnl=0.0, total_pnl_pct=0.0,
+        )
+
+    tickers = list({i.ticker for i in items})
+    prices = _fetch_prices(tickers)
+
+    total_invested = sum(i.entry_price * i.quantity for i in items)
+    total_current = sum(
+        prices.get(i.ticker, i.entry_price) * i.quantity for i in items
+    )
+    pnl = total_current - total_invested
+    pnl_pct = (pnl / total_invested * 100) if total_invested else 0.0
+
+    return PortfolioSummary(
+        total_items=len(items),
+        total_invested=round(total_invested, 2),
+        total_current_value=round(total_current, 2),
+        total_pnl=round(pnl, 2),
+        total_pnl_pct=round(pnl_pct, 4),
+    )
+
+
+@portfolio_router.get("/refresh", response_model=list[PortfolioOut])
+async def refresh_portfolio(db: AsyncSession = Depends(get_db)):
+    """yfinance로 현재가 조회 후 응답에 포함 (DB 미저장)."""
+    result = await db.execute(select(Portfolio).order_by(Portfolio.id))
+    items = result.scalars().all()
+
+    tickers = list({i.ticker for i in items})
+    prices = _fetch_prices(tickers)
+
+    out = []
+    for item in items:
+        item_dict = {
+            col.name: getattr(item, col.name)
+            for col in item.__table__.columns
+        }
+        item_dict["current_price"] = prices.get(item.ticker)
+        out.append(PortfolioOut(**item_dict))
+    return out
 
 
 @router.get("/holdings", response_model=list[HoldingOut])

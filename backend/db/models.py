@@ -7,6 +7,27 @@ from sqlalchemy.orm import Mapped, mapped_column
 from backend.db.database import Base
 
 
+class Portfolio(Base):
+    """포트폴리오 보유 종목."""
+
+    __tablename__ = "portfolio"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticker: Mapped[str] = mapped_column(String(20), nullable=False)
+    name: Mapped[str | None] = mapped_column(String(100))
+    entry_price: Mapped[float] = mapped_column(Float, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    entry_date: Mapped[str | None] = mapped_column(String(10))          # YYYY-MM-DD
+    stop_loss: Mapped[float | None] = mapped_column(Float)
+    market: Mapped[str] = mapped_column(String(2), default="US")        # US | KR
+    created_at: Mapped[str] = mapped_column(
+        String(30), default=lambda: datetime.now(UTC).isoformat(timespec="seconds")
+    )
+    updated_at: Mapped[str] = mapped_column(
+        String(30), default=lambda: datetime.now(UTC).isoformat(timespec="seconds")
+    )
+
+
 class ScreeningResult(Base):
     """개별 종목 스크리닝 결과."""
 
