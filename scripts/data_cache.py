@@ -129,6 +129,51 @@ def fetch_nasdaq100_tickers():
         return [], {}
 
 
+def fetch_sp600_tickers():
+    """S&P SmallCap 600 구성 종목 및 GICS 섹터 가져오기 (Wikipedia)."""
+    try:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+            )
+        }
+        r = requests.get(
+            "https://en.wikipedia.org/wiki/List_of_S%26P_600_companies",
+            headers=headers,
+            timeout=15,
+        )
+        r.raise_for_status()
+        tables = pd.read_html(io.StringIO(r.text))
+        # 첫 번째 테이블이 S&P 600 종목 목록
+        sp600 = tables[0]
+        # 컬럼명 정규화
+        sp600.columns = [c.strip() for c in sp600.columns]
+        # 티커 컬럼 탐색
+        ticker_col = None
+        sector_col = None
+        for col in sp600.columns:
+            if col.lower() in ("ticker", "symbol", "ticker symbol"):
+                ticker_col = col
+            if "sector" in col.lower() or "gics" in col.lower():
+                sector_col = col
+        if ticker_col is None:
+            ticker_col = sp600.columns[0]
+        tickers = sp600[ticker_col].str.replace(".", "-", regex=False).tolist()
+        if sector_col:
+            sectors = dict(zip(
+                sp600[ticker_col].str.replace(".", "-", regex=False),
+                sp600[sector_col],
+            ))
+        else:
+            sectors = {t: "Unknown" for t in tickers}
+        print(f"  S&P600 {len(tickers)}개 종목 수집 완료")
+        return tickers, sectors
+    except Exception as e:
+        print(f"  S&P600 수집 실패 ({e})")
+        return [], {}
+
+
 def fetch_kr_tickers(kospi_n=200, kosdaq_n=150):
     """KRX에서 KOSPI/KOSDAQ 상위 종목 가져오기.
 
