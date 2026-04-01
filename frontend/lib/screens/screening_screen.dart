@@ -6,40 +6,28 @@ import '../providers/screening_provider.dart';
 import '../providers/serverless_providers.dart';
 import '../widgets/stock_card.dart';
 
-class ScreeningScreen extends ConsumerStatefulWidget {
+class ScreeningScreen extends ConsumerWidget {
   const ScreeningScreen({super.key});
 
   @override
-  ConsumerState<ScreeningScreen> createState() => _ScreeningScreenState();
-}
-
-enum _MarketFilter { all, kr, us }
-
-class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
-  StrategyType _selected = StrategyType.balanced;
-  _MarketFilter _marketFilter = _MarketFilter.all;
-
-  @override
-  Widget build(BuildContext context) {
-    // 서버리스 모드: 4전략 데이터 사용
+  Widget build(BuildContext context, WidgetRef ref) {
     if (AppConfig.isServerless) {
-      return _buildServerlessView();
+      return _buildServerlessView(context, ref);
     }
-    // 풀스택 모드: 기존 단일 스크리닝
-    return _buildFullstackView();
+    return _buildFullstackView(context, ref);
   }
 
   // ── 서버리스 모드: 4전략 탭 ──
 
-  Widget _buildServerlessView() {
-    final historyAsync = ref.watch(historyScreeningProvider);
+  Widget _buildServerlessView(BuildContext context, WidgetRef ref) {
+    final filteredAsync = ref.watch(filteredScreeningProvider);
 
     return Scaffold(
       body: Column(
         children: [
-          _buildDateSelector(),
-          _buildStrategySelector(),
-          _buildMarketFilter(),
+          _buildDateSelector(context, ref),
+          _buildStrategySelector(context, ref),
+          _buildMarketFilter(context, ref),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async {
@@ -47,12 +35,10 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
                 ref.invalidate(historyScreeningProvider);
                 ref.invalidate(historyDatesProvider);
               },
-              child: historyAsync.when(
-                data: (data) {
-                  if (data == null) return _buildEmpty();
-                  final run = data.toScreeningRun(_selected);
-                  final sr = data.strategies[_selected];
-                  return _buildResultList(_filterRun(run), sr);
+              child: filteredAsync.when(
+                data: (result) {
+                  if (result == null) return _buildEmpty();
+                  return _buildResultList(result.run, result.sr, result.selected);
                 },
                 loading: () =>
                     const Center(child: CircularProgressIndicator()),
@@ -67,16 +53,21 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
 
   // ── 날짜 선택 바 ──
 
-  Widget _buildDateSelector() {
+  Widget _buildDateSelector(BuildContext context, WidgetRef ref) {
     final datesAsync = ref.watch(historyDatesProvider);
     final selectedDate = ref.watch(selectedHistoryDateProvider);
 
     return datesAsync.when(
       data: (dates) {
         if (dates.isEmpty) return const SizedBox.shrink();
-        // null = 최신(오늘)
-        final effectiveDate = selectedDate ?? dates.first;
-        final idx = dates.indexOf(effectiveDate);
+        // 스크리닝 페이지는 최근 5일만 표시 (히스토리는 30일 저장되지만 UI는 5일)
+        final displayDates = dates.take(5).toList();
+        // null = 최신(오늘) / 5일 범위 밖 날짜 선택 시 최신으로 fallback
+        final effectiveDate =
+            (selectedDate != null && displayDates.contains(selectedDate))
+                ? selectedDate!
+                : displayDates.first;
+        final idx = displayDates.indexOf(effectiveDate);
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -89,10 +80,10 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
                 iconSize: 20,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
-                onPressed: idx < dates.length - 1
+                onPressed: idx < displayDates.length - 1
                     ? () => ref
                         .read(selectedHistoryDateProvider.notifier)
-                        .state = dates[idx + 1]
+                        .state = displayDates[idx + 1]
                     : null,
               ),
               const SizedBox(width: 4),
@@ -100,8 +91,8 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
                 value: effectiveDate,
                 underline: const SizedBox.shrink(),
                 isDense: true,
-                items: dates.map((d) {
-                  final isLatest = d == dates.first;
+                items: displayDates.map((d) {
+                  final isLatest = d == displayDates.first;
                   return DropdownMenuItem(
                     value: d,
                     child: Text(
@@ -123,7 +114,7 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
                 onPressed: idx > 0
                     ? () => ref
                         .read(selectedHistoryDateProvider.notifier)
-                        .state = dates[idx - 1]
+                        .state = displayDates[idx - 1]
                     : null,
               ),
             ],
@@ -137,7 +128,7 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
 
   // ── 풀스택 모드: 기존 화면 ──
 
-  Widget _buildFullstackView() {
+  Widget _buildFullstackView(BuildContext context, WidgetRef ref) {
     final screeningAsync = ref.watch(screeningProvider);
 
     return Scaffold(
@@ -148,7 +139,7 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
         child: screeningAsync.when(
           data: (run) {
             if (run == null || run.results.isEmpty) return _buildEmpty();
-            return _buildResultList(run, null);
+            return _buildResultList(run, null, StrategyType.balanced);
           },
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('오류: $e')),
@@ -169,14 +160,15 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
 
   // ── 전략 선택 바 ──
 
-  Widget _buildStrategySelector() {
+  Widget _buildStrategySelector(BuildContext context, WidgetRef ref) {
+    final selected = ref.watch(selectedStrategyProvider);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: StrategyType.values.map((st) {
-            final isSelected = st == _selected;
+            final isSelected = st == selected;
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: ChoiceChip(
@@ -197,11 +189,11 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
                   ],
                 ),
                 selected: isSelected,
-                onSelected: (_) => setState(() => _selected = st),
+                onSelected: (_) =>
+                    ref.read(selectedStrategyProvider.notifier).state = st,
                 selectedColor: _chipColor(st),
                 labelStyle: TextStyle(
-                    color:
-                        isSelected ? Colors.white : null),
+                    color: isSelected ? Colors.white : null),
               ),
             );
           }).toList(),
@@ -210,16 +202,17 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
     );
   }
 
-  Widget _buildMarketFilter() {
+  Widget _buildMarketFilter(BuildContext context, WidgetRef ref) {
+    final marketFilter = ref.watch(selectedMarketFilterProvider);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
-        children: _MarketFilter.values.map((f) {
-          final isSelected = f == _marketFilter;
+        children: MarketFilter.values.map((f) {
+          final isSelected = f == marketFilter;
           final label = switch (f) {
-            _MarketFilter.all => '전체',
-            _MarketFilter.kr => '🇰🇷 한국',
-            _MarketFilter.us => '🇺🇸 미국',
+            MarketFilter.all => '전체',
+            MarketFilter.kr => '🇰🇷 한국',
+            MarketFilter.us => '🇺🇸 미국',
           };
           return Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -227,51 +220,17 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
               label: Text(label,
                   style: TextStyle(
                       fontSize: 12,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal)),
               selected: isSelected,
-              onSelected: (_) => setState(() => _marketFilter = f),
+              onSelected: (_) =>
+                  ref.read(selectedMarketFilterProvider.notifier).state = f,
               selectedColor: Colors.teal.shade600,
               labelStyle: TextStyle(color: isSelected ? Colors.white : null),
             ),
           );
         }).toList(),
       ),
-    );
-  }
-
-  ScreeningRun _filterRun(ScreeningRun run) {
-    if (_marketFilter == _MarketFilter.all) return run;
-    final marketCode = _marketFilter == _MarketFilter.kr ? 'KR' : 'US';
-    final filtered = run.results
-        .where((r) => r.market == marketCode)
-        .toList();
-    final reranked = filtered.asMap().entries.map((e) {
-      final r = e.value;
-      return ScreeningResult(
-        rank: e.key + 1,
-        ticker: r.ticker,
-        market: r.market,
-        name: r.name,
-        sector: r.sector,
-        score: r.score,
-        weightPct: r.weightPct,
-        price: r.price,
-        adx: r.adx,
-        rsi: r.rsi,
-        ret3m: r.ret3m,
-        stopPrice: r.stopPrice,
-        stopDistPct: r.stopDistPct,
-        atr: r.atr,
-      );
-    }).toList();
-    return ScreeningRun(
-      runId: run.runId,
-      runDate: run.runDate,
-      marketStatus: run.marketStatus,
-      btcSignal: run.btcSignal,
-      totalScreened: run.totalScreened,
-      totalPassed: run.totalPassed,
-      results: reranked,
     );
   }
 
@@ -290,11 +249,11 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
 
   // ── 결과 리스트 ──
 
-  Widget _buildResultList(ScreeningRun run, StrategyResult? sr) {
+  Widget _buildResultList(
+      ScreeningRun run, StrategyResult? sr, StrategyType selected) {
     if (run.results.isEmpty) return _buildEmpty();
 
     return ListView(
-      key: ValueKey(_selected.key),
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -315,10 +274,10 @@ class _ScreeningScreenState extends ConsumerState<ScreeningScreen> {
             child: Row(
               children: [
                 _infoChip('ATR ${sr.atrMult}',
-                    color: _chipColor(_selected)),
+                    color: _chipColor(selected)),
                 const SizedBox(width: 8),
                 _infoChip(sr.rebalFreq,
-                    color: _chipColor(_selected)),
+                    color: _chipColor(selected)),
                 if (sr.currentRegime != null) ...[
                   const SizedBox(width: 8),
                   _infoChip('국면: ${sr.currentRegime}',

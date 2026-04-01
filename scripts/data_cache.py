@@ -28,7 +28,9 @@ import warnings
 from datetime import date, datetime
 from pathlib import Path
 
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings("ignore", message=".*yfinance.*")
 
 import pandas as pd
 import requests
