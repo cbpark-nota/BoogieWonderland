@@ -71,6 +71,7 @@ python scripts/monitor/monitor.py
 # 백테스트
 python scripts/backtest/backtest_rebal_freq.py
 python scripts/backtest/backtest_atr_tuning.py
+python scripts/backtest/backtest_short_squeeze.py  # 숏스퀴즈: 대형주 vs 소형주 vs 전체
 ```
 
 ## 기술 스택
