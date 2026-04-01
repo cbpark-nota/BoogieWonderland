@@ -295,8 +295,8 @@ void main() {
     });
 
     // 입력: exchange_rate 없는 JSON
-    // 출력: usdkrw 기본값 1380.0
-    test('exchange_rate 없을 때 usdkrw 기본값 1380.0이다', () {
+    // 출력: usdkrw null (환율 정보 없음으로 처리, 커밋 0f9578d에서 기본값 제거)
+    test('exchange_rate 없을 때 usdkrw는 null이다', () {
       final json = {
         'updated_at': '',
         'total_invested': 0.0,
@@ -307,7 +307,7 @@ void main() {
 
       final portfolio = PortfolioData.fromJson(json);
 
-      expect(portfolio.usdkrw, 1380.0);
+      expect(portfolio.usdkrw, isNull);
     });
 
     // 입력: total_invested_krw 없지만 total_invested 있는 JSON (하위 호환)

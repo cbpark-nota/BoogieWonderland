@@ -1,7 +1,7 @@
 """
 52주 신고가 돌파 전략 백테스트
 ══════════════════════════════════════════════════════════════
-전략: 52주 신고가 돌파 + 거래량 동반 + 필터
+전략: 52주 신고가 돌파 + 거래량 동반 + 필터 + 첫 돌파만 (시나리오 B 최적화)
 
 진입 조건:
   - 현재가 >= 52주 고점 × HIGH_52W_THRESHOLD (0.98) → 52주 신고가 근접/돌파
@@ -9,6 +9,7 @@
   - 5일 내 급등 < SURGE_EXCLUDE (10%) → 급등 제외 (미리 올라간 종목 배제)
   - ADX >= ADX_MIN (20) → 추세 강도 확인
   - RSI <= RSI_MAX (80) → 과매수 제외
+  - 최근 FIRST_BREAKOUT_LOOKBACK(20)일 내 52주 신고가 미경험 → 첫 돌파만 진입
 
 청산 조건:
   - ATR 트레일링 스톱: 최고가 - ATR × ATR_MULT (2.0)
@@ -18,6 +19,10 @@
   - 동시 최대 MAX_POSITIONS (10) 종목
   - 동일 비중 (1/MAX_POSITIONS)
   - 수수료: COMMISSION (0.2%)
+
+파라미터 튜닝 결과 (시나리오 A~G 비교, 2015~2026):
+  최적: 시나리오 B (첫 돌파만) — CAGR +8.4%, MDD -30.7%, 샤프 0.43
+  SPY 기준: CAGR +12.8%, MDD -33.7%  ← MDD 기준 충족
 
 유니버스: S&P 500 + Nasdaq 100 + KOSPI 200 + KOSDAQ 150 (동적 수집)
 기간    : 2015-01-01 ~ 현재
@@ -47,15 +52,18 @@ RESULTS_DIR.mkdir(exist_ok=True)
 # ══════════════════════════════════════════════════════════════
 # 전략 파라미터 (상수)
 # ══════════════════════════════════════════════════════════════
-HIGH_52W_THRESHOLD = 0.98   # 52주 고점의 98% 이상이면 신고가 근접
-VOLUME_SPIKE       = 1.5    # 20일 평균 거래량의 1.5배 이상
-SURGE_EXCLUDE      = 0.10   # 5일 내 10% 급등 종목 제외
-ADX_MIN            = 20     # ADX 최소값
-RSI_MAX            = 80     # RSI 최대값
-ATR_MULT           = 2.0    # ATR 트레일링 스톱 승수
-MAX_HOLD_DAYS      = 40     # 최대 보유기간 (영업일)
-MAX_POSITIONS      = 10     # 최대 동시 보유 종목 수
-COMMISSION         = 0.002  # 편도 수수료 0.2%
+HIGH_52W_THRESHOLD      = 0.98   # 52주 고점의 98% 이상이면 신고가 근접
+VOLUME_SPIKE            = 1.5    # 20일 평균 거래량의 1.5배 이상
+SURGE_EXCLUDE           = 0.10   # 5일 내 10% 급등 종목 제외
+ADX_MIN                 = 20     # ADX 최소값
+RSI_MAX                 = 80     # RSI 최대값
+ATR_MULT                = 2.0    # ATR 트레일링 스톱 승수
+MAX_HOLD_DAYS           = 40     # 최대 보유기간 (영업일)
+MAX_POSITIONS           = 10     # 최대 동시 보유 종목 수
+COMMISSION              = 0.002  # 편도 수수료 0.2%
+# 튜닝 결과 최적 파라미터 (시나리오 B)
+FIRST_BREAKOUT_ONLY     = True   # 최근 N일 내 첫 돌파만 진입 (재돌파 제외)
+FIRST_BREAKOUT_LOOKBACK = 20     # 첫 돌파 확인 윈도우 (영업일)
 
 START = "2015-01-01"
 END   = datetime.today().strftime("%Y-%m-%d")
@@ -100,6 +108,9 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     # 5일 수익률 (급등 확인용)
     df["Ret5D"] = close.pct_change(5)
+
+    # 52주 신고가 터치 플래그 (첫 돌파 필터용)
+    df["Is52WHigh"] = (close >= df["High52W"] * HIGH_52W_THRESHOLD).astype(int)
 
     return df
 
@@ -226,8 +237,16 @@ def run_backtest(all_data: dict) -> tuple[list, list, list]:
                 if today not in df.index:
                     continue
                 row = df.loc[today]
-                if is_entry_signal(row):
-                    candidates.append((ticker, float(row["Close"]), float(row.get("ADX", 0) or 0)))
+                if not is_entry_signal(row):
+                    continue
+                # 첫 돌파 필터: 최근 N일 내 이미 52주 신고가였던 종목 제외
+                if FIRST_BREAKOUT_ONLY and "Is52WHigh" in df.columns:
+                    idx_pos = df.index.get_loc(today)
+                    lb_start = max(0, idx_pos - FIRST_BREAKOUT_LOOKBACK)
+                    recent_highs = df["Is52WHigh"].iloc[lb_start:idx_pos].sum()
+                    if recent_highs > 0:
+                        continue
+                candidates.append((ticker, float(row["Close"]), float(row.get("ADX", 0) or 0)))
 
             # ADX 높은 순 정렬 → 상위 슬롯만 진입
             candidates.sort(key=lambda x: x[2], reverse=True)
@@ -391,15 +410,16 @@ if __name__ == "__main__":
     print(f"  유니버스   : 풀 유니버스 (S&P500 + NASDAQ-100 + KOSPI200 + KOSDAQ150)")
     print("=" * 70)
     print()
-    print("  [전략 파라미터]")
-    print(f"  HIGH_52W_THRESHOLD = {HIGH_52W_THRESHOLD}  (52주 고점의 {HIGH_52W_THRESHOLD*100:.0f}% 이상)")
-    print(f"  VOLUME_SPIKE       = {VOLUME_SPIKE}   (20일 평균 거래량의 {VOLUME_SPIKE}배)")
-    print(f"  SURGE_EXCLUDE      = {SURGE_EXCLUDE}  (5일 내 {SURGE_EXCLUDE*100:.0f}% 급등 제외)")
-    print(f"  ADX_MIN            = {ADX_MIN}")
-    print(f"  RSI_MAX            = {RSI_MAX}")
-    print(f"  ATR_MULT           = {ATR_MULT}   (트레일링 스톱)")
-    print(f"  MAX_HOLD_DAYS      = {MAX_HOLD_DAYS}  (최대 보유기간)")
-    print(f"  MAX_POSITIONS      = {MAX_POSITIONS}  (최대 동시 보유)")
+    print("  [전략 파라미터] — 시나리오 B 최적화 (튜닝 A~G 중 CAGR 최고·MDD 기준 충족)")
+    print(f"  HIGH_52W_THRESHOLD      = {HIGH_52W_THRESHOLD}  (52주 고점의 {HIGH_52W_THRESHOLD*100:.0f}% 이상)")
+    print(f"  VOLUME_SPIKE            = {VOLUME_SPIKE}   (20일 평균 거래량의 {VOLUME_SPIKE}배)")
+    print(f"  SURGE_EXCLUDE           = {SURGE_EXCLUDE}  (5일 내 {SURGE_EXCLUDE*100:.0f}% 급등 제외)")
+    print(f"  ADX_MIN                 = {ADX_MIN}")
+    print(f"  RSI_MAX                 = {RSI_MAX}")
+    print(f"  ATR_MULT                = {ATR_MULT}   (트레일링 스톱)")
+    print(f"  MAX_HOLD_DAYS           = {MAX_HOLD_DAYS}  (최대 보유기간)")
+    print(f"  MAX_POSITIONS           = {MAX_POSITIONS}  (최대 동시 보유)")
+    print(f"  FIRST_BREAKOUT_ONLY     = {FIRST_BREAKOUT_ONLY}  (최근 {FIRST_BREAKOUT_LOOKBACK}일 내 첫 돌파만)")
     print()
 
     # ── [1] 데이터 로드 ──────────────────────────────────────
