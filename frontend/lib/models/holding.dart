@@ -20,8 +20,8 @@ class Holding {
       id: json['id'],
       ticker: json['ticker'],
       entryPrice: (json['entry_price'] as num).toDouble(),
-      entryDate: json['entry_date'],
-      peakPrice: (json['peak_price'] as num).toDouble(),
+      entryDate: json['entry_date'] ?? '',
+      peakPrice: (json['peak_price'] as num? ?? json['current_price'] as num? ?? json['entry_price'] as num).toDouble(),
       isActive: json['is_active'] ?? true,
     );
   }

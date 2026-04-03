@@ -137,6 +137,17 @@ def update_portfolio(item_id: int, data: PortfolioUpdate, db: Session = Depends(
     return item
 
 
+@router.delete("/ticker/{ticker}", status_code=204)
+def delete_portfolio_by_ticker(ticker: str, db: Session = Depends(get_db)):
+    """티커로 종목 삭제."""
+    stmt = select(Portfolio).where(Portfolio.ticker == ticker)
+    item = db.execute(stmt).scalar_one_or_none()
+    if not item:
+        raise HTTPException(404, f"ticker={ticker} 종목 없음")
+    db.delete(item)
+    db.commit()
+
+
 @router.delete("/{item_id}", status_code=204)
 def delete_portfolio(item_id: int, db: Session = Depends(get_db)):
     """종목 삭제."""
@@ -182,3 +193,26 @@ def refresh_portfolio(db: Session = Depends(get_db)):
     tickers = list({i.ticker for i in items})
     prices = _fetch_prices(tickers)
     return [_to_out(i, prices.get(i.ticker)) for i in items]
+
+
+@router.post("/check-stops")
+def check_stops(db: Session = Depends(get_db)) -> dict:
+    """스톱로스 체크: 현재가가 stop_loss 이하이면 STOP_HIT 이벤트 반환."""
+    items = db.execute(select(Portfolio).order_by(Portfolio.id)).scalars().all()
+    tickers = list({i.ticker for i in items})
+    prices = _fetch_prices(tickers)
+    results = []
+    for item in items:
+        cp = prices.get(item.ticker)
+        if cp is None:
+            continue
+        stop = item.stop_loss if item.stop_loss else item.entry_price * 0.85
+        margin = (cp - stop) / stop * 100
+        results.append({
+            "ticker": item.ticker,
+            "current_price": round(cp, 4),
+            "stop_price": round(stop, 4),
+            "margin_pct": round(margin, 2),
+            "event_type": "STOP_HIT" if cp <= stop else None,
+        })
+    return {"results": results}

@@ -34,20 +34,21 @@ class ApiClient {
 
   // Portfolio
   Future<List<dynamic>> getHoldings() async {
-    final res = await dio.get('${ApiConfig.portfolio}/holdings');
+    final res = await dio.get(ApiConfig.portfolio);
     return res.data;
   }
 
   Future<Map<String, dynamic>> addHolding(String ticker, double entryPrice) async {
-    final res = await dio.post('${ApiConfig.portfolio}/holdings', data: {
+    final res = await dio.post(ApiConfig.portfolio, data: {
       'ticker': ticker,
       'entry_price': entryPrice,
+      'quantity': 1,
     });
     return res.data;
   }
 
   Future<void> removeHolding(String ticker) async {
-    await dio.delete('${ApiConfig.portfolio}/holdings/$ticker');
+    await dio.delete('${ApiConfig.portfolio}/ticker/$ticker');
   }
 
   Future<Map<String, dynamic>> checkStops() async {

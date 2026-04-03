@@ -7,13 +7,16 @@ PostgreSQL 없이 SQLite만으로 스크리닝 결과 API를 제공한다.
     uvicorn backend.api.main:app --reload --port 8001
 """
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.sql import text
 
 from backend.api.portfolio import router as portfolio_router
 from backend.api.screening import router as screening_router
-from backend.db.database import init_db
+from backend.db.database import SessionLocal, init_db
 
 
 @asynccontextmanager
@@ -43,3 +46,21 @@ app.include_router(portfolio_router)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/health")
+def api_health():
+    """DB 연결 상태 포함 헬스체크."""
+    db_status = "disconnected"
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        db_status = "connected"
+    except OperationalError:
+        pass
+    return {
+        "status": "ok",
+        "db": db_status,
+        "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
