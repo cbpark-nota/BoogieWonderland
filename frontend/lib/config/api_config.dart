@@ -1,7 +1,7 @@
 class ApiConfig {
   static const String baseUrl = String.fromEnvironment(
     'API_URL',
-    defaultValue: 'http://localhost:8001',
+    defaultValue: 'http://localhost:8002',
   );
 
   static const String screening = '/api/screening';
