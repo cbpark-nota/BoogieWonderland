@@ -195,22 +195,49 @@ class StrategyScreeningData {
   });
 
   factory StrategyScreeningData.fromJson(Map<String, dynamic> json) {
-    final strategiesJson = json['strategies'] as Map<String, dynamic>;
     final ms = json['market_status'] != null
         ? MarketStatus.fromJson(json['market_status'])
         : null;
 
     final strategies = <StrategyType, StrategyResult>{};
-    for (final st in StrategyType.values) {
-      final sJson = strategiesJson[st.key];
-      if (sJson != null) {
-        strategies[st] = StrategyResult.fromJson(sJson);
+
+    if (json['strategies'] is Map) {
+      // 서버리스 모드: {aggressive: {...}, balanced: {...}, ...} 구조
+      final strategiesJson = json['strategies'] as Map<String, dynamic>;
+      for (final st in StrategyType.values) {
+        final sJson = strategiesJson[st.key];
+        if (sJson != null) {
+          strategies[st] = StrategyResult.fromJson(sJson);
+        }
+      }
+    } else if (json['results'] is List) {
+      // 풀스택 백엔드: flat results 배열 → 모든 전략에 동일 결과 적용
+      final totalScreened = (json['total_screened'] as num?)?.toInt() ?? 0;
+      final totalPassed = (json['total_passed'] as num?)?.toInt() ?? 0;
+      final results = (json['results'] as List)
+          .map((r) => ScreeningResult.fromJson(r as Map<String, dynamic>))
+          .toList();
+      const atrMults = {
+        StrategyType.aggressive: 1.5,
+        StrategyType.balanced: 2.0,
+        StrategyType.conservative: 2.5,
+        StrategyType.adaptive: 2.0,
+      };
+      for (final st in StrategyType.values) {
+        strategies[st] = StrategyResult(
+          label: st.label,
+          atrMult: atrMults[st]!,
+          rebalFreq: st.description,
+          totalScreened: totalScreened,
+          totalPassed: totalPassed,
+          results: results,
+        );
       }
     }
 
     return StrategyScreeningData(
-      runId: json['run_id'],
-      runDate: json['run_date'],
+      runId: json['run_id'] as int,
+      runDate: json['run_date'].toString(),
       marketStatus: ms,
       strategies: strategies,
     );
