@@ -17,8 +17,11 @@
 import warnings
 warnings.filterwarnings("ignore")
 
+import logging
 import sys
 import numpy as np
+
+logger = logging.getLogger(__name__)
 import pandas as pd
 import pandas_ta as ta
 import matplotlib
@@ -405,24 +408,38 @@ def calc_spy_nav(spy_df: pd.DataFrame) -> list:
 # ══════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    print("=" * 70)
-    print("  52주 신고가 돌파 전략 — 파라미터 튜닝 (시나리오 A~G)")
-    print(f"  기간: {START} ~ {END}")
-    print("=" * 70)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
+    args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+
+    if args.verbose:
+        print("=" * 70)
+        print("  52주 신고가 돌파 전략 — 파라미터 튜닝 (시나리오 A~G)")
+        print(f"  기간: {START} ~ {END}")
+        print("=" * 70)
 
     # ── [1] 데이터 로드 ──────────────────────────────────────
-    print("\n[1] 데이터 로드...")
+    if args.verbose:
+        print("\n[1] 데이터 로드...")
     all_data_raw, spy_df, etf_raw, universe_map = load_full_universe(START)
-    print(f"  → {len(all_data_raw)}개 종목 로드 완료")
+    if args.verbose:
+        print(f"  → {len(all_data_raw)}개 종목 로드 완료")
 
     # ── [2] 지표 계산 (1회만) ─────────────────────────────────
-    print(f"\n[2] 지표 계산 ({len(all_data_raw)}종목)...")
+    if args.verbose:
+        print(f"\n[2] 지표 계산 ({len(all_data_raw)}종목)...")
     all_data = {}
     for i, (t, df) in enumerate(all_data_raw.items()):
         if i % 100 == 0:
-            print(f"\r  진행: {i}/{len(all_data_raw)}", end="", flush=True)
+            logger.info(f"  진행: {i}/{len(all_data_raw)}")
         all_data[t] = add_indicators(df)
-    print(f"\r  완료: {len(all_data)}종목", flush=True)
+    if args.verbose:
+        print(f"  완료: {len(all_data)}종목")
 
     # SPY 벤치마크
     spy_nav = calc_spy_nav(spy_df)
@@ -431,7 +448,8 @@ if __name__ == "__main__":
     # ── [3] 시나리오별 백테스트 ───────────────────────────────
     results = []
     for cfg in SCENARIOS:
-        print(f"\n[3-{cfg.name}] {cfg.name}: {cfg.label} 실행 중...")
+        if args.verbose:
+            print(f"\n[3-{cfg.name}] {cfg.name}: {cfg.label} 실행 중...")
         nav_list, trade_log, dates = run_backtest(all_data, cfg)
         met = calc_metrics(nav_list)
         sells = [t for t in trade_log if t["action"] == "SELL"]
@@ -454,50 +472,55 @@ if __name__ == "__main__":
             "MDD기준충족": "O" if met["MDD"] >= SPY_MDD_BENCHMARK else "X",
         }
         results.append(row)
-        print(f"  완료: CAGR {met['CAGR']:+.1%} | MDD {met['MDD']:.1%} | 샤프 {met['샤프']:.2f} | 거래 {trade_count}건")
+        if args.verbose:
+            print(f"  완료: CAGR {met['CAGR']:+.1%} | MDD {met['MDD']:.1%} | 샤프 {met['샤프']:.2f} | 거래 {trade_count}건")
 
     # ── [4] 결과 비교 테이블 ──────────────────────────────────
     df_results = pd.DataFrame(results)
 
-    print("\n" + "═" * 100)
-    print("  시나리오별 성과 비교")
-    print("═" * 100)
-    print(f"  {'시나리오':<5} {'설명':<28} {'CAGR':>8} {'MDD':>8} {'샤프':>7} {'승률':>7} "
-          f"{'거래건':>7} {'첫돌파':>6} {'눌림목':>6} {'MDD기준':>7}")
-    print("  " + "─" * 95)
-    for _, r in df_results.iterrows():
-        marker = " ◀ 최적후보" if r["MDD기준충족"] == "O" else ""
-        print(f"  {r['시나리오']:<5} {r['설명']:<28} {r['CAGR']:>+8.1%} {r['MDD']:>+8.1%} "
-              f"{r['샤프']:>7.2f} {r['승률(NAV)']:>7.1%} {r['거래건수']:>7} "
-              f"{r['첫돌파필터']:>6} {r['눌림목진입']:>6} {r['MDD기준충족']:>7}{marker}")
+    if args.verbose:
+        print("\n" + "═" * 100)
+        print("  시나리오별 성과 비교")
+        print("═" * 100)
+        print(f"  {'시나리오':<5} {'설명':<28} {'CAGR':>8} {'MDD':>8} {'샤프':>7} {'승률':>7} "
+              f"{'거래건':>7} {'첫돌파':>6} {'눌림목':>6} {'MDD기준':>7}")
+        print("  " + "─" * 95)
+        for _, r in df_results.iterrows():
+            marker = " ◀ 최적후보" if r["MDD기준충족"] == "O" else ""
+            print(f"  {r['시나리오']:<5} {r['설명']:<28} {r['CAGR']:>+8.1%} {r['MDD']:>+8.1%} "
+                  f"{r['샤프']:>7.2f} {r['승률(NAV)']:>7.1%} {r['거래건수']:>7} "
+                  f"{r['첫돌파필터']:>6} {r['눌림목진입']:>6} {r['MDD기준충족']:>7}{marker}")
 
-    # SPY 벤치마크 출력
-    print("  " + "─" * 95)
-    print(f"  {'SPY':<5} {'Buy&Hold':<28} {spy_met['CAGR']:>+8.1%} {spy_met['MDD']:>+8.1%} "
-          f"{spy_met['샤프']:>7.2f} {spy_met['승률']:>7.1%}")
+        # SPY 벤치마크 출력
+        print("  " + "─" * 95)
+        print(f"  {'SPY':<5} {'Buy&Hold':<28} {spy_met['CAGR']:>+8.1%} {spy_met['MDD']:>+8.1%} "
+              f"{spy_met['샤프']:>7.2f} {spy_met['승률']:>7.1%}")
 
     # ── [5] 최적 시나리오 선정 ────────────────────────────────
     # 기준: MDD >= SPY_MDD_BENCHMARK (-33.7%) 이면서 CAGR 최고
     candidates_df = df_results[df_results["MDD기준충족"] == "O"].copy()
     if not candidates_df.empty:
         best = candidates_df.loc[candidates_df["CAGR"].idxmax()]
-        print(f"\n  ★ 최적 시나리오: {best['시나리오']} ({best['설명']})")
-        print(f"    CAGR  : {best['CAGR']:+.1%}")
-        print(f"    MDD   : {best['MDD']:.1%}")
-        print(f"    샤프   : {best['샤프']:.2f}")
-        print(f"    파라미터: {best['파라미터']}")
+        if args.verbose:
+            print(f"\n  ★ 최적 시나리오: {best['시나리오']} ({best['설명']})")
+            print(f"    CAGR  : {best['CAGR']:+.1%}")
+            print(f"    MDD   : {best['MDD']:.1%}")
+            print(f"    샤프   : {best['샤프']:.2f}")
+            print(f"    파라미터: {best['파라미터']}")
         best_name = best["시나리오"]
     else:
         # MDD 기준 미충족 시 MDD가 가장 낮은 것 선택
         best = df_results.loc[df_results["MDD"].idxmax()]
-        print(f"\n  ※ MDD 기준({SPY_MDD_BENCHMARK:.1%}) 충족 시나리오 없음 — MDD 최소 선택")
-        print(f"  ★ 최적 시나리오: {best['시나리오']} ({best['설명']})")
+        if args.verbose:
+            print(f"\n  ※ MDD 기준({SPY_MDD_BENCHMARK:.1%}) 충족 시나리오 없음 — MDD 최소 선택")
+            print(f"  ★ 최적 시나리오: {best['시나리오']} ({best['설명']})")
         best_name = best["시나리오"]
 
     # ── [6] CSV 저장 ──────────────────────────────────────────
     csv_path = RESULTS_DIR / "backtest_52w_high_tuning.csv"
     df_results.to_csv(csv_path, index=False, encoding="utf-8-sig")
-    print(f"\n  결과 CSV: {csv_path}")
+    if args.verbose:
+        print(f"\n  결과 CSV: {csv_path}")
 
     # ── [7] 비교 차트 ─────────────────────────────────────────
     # 시나리오별 CAGR vs MDD 산점도
@@ -545,8 +568,10 @@ if __name__ == "__main__":
     chart_path = RESULTS_DIR / "backtest_52w_high_tuning.png"
     plt.tight_layout()
     plt.savefig(chart_path, dpi=150, bbox_inches="tight")
-    print(f"  비교 차트: {chart_path}")
+    if args.verbose:
+        print(f"  비교 차트: {chart_path}")
 
-    print("\n" + "=" * 70)
-    print("  튜닝 완료")
-    print("=" * 70)
+    if args.verbose:
+        print("\n" + "=" * 70)
+        print("  튜닝 완료")
+        print("=" * 70)

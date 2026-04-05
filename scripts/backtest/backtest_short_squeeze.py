@@ -25,8 +25,11 @@
 import warnings
 warnings.filterwarnings("ignore")
 
+import logging
 import sys
 import numpy as np
+
+logger = logging.getLogger(__name__)
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
@@ -295,11 +298,11 @@ def calc_metrics(trades: list[dict], label: str) -> dict:
 
 
 def print_metrics(m: dict):
-    print(f"  {'─'*65}")
-    print(f"  {m['label']}")
-    print(f"  거래횟수 {m['trade_cnt']:>6}   승률     {m['win_rate']:>7.1%}")
-    print(f"  CAGR     {m['CAGR']:>+7.1%}   MDD      {m['MDD']:>+7.1%}")
-    print(f"  Sharpe   {m['Sharpe']:>7.2f}   손익비   {m['pnl_ratio']:>7.2f}")
+    logger.info(f"  {'─'*65}")
+    logger.info(f"  {m['label']}")
+    logger.info(f"  거래횟수 {m['trade_cnt']:>6}   승률     {m['win_rate']:>7.1%}")
+    logger.info(f"  CAGR     {m['CAGR']:>+7.1%}   MDD      {m['MDD']:>+7.1%}")
+    logger.info(f"  Sharpe   {m['Sharpe']:>7.2f}   손익비   {m['pnl_ratio']:>7.2f}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -347,7 +350,7 @@ def plot_results(metrics_list: list[dict]):
     path = RESULTS_DIR / "short_squeeze_universe_comparison.png"
     plt.tight_layout()
     plt.savefig(path, dpi=150, bbox_inches="tight")
-    print(f"\n  차트 저장: {path}")
+    logger.info(f"\n  차트 저장: {path}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -378,11 +381,11 @@ def load_tickers_data(tickers: list[str], label: str) -> dict:
 
     missing = [t for t in tickers if t not in cached_data]
     if missing:
-        print(f"  {label}: 캐시 미스 {len(missing)}개 → 다운로드 중...")
+        logger.info(f"  {label}: 캐시 미스 {len(missing)}개 → 다운로드 중...")
         new_data = _download_batch(missing, START, END, batch_size=50, label=label)
         cached_data.update(new_data)
     else:
-        print(f"  {label}: {len(cached_data)}개 캐시에서 로드 완료")
+        logger.info(f"  {label}: {len(cached_data)}개 캐시에서 로드 완료")
 
     return {t: v for t, v in cached_data.items() if t in tickers}
 
@@ -391,55 +394,72 @@ def load_tickers_data(tickers: list[str], label: str) -> dict:
 # MAIN
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    print("=" * 70)
-    print("  숏스퀴즈 스크리너 백테스트 — 대형주 vs 소형주 vs 전체")
-    print(f"  기간     : {START} ~ {END}")
-    print(f"  수수료   : 편도 {COMMISSION*100:.1f}% (왕복 {COMMISSION*2*100:.1f}%)")
-    print(f"  파라미터 : 거래량 {VOL_MULT:.0f}x, 하락 {DROP_THRESH*100:.0f}%, "
-          f"반등 {BOUNCE_THRESH*100:.1f}%, ATR진입 {ATR_ENTRY_MULT:.1f}x, "
-          f"스톱 ATR×{ATR_STOP_MULT:.1f}, 보유 {HOLD_DAYS}일")
-    print("=" * 70)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
+    args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+
+    if args.verbose:
+        print("=" * 70)
+        print("  숏스퀴즈 스크리너 백테스트 — 대형주 vs 소형주 vs 전체")
+        print(f"  기간     : {START} ~ {END}")
+        print(f"  수수료   : 편도 {COMMISSION*100:.1f}% (왕복 {COMMISSION*2*100:.1f}%)")
+        print(f"  파라미터 : 거래량 {VOL_MULT:.0f}x, 하락 {DROP_THRESH*100:.0f}%, "
+              f"반등 {BOUNCE_THRESH*100:.1f}%, ATR진입 {ATR_ENTRY_MULT:.1f}x, "
+              f"스톱 ATR×{ATR_STOP_MULT:.1f}, 보유 {HOLD_DAYS}일")
+        print("=" * 70)
 
     # ── [1] 유니버스 수집 ─────────────────────────────────────
-    print("\n[1] 유니버스 티커 수집...")
+    if args.verbose:
+        print("\n[1] 유니버스 티커 수집...")
     large_tickers_sp500, sp500_sec = fetch_sp500_tickers()
     large_tickers_ndx, ndx_sec     = fetch_nasdaq100_tickers()
 
     sp500_set = set(large_tickers_sp500)
     ndx_new   = [t for t in large_tickers_ndx if t not in sp500_set]
     large_tickers = large_tickers_sp500 + ndx_new
-    print(f"  대형주 유니버스: S&P500 {len(large_tickers_sp500)}개 + NASDAQ-100 신규 {len(ndx_new)}개 = {len(large_tickers)}개")
+    if args.verbose:
+        print(f"  대형주 유니버스: S&P500 {len(large_tickers_sp500)}개 + NASDAQ-100 신규 {len(ndx_new)}개 = {len(large_tickers)}개")
 
     small_tickers, sp600_sec = fetch_sp600_tickers()
     # 대형주와 중복 제거
     large_set     = set(large_tickers)
     small_unique  = [t for t in small_tickers if t not in large_set]
-    print(f"  소형주 유니버스: S&P600 {len(small_unique)}개 (대형주 중복 제거 후)")
+    if args.verbose:
+        print(f"  소형주 유니버스: S&P600 {len(small_unique)}개 (대형주 중복 제거 후)")
 
     all_tickers = large_tickers + small_unique
-    print(f"  전체 유니버스: {len(all_tickers)}개")
+    if args.verbose:
+        print(f"  전체 유니버스: {len(all_tickers)}개")
 
     # ── [2] 데이터 다운로드 ───────────────────────────────────
-    print("\n[2] OHLCV 데이터 로드...")
+    if args.verbose:
+        print("\n[2] OHLCV 데이터 로드...")
     large_data = load_tickers_data(large_tickers, "대형주")
     small_data = load_tickers_data(small_unique,  "소형주")
     all_data   = {**large_data, **small_data}
-    print(f"  대형주 {len(large_data)}개, 소형주 {len(small_data)}개, 전체 {len(all_data)}개 로드 완료")
+    if args.verbose:
+        print(f"  대형주 {len(large_data)}개, 소형주 {len(small_data)}개, 전체 {len(all_data)}개 로드 완료")
 
     # ── [3] 트레이드 추출 ─────────────────────────────────────
-    print("\n[3] 숏스퀴즈 시그널 탐지 및 트레이드 추출...")
+    if args.verbose:
+        print("\n[3] 숏스퀴즈 시그널 탐지 및 트레이드 추출...")
 
     def run_universe(data: dict, label: str) -> list[dict]:
         trades = []
         for i, (ticker, df) in enumerate(data.items()):
             if (i + 1) % 100 == 0:
-                print(f"\r  {label}: {i+1}/{len(data)} 처리 중...", end="", flush=True)
+                logger.info(f"  {label}: {i+1}/{len(data)} 처리 중...")
             try:
                 t = extract_trades(ticker, df)
                 trades.extend(t)
             except Exception:
                 pass
-        print(f"\r  {label}: {len(data)}개 처리 완료, 트레이드 {len(trades)}건    ")
+        logger.info(f"  {label}: {len(data)}개 처리 완료, 트레이드 {len(trades)}건")
         return trades
 
     large_trades = run_universe(large_data, "대형주")
@@ -447,7 +467,8 @@ if __name__ == "__main__":
     all_trades   = large_trades + small_trades
 
     # ── [4] 성과 계산 ─────────────────────────────────────────
-    print("\n[4] 성과 지표 계산...")
+    if args.verbose:
+        print("\n[4] 성과 지표 계산...")
     m_large = calc_metrics(large_trades, f"대형주 (S&P500+NDX100, {len(large_data)}종목)")
     m_small = calc_metrics(small_trades, f"소형주 (S&P600, {len(small_data)}종목)")
     m_all   = calc_metrics(all_trades,   f"전체 ({len(all_data)}종목)")
@@ -456,18 +477,19 @@ if __name__ == "__main__":
         print_metrics(m)
 
     # ── [5] 종합 비교 표 ──────────────────────────────────────
-    print("\n" + "═" * 70)
-    print("  종합 성과 비교")
-    print("═" * 70)
-    header = f"  {'유니버스':<36} {'거래수':>6} {'승률':>7} {'CAGR':>8} {'MDD':>8} {'Sharpe':>7} {'손익비':>7}"
-    print(header)
-    print("  " + "─" * 67)
-    for m in [m_large, m_small, m_all]:
-        print(
-            f"  {m['label']:<36} {m['trade_cnt']:>6} "
-            f"{m['win_rate']:>7.1%} {m['CAGR']:>+8.1%} "
-            f"{m['MDD']:>+8.1%} {m['Sharpe']:>7.2f} {m['pnl_ratio']:>7.2f}"
-        )
+    if args.verbose:
+        print("\n" + "═" * 70)
+        print("  종합 성과 비교")
+        print("═" * 70)
+        header = f"  {'유니버스':<36} {'거래수':>6} {'승률':>7} {'CAGR':>8} {'MDD':>8} {'Sharpe':>7} {'손익비':>7}"
+        print(header)
+        print("  " + "─" * 67)
+        for m in [m_large, m_small, m_all]:
+            print(
+                f"  {m['label']:<36} {m['trade_cnt']:>6} "
+                f"{m['win_rate']:>7.1%} {m['CAGR']:>+8.1%} "
+                f"{m['MDD']:>+8.1%} {m['Sharpe']:>7.2f} {m['pnl_ratio']:>7.2f}"
+            )
 
     # ── [6] CSV 저장 ──────────────────────────────────────────
     rows = [{
@@ -481,11 +503,13 @@ if __name__ == "__main__":
     } for m in [m_large, m_small, m_all]]
     csv_path = RESULTS_DIR / "short_squeeze_universe_comparison.csv"
     pd.DataFrame(rows).to_csv(csv_path, index=False, encoding="utf-8-sig")
-    print(f"\n  결과 CSV: {csv_path}")
+    if args.verbose:
+        print(f"\n  결과 CSV: {csv_path}")
 
     # ── [7] 차트 ─────────────────────────────────────────────
     plot_results([m_large, m_small, m_all])
 
-    print("\n" + "=" * 70)
-    print("  백테스트 완료")
-    print("=" * 70)
+    if args.verbose:
+        print("\n" + "=" * 70)
+        print("  백테스트 완료")
+        print("=" * 70)

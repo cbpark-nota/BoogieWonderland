@@ -8,6 +8,7 @@ KST 07:00 — 미국 종목 (S&P500)
 """
 import argparse
 import io
+import logging
 import os
 import time
 from datetime import datetime, timezone, timedelta
@@ -15,6 +16,8 @@ from datetime import datetime, timezone, timedelta
 import pandas as pd
 import requests
 import yfinance as yf
+
+logger = logging.getLogger(__name__)
 
 KST = timezone(timedelta(hours=9))
 DATA_DIR = os.environ.get("COLLECT_DATA_DIR", "/data/daily")
@@ -63,7 +66,7 @@ def collect_market_data(tickers, market_label, date_str):
 
     for i in range(0, total, batch_size):
         batch = tickers[i:i + batch_size]
-        print(f"\r  [{market_label}] {i}/{total}", end="", flush=True)
+        logger.debug("  [%s] %d/%d", market_label, i, total)
 
         try:
             # 최근 5일 데이터 받아서 마지막 행 사용 (당일 데이터 보장)
@@ -124,16 +127,16 @@ def collect_market_data(tickers, market_label, date_str):
                     "market_cap": int(market_cap) if market_cap else None,
                 })
         except Exception as e:
-            print(f"\n  배치 실패: {e}")
+            logger.warning("  배치 실패: %s", e)
 
-    print(f"\r  [{market_label}] {total}/{total} → {len(rows)}개 수집 완료")
+    logger.info("  [%s] %d/%d → %d개 수집 완료", market_label, total, total, len(rows))
     return rows
 
 
 def save_to_monthly_parquet(rows, market_label):
     """월별 parquet 파일에 append."""
     if not rows:
-        print(f"  [{market_label}] 저장할 데이터 없음")
+        logger.warning("  [%s] 저장할 데이터 없음", market_label)
         return
 
     df = pd.DataFrame(rows)
@@ -151,6 +154,7 @@ def save_to_monthly_parquet(rows, market_label):
         existing = existing[existing["date"] != date_str]
         df = pd.concat([existing, df], ignore_index=True)
 
+    logger.info("  [%s] 저장: %s (%d행)", market_label, fpath, len(df))
     df.to_parquet(fpath, index=False)
 
     # 시가총액 순위 계산 및 저장
@@ -170,52 +174,50 @@ def save_to_monthly_parquet(rows, market_label):
 
         rank_df.to_parquet(rank_path, index=False)
 
-    print(f"  [{market_label}] 저장: {fpath} ({len(df)}행)")
-
 
 # ── 메인 ──────────────────────────────────────────────────────
 
 def collect_kr():
     """한국 시장 데이터 수집 (KST 23:00 실행)."""
     now = datetime.now(KST)
-    print(f"{'='*60}")
-    print(f"  한국 시장 데이터 수집")
-    print(f"  시각: {now.strftime('%Y-%m-%d %H:%M KST')}")
-    print(f"{'='*60}")
+    logger.info("=" * 60)
+    logger.info("  한국 시장 데이터 수집")
+    logger.info("  시각: %s", now.strftime("%Y-%m-%d %H:%M KST"))
+    logger.info("=" * 60)
 
     t0 = time.time()
 
-    print("\n  종목 리스트 가져오기...")
+    # 종목 리스트 가져오기
     kospi_tickers, kosdaq_tickers = fetch_kr_tickers()
-    print(f"    KOSPI: {len(kospi_tickers)}개, KOSDAQ: {len(kosdaq_tickers)}개")
+    logger.info("    KOSPI: %d개, KOSDAQ: %d개", len(kospi_tickers), len(kosdaq_tickers))
 
-    print("\n  KOSPI 데이터 수집...")
+    # KOSPI 데이터 수집
     kospi_rows = collect_market_data(kospi_tickers, "kospi", now.strftime("%Y-%m-%d"))
     save_to_monthly_parquet(kospi_rows, "kospi")
 
-    print("\n  KOSDAQ 데이터 수집...")
+    # KOSDAQ 데이터 수집
     kosdaq_rows = collect_market_data(kosdaq_tickers, "kosdaq", now.strftime("%Y-%m-%d"))
     save_to_monthly_parquet(kosdaq_rows, "kosdaq")
 
     elapsed = time.time() - t0
-    print(f"\n  완료: {elapsed:.0f}초 ({elapsed/60:.1f}분)")
+    logger.info("  완료: %.0f초 (%.1f분)", elapsed, elapsed / 60)
 
 
 def collect_us():
     """미국 시장 데이터 수집 (KST 07:00 실행)."""
     now = datetime.now(KST)
-    print(f"{'='*60}")
-    print(f"  미국 시장 데이터 수집")
-    print(f"  시각: {now.strftime('%Y-%m-%d %H:%M KST')}")
-    print(f"{'='*60}")
+    logger.info("=" * 60)
+    logger.info("  미국 시장 데이터 수집")
+    logger.info("  시각: %s", now.strftime("%Y-%m-%d %H:%M KST"))
+    logger.info("=" * 60)
 
     t0 = time.time()
 
-    print("\n  S&P500 종목 리스트 가져오기...")
+    # S&P500 종목 리스트 가져오기
     us_tickers, sectors = fetch_sp500_tickers()
-    print(f"    {len(us_tickers)}개")
+    logger.info("    %d개", len(us_tickers))
 
-    print("\n  데이터 수집...")
+    # 데이터 수집
     us_rows = collect_market_data(us_tickers, "sp500", now.strftime("%Y-%m-%d"))
 
     # 섹터 정보 추가
@@ -225,19 +227,24 @@ def collect_us():
     save_to_monthly_parquet(us_rows, "sp500")
 
     # SPY 벤치마크
-    print("\n  SPY 벤치마크...")
     spy_rows = collect_market_data(["SPY"], "spy", now.strftime("%Y-%m-%d"))
     save_to_monthly_parquet(spy_rows, "spy")
 
     elapsed = time.time() - t0
-    print(f"\n  완료: {elapsed:.0f}초 ({elapsed/60:.1f}분)")
+    logger.info("  완료: %.0f초 (%.1f분)", elapsed, elapsed / 60)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="일별 시장 데이터 수집")
     parser.add_argument("market", choices=["kr", "us", "all"],
                         help="수집 대상 시장")
+    parser.add_argument("--verbose", action="store_true", help="진행 상황 출력")
     args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
 
     if args.market in ("kr", "all"):
         collect_kr()

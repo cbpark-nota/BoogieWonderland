@@ -23,10 +23,13 @@ yfinance에서 867종목을 매번 다운로드하지 않고, 당일 캐시를 �
 """
 import io
 import json
+import logging
 import sys
 import warnings
 from datetime import date, datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -93,10 +96,10 @@ def fetch_sp500_tickers():
             df["Symbol"].str.replace(".", "-", regex=False),
             df["GICS Sector"],
         ))
-        print(f"  S&P500 {len(tickers)}개 종목 수집 완료")
+        logger.info("  S&P500 %d개 종목 수집 완료", len(tickers))
         return tickers, sectors
     except Exception as e:
-        print(f"  S&P500 수집 실패 ({e})")
+        logger.warning("  S&P500 수집 실패 (%s)", e)
         return [], {}
 
 
@@ -124,10 +127,10 @@ def fetch_nasdaq100_tickers():
             )
             for _, row in ndx.iterrows()
         }
-        print(f"  NASDAQ-100 {len(tickers)}개 종목 수집 완료")
+        logger.info("  NASDAQ-100 %d개 종목 수집 완료", len(tickers))
         return tickers, sectors
     except Exception as e:
-        print(f"  NASDAQ-100 수집 실패 ({e})")
+        logger.warning("  NASDAQ-100 수집 실패 (%s)", e)
         return [], {}
 
 
@@ -169,10 +172,10 @@ def fetch_sp600_tickers():
             ))
         else:
             sectors = {t: "Unknown" for t in tickers}
-        print(f"  S&P600 {len(tickers)}개 종목 수집 완료")
+        logger.info("  S&P600 %d개 종목 수집 완료", len(tickers))
         return tickers, sectors
     except Exception as e:
-        print(f"  S&P600 수집 실패 ({e})")
+        logger.warning("  S&P600 수집 실패 (%s)", e)
         return [], {}
 
 
@@ -202,10 +205,10 @@ def fetch_kr_tickers(kospi_n=200, kosdaq_n=150):
         kosdaq_tickers = [f"{str(c).zfill(6)}.KQ" for c in kosdaq["종목코드"].tolist()][:kosdaq_n]
 
         all_kr = kospi_tickers + kosdaq_tickers
-        print(f"  KR KOSPI {len(kospi_tickers)}개 + KOSDAQ {len(kosdaq_tickers)}개 수집 완료")
+        logger.info("  KR KOSPI %d개 + KOSDAQ %d개 수집 완료", len(kospi_tickers), len(kosdaq_tickers))
         return all_kr
     except Exception as e:
-        print(f"  KRX 수집 실패 ({e}), 네이버 금융으로 재시도...")
+        logger.warning("  KRX 수집 실패 (%s), 네이버 금융으로 재시도...", e)
         return _fetch_kr_naver_fallback(kospi_n, kosdaq_n)
 
 
@@ -215,7 +218,7 @@ def _fetch_kr_naver_fallback(kospi_n=200, kosdaq_n=150):
     try:
         from bs4 import BeautifulSoup
     except ImportError:
-        print("  bs4 미설치, KR 종목 수집 불가")
+        logger.warning("  bs4 미설치, KR 종목 수집 불가")
         return []
 
     def _scrape(sosok, n, suffix):
@@ -245,10 +248,10 @@ def _fetch_kr_naver_fallback(kospi_n=200, kosdaq_n=150):
         kospi  = _scrape(0, kospi_n, ".KS")
         kosdaq = _scrape(1, kosdaq_n, ".KQ")
         all_kr = kospi + kosdaq
-        print(f"  KR (네이버) KOSPI {len(kospi)}개 + KOSDAQ {len(kosdaq)}개 수집 완료")
+        logger.info("  KR (네이버) KOSPI %d개 + KOSDAQ %d개 수집 완료", len(kospi), len(kosdaq))
         return all_kr
     except Exception as e:
-        print(f"  KR 종목 수집 최종 실패 ({e})")
+        logger.warning("  KR 종목 수집 최종 실패 (%s)", e)
         return []
 
 
@@ -264,7 +267,7 @@ def _download_batch(tickers, start, end, batch_size=50, label="종목"):
     for i in range(0, total, batch_size):
         batch = tickers[i:i + batch_size]
         done  = min(i + batch_size, total)
-        print(f"\r  {label} 다운로드: {done}/{total}", end="", flush=True)
+        logger.debug("  %s 다운로드: %d/%d", label, done, total)
         try:
             raw = yf.download(
                 batch, start=start, end=end,
@@ -287,10 +290,9 @@ def _download_batch(tickers, start, end, batch_size=50, label="종목"):
                 if df is not None:
                     all_data[batch[0]] = df
         except Exception as e:
-            print(f"\n  배치 다운로드 오류 (offset={i}): {e}")
+            logger.warning("  배치 다운로드 오류 (offset=%d): %s", i, e)
 
-    print(f"\r  {label} 다운로드 완료: {len(all_data)}/{total}개", flush=True)
-    print()
+    logger.info("  %s 다운로드 완료: %d/%d개", label, len(all_data), total)
     return all_data
 
 
@@ -352,7 +354,7 @@ def _save_cache(all_data: dict, spy_df: pd.DataFrame, etf_data: dict,
     with open(CACHE_DIR / "manifest.json", "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
-    print(f"  캐시 저장 완료: {CACHE_DIR} ({len(all_data)}종목, ETF {len(etf_data)}개)")
+    logger.info("  캐시 저장 완료: %s (%d종목, ETF %d개)", CACHE_DIR, len(all_data), len(etf_data))
 
 
 def _load_cache(start: str):
@@ -365,20 +367,20 @@ def _load_cache(start: str):
         with open(manifest_path, encoding="utf-8") as f:
             manifest = json.load(f)
     except Exception as e:
-        print(f"  manifest 읽기 실패 ({e})")
+        logger.warning("  manifest 읽기 실패 (%s)", e)
         return None
 
     # 날짜 유효성 확인
     cached_date = manifest.get("downloaded_at", "")
     today = date.today().isoformat()
     if cached_date != today:
-        print(f"  캐시 만료 (저장일: {cached_date} ≠ 오늘: {today})")
+        logger.info("  캐시 만료 (저장일: %s ≠ 오늘: %s)", cached_date, today)
         return None
 
     # 시작일 일치 확인
     cached_start = manifest.get("start", "")
     if cached_start != start:
-        print(f"  캐시 시작일 불일치 (캐시: {cached_start}, 요청: {start})")
+        logger.info("  캐시 시작일 불일치 (캐시: %s, 요청: %s)", cached_start, start)
         return None
 
     # 종목 로드
@@ -398,13 +400,13 @@ def _load_cache(start: str):
     # SPY 로드
     spy_path = CACHE_DIR / "spy.parquet"
     if not spy_path.exists():
-        print("  SPY 캐시 파일 없음, 재다운로드 필요")
+        logger.warning("  SPY 캐시 파일 없음, 재다운로드 필요")
         return None
     spy_df = pd.read_parquet(spy_path)
 
     universe_map = manifest.get("universe_map", {})
 
-    print(f"  캐시 로드 완료: {len(all_data)}종목, ETF {len(etf_data)}개 (저장일: {cached_date})")
+    logger.info("  캐시 로드 완료: %d종목, ETF %d개 (저장일: %s)", len(all_data), len(etf_data), cached_date)
     return all_data, spy_df, etf_data, universe_map
 
 
@@ -450,8 +452,8 @@ def load_full_universe(start: str = "2015-01-01", force_refresh: bool = False):
             return cached
 
     # ── 유니버스 수집 ──
-    print("\n풀 유니버스 다운로드 시작...")
-    print("유니버스 수집 중...")
+    logger.info("풀 유니버스 다운로드 시작...")
+    logger.info("유니버스 수집 중...")
 
     us_tickers, us_sectors = fetch_sp500_tickers()
     ndx_tickers, ndx_sectors = fetch_nasdaq100_tickers()
@@ -460,7 +462,7 @@ def load_full_universe(start: str = "2015-01-01", force_refresh: bool = False):
     sp500_set  = set(us_tickers)
     ndx_new    = [t for t in ndx_tickers if t not in sp500_set]
     ndx_new_sec = {t: s for t, s in ndx_sectors.items() if t not in sp500_set}
-    print(f"  NASDAQ-100 신규 추가: {len(ndx_new)}개 (S&P500 중복 {len(ndx_tickers) - len(ndx_new)}개 제거)")
+    logger.info("  NASDAQ-100 신규 추가: %d개 (S&P500 중복 %d개 제거)", len(ndx_new), len(ndx_tickers) - len(ndx_new))
 
     us_tickers = us_tickers + ndx_new
     us_sectors = {**us_sectors, **ndx_new_sec}
@@ -471,7 +473,7 @@ def load_full_universe(start: str = "2015-01-01", force_refresh: bool = False):
     all_tickers  = us_tickers + kr_tickers
     universe_map = {**us_sectors, **kr_sectors}
 
-    print(f"  유니버스 합계: US {len(us_tickers)}종목 + KR {len(kr_tickers)}종목 = {len(all_tickers)}종목")
+    logger.info("  유니버스 합계: US %d종목 + KR %d종목 = %d종목", len(us_tickers), len(kr_tickers), len(all_tickers))
 
     # ── 종목 다운로드 ──
     all_data = _download_batch(all_tickers, start, end, batch_size=50, label="종목")
@@ -482,7 +484,7 @@ def load_full_universe(start: str = "2015-01-01", force_refresh: bool = False):
                                batch_size=len(etf_tickers), label="ETF")
 
     # ── SPY 다운로드 ──
-    print("  SPY 다운로드 중...", end="", flush=True)
+    logger.info("  SPY 다운로드 중...")
     spy_raw = yf.download("SPY", start=start, end=end,
                           auto_adjust=True, progress=False)
     if isinstance(spy_raw.columns, pd.MultiIndex):
@@ -490,7 +492,7 @@ def load_full_universe(start: str = "2015-01-01", force_refresh: bool = False):
     spy_df = _clean_ohlcv(spy_raw, min_rows=1)
     if spy_df is None:
         spy_df = spy_raw.copy()
-    print(f" {len(spy_df)}행")
+    logger.info("  SPY 다운로드 완료: %d행", len(spy_df))
 
     # ── 캐시 저장 ──
     _save_cache(all_data, spy_df, etf_data, universe_map, start)
@@ -512,7 +514,14 @@ if __name__ == "__main__":
                         help="데이터 시작일 (기본값: 2015-01-01)")
     parser.add_argument("--status", action="store_true",
                         help="캐시 상태만 확인")
+    parser.add_argument("--verbose", action="store_true",
+                        help="진행 상황 출력")
     args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
 
     if args.status:
         manifest_path = CACHE_DIR / "manifest.json"
@@ -532,4 +541,5 @@ if __name__ == "__main__":
             start=args.start,
             force_refresh=args.refresh,
         )
-        print(f"\n완료: {len(all_data)}종목, SPY {len(spy_df)}행, ETF {len(etf_data)}개")
+        if args.verbose:
+            print(f"\n완료: {len(all_data)}종목, SPY {len(spy_df)}행, ETF {len(etf_data)}개")

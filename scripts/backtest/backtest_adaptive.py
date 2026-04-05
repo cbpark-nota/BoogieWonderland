@@ -36,6 +36,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import json
+import logging
 import os
 import sys
 
@@ -46,6 +47,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
@@ -85,7 +88,7 @@ from core.constants import US_UNIVERSE, KR_UNIVERSE, ALL_UNIVERSE, SECTOR_ETF
 
 def load_local_data():
     if not os.path.exists(MANIFEST):
-        print(f"  ✗ {MANIFEST} 없음. 먼저 python download_data.py 를 실행하세요.")
+        logger.warning(f"  ✗ {MANIFEST} 없음. 먼저 python download_data.py 를 실행하세요.")
         sys.exit(1)
     with open(MANIFEST, "r", encoding="utf-8") as f:
         manifest = json.load(f)
@@ -730,7 +733,7 @@ def plot_results(results, spy_close, regime_df, window_label, start, end):
     plt.tight_layout()
     fname = f"backtest_adaptive_{window_label}.png"
     plt.savefig(RESULTS_DIR / fname, dpi=150, bbox_inches="tight")
-    print(f"  차트 저장: {fname}")
+    logger.info(f"  차트 저장: {fname}")
     plt.close()
 
 
@@ -743,46 +746,48 @@ def run_window(all_data, etf_data, spy_close, start, end, window_label):
     global START, END
     START, END = start, end
 
-    print(f"\n{'█'*70}")
-    print(f"  [{window_label}] {start} ~ {end}")
-    print(f"{'█'*70}")
+    logger.info(f"\n{'█'*70}")
+    logger.info(f"  [{window_label}] {start} ~ {end}")
+    logger.info(f"{'█'*70}")
 
     # 적응형 v1 (MA gap only)
-    print(f"\n  [1/6] 적응형 v1 (MA gap)")
+    logger.info(f"\n  [1/6] 적응형 v1 (MA gap)")
     nav_v1, _, regime_v1 = run_adaptive_backtest(
         all_data, etf_data, spy_close, COST_PER_SIDE,
         detect_fn=detect_regime, use_asymmetric=False)
     m_v1 = calc_metrics(nav_v1, "적응형 v1 (MA gap)")
 
     dist_v1 = regime_v1["regime"].value_counts(normalize=True)
-    print(f"    국면: ", end="")
-    for r in ["aggressive","balanced","conservative"]:
-        print(f"{PRESETS[r]['label']} {dist_v1.get(r,0):.0%}  ", end="")
-    print(f"| 전환 {int(regime_v1['regime_changed'].sum())}회")
+    regime_line_v1 = "    국면: " + "".join(
+        f"{PRESETS[r]['label']} {dist_v1.get(r,0):.0%}  "
+        for r in ["aggressive","balanced","conservative"]
+    ) + f"| 전환 {int(regime_v1['regime_changed'].sum())}회"
+    logger.info(regime_line_v1)
 
     # 적응형 v2 (3계층 + 비대칭 전환)
-    print(f"  [2/6] 적응형 v2 (3계층+비대칭)")
+    logger.info(f"  [2/6] 적응형 v2 (3계층+비대칭)")
     nav_v2, _, regime_v2 = run_adaptive_backtest(
         all_data, etf_data, spy_close, COST_PER_SIDE,
         detect_fn=detect_regime_v2, use_asymmetric=True)
     m_v2 = calc_metrics(nav_v2, "적응형 v2 (3계층)")
 
     dist_v2 = regime_v2["regime"].value_counts(normalize=True)
-    print(f"    국면: ", end="")
-    for r in ["aggressive","balanced","conservative"]:
-        print(f"{PRESETS[r]['label']} {dist_v2.get(r,0):.0%}  ", end="")
-    print(f"| 전환 {int(regime_v2['regime_changed'].sum())}회")
+    regime_line_v2 = "    국면: " + "".join(
+        f"{PRESETS[r]['label']} {dist_v2.get(r,0):.0%}  "
+        for r in ["aggressive","balanced","conservative"]
+    ) + f"| 전환 {int(regime_v2['regime_changed'].sum())}회"
+    logger.info(regime_line_v2)
 
     # 고정 전략들
-    print(f"  [3/6] 공격적 (ATR=2.0, 주간)")
+    logger.info(f"  [3/6] 공격적 (ATR=2.0, 주간)")
     nav_agg, _ = run_fixed_backtest(all_data, etf_data, "W", 2.0, COST_PER_SIDE)
     m_agg = calc_metrics(nav_agg, "공격적 (ATR=2.0 주간)")
 
-    print(f"  [4/6] 균형형 (ATR=2.5, 격주)")
+    logger.info(f"  [4/6] 균형형 (ATR=2.5, 격주)")
     nav_bal, _ = run_fixed_backtest(all_data, etf_data, "2W", 2.5, COST_PER_SIDE)
     m_bal = calc_metrics(nav_bal, "균형형 (ATR=2.5 격주)")
 
-    print(f"  [5/6] 보수적 (ATR=3.5, 월간)")
+    logger.info(f"  [5/6] 보수적 (ATR=3.5, 월간)")
     nav_con, _ = run_fixed_backtest(all_data, etf_data, "M", 3.5, COST_PER_SIDE)
     m_con = calc_metrics(nav_con, "보수적 (ATR=3.5 월간)")
 
@@ -798,18 +803,18 @@ def run_window(all_data, etf_data, spy_close, start, end, window_label):
     all_results = [m_v1, m_v2, m_agg, m_bal, m_con, m_spy]
 
     # 결과 출력
-    print(f"\n  {'전략':<25} {'CAGR':>8} {'총수익':>10} {'MDD':>8} {'샤프':>6} {'승률':>6}")
-    print("  " + "─" * 65)
+    logger.info(f"\n  {'전략':<25} {'CAGR':>8} {'총수익':>10} {'MDD':>8} {'샤프':>6} {'승률':>6}")
+    logger.info("  " + "─" * 65)
     for r in all_results:
         marker = " ★" if r is m_v2 else ""
-        print(f"  {r['label']:<25} {r['CAGR']:>+8.1%} {r['총수익']:>+9.0%}"
-              f" {r['MDD']:>+8.1%} {r['샤프']:>6.2f} {r['승률']:>6.1%}{marker}")
+        logger.info(f"  {r['label']:<25} {r['CAGR']:>+8.1%} {r['총수익']:>+9.0%}"
+                    f" {r['MDD']:>+8.1%} {r['샤프']:>6.2f} {r['승률']:>6.1%}{marker}")
 
     # v1 vs v2 비교
-    print(f"\n  [v1 vs v2]")
-    print(f"    CAGR: {m_v1['CAGR']:+.1%} → {m_v2['CAGR']:+.1%}  ({m_v2['CAGR']-m_v1['CAGR']:+.1%}p)")
-    print(f"    MDD:  {m_v1['MDD']:+.1%} → {m_v2['MDD']:+.1%}  ({'개선' if m_v2['MDD'] > m_v1['MDD'] else '악화'} {abs(m_v2['MDD']-m_v1['MDD']):.1%}p)")
-    print(f"    샤프: {m_v1['샤프']:.2f} → {m_v2['샤프']:.2f}  ({m_v2['샤프']-m_v1['샤프']:+.2f})")
+    logger.info(f"\n  [v1 vs v2]")
+    logger.info(f"    CAGR: {m_v1['CAGR']:+.1%} → {m_v2['CAGR']:+.1%}  ({m_v2['CAGR']-m_v1['CAGR']:+.1%}p)")
+    logger.info(f"    MDD:  {m_v1['MDD']:+.1%} → {m_v2['MDD']:+.1%}  ({'개선' if m_v2['MDD'] > m_v1['MDD'] else '악화'} {abs(m_v2['MDD']-m_v1['MDD']):.1%}p)")
+    logger.info(f"    샤프: {m_v1['샤프']:.2f} → {m_v2['샤프']:.2f}  ({m_v2['샤프']-m_v1['샤프']:+.2f})")
 
     # 차트 — v2 국면 타임라인 사용
     plot_results(all_results, spy_close, regime_v2, window_label, start, end)
@@ -829,6 +834,15 @@ def run_window(all_data, etf_data, spy_close, start, end, window_label):
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
+    args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+
     # ── 멀티 윈도우 정의 ──
     WINDOWS = [
         ("A_풀사이클",   "2007-01-01", "2024-12-31"),  # GFC 포함 전체
@@ -836,21 +850,24 @@ if __name__ == "__main__":
         ("C_최근변동성", "2020-01-01", "2024-12-31"),  # 코로나→금리→AI
     ]
 
-    print("=" * 70)
-    print("  멀티 윈도우 적응형 전략 백테스트")
-    print("  시장 국면별 공격/균형/보수 동적 전환")
-    print(f"  거래비용: 편도 {COST_PER_SIDE*100:.1f}%")
-    print(f"  윈도우: {len(WINDOWS)}개")
-    for label, s, e in WINDOWS:
-        print(f"    {label}: {s} ~ {e}")
-    print("=" * 70)
+    if args.verbose:
+        print("=" * 70)
+        print("  멀티 윈도우 적응형 전략 백테스트")
+        print("  시장 국면별 공격/균형/보수 동적 전환")
+        print(f"  거래비용: 편도 {COST_PER_SIDE*100:.1f}%")
+        print(f"  윈도우: {len(WINDOWS)}개")
+        for label, s, e in WINDOWS:
+            print(f"    {label}: {s} ~ {e}")
+        print("=" * 70)
 
     # ── 데이터 로드 ──
-    print("\n[데이터 로드]")
+    if args.verbose:
+        print("\n[데이터 로드]")
     all_data, etf_raw, spy_close = load_local_data()
-    print(f"  종목 {len(all_data)}개, ETF {len(etf_raw)}개, SPY ✓")
+    if args.verbose:
+        print(f"  종목 {len(all_data)}개, ETF {len(etf_raw)}개, SPY ✓")
 
-    print(f"  지표 계산 ({len(all_data)}개)...")
+        print(f"  지표 계산 ({len(all_data)}개)...")
     for t in list(all_data.keys()):
         all_data[t] = add_indicators(all_data[t])
     etf_data = {t: add_indicators(df) for t, df in etf_raw.items()}
@@ -864,18 +881,20 @@ if __name__ == "__main__":
     # ── 통합 CSV ──
     pd.DataFrame(all_rows).to_csv(RESULTS_DIR / "backtest_adaptive_multiwindow.csv",
                                    index=False, encoding="utf-8-sig")
-    print(f"\n  통합 결과 저장: backtest_adaptive_multiwindow.csv")
+    if args.verbose:
+        print(f"\n  통합 결과 저장: backtest_adaptive_multiwindow.csv")
 
     # ── 크로스 윈도우 비교 요약 ──
-    print(f"\n{'═'*70}")
-    print("  크로스 윈도우 요약 — v1 vs v2 비교")
-    print("═" * 70)
-    print(f"  {'윈도우':<15} {'v1 CAGR':>9} {'v1 MDD':>9} {'v2 CAGR':>9} {'v2 MDD':>9} {'MDD개선':>8}")
-    print("  " + "─" * 60)
-    for label, _, _ in WINDOWS:
-        v1r = [r for r in all_rows if r["윈도우"]==label and "v1" in r["전략"]]
-        v2r = [r for r in all_rows if r["윈도우"]==label and "v2" in r["전략"]]
-        if v1r and v2r:
-            print(f"  {label:<15} {v1r[0]['CAGR']:>9} {v1r[0]['MDD']:>9}"
-                  f" {v2r[0]['CAGR']:>9} {v2r[0]['MDD']:>9}")
-    print()
+    if args.verbose:
+        print(f"\n{'═'*70}")
+        print("  크로스 윈도우 요약 — v1 vs v2 비교")
+        print("═" * 70)
+        print(f"  {'윈도우':<15} {'v1 CAGR':>9} {'v1 MDD':>9} {'v2 CAGR':>9} {'v2 MDD':>9} {'MDD개선':>8}")
+        print("  " + "─" * 60)
+        for label, _, _ in WINDOWS:
+            v1r = [r for r in all_rows if r["윈도우"]==label and "v1" in r["전략"]]
+            v2r = [r for r in all_rows if r["윈도우"]==label and "v2" in r["전략"]]
+            if v1r and v2r:
+                print(f"  {label:<15} {v1r[0]['CAGR']:>9} {v1r[0]['MDD']:>9}"
+                      f" {v2r[0]['CAGR']:>9} {v2r[0]['MDD']:>9}")
+        print()

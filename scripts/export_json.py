@@ -11,6 +11,7 @@ v3 최적 파라미터 적용:
 import argparse
 import io
 import json
+import logging
 import shutil
 import sys
 from datetime import datetime
@@ -19,6 +20,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import requests
+
+logger = logging.getLogger(__name__)
 
 sys.path.insert(0, str(Path(__file__).parent / "screener"))
 sys.path.insert(0, str(Path(__file__).parent / "crypto"))
@@ -106,11 +109,11 @@ def _fetch_kr_from_naver(kospi_n: int, kosdaq_n: int) -> list[str]:
         kosdaq_tickers, kosdaq_names = _scrape_market(1, kosdaq_n, ".KQ")
         all_kr = kospi_tickers + kosdaq_tickers
         all_names = {**kospi_names, **kosdaq_names}
-        print(f"  KR (네이버 fallback) KOSPI {len(kospi_tickers)}개 + KOSDAQ {len(kosdaq_tickers)}개 수집 완료")
+        logger.info("  KR (네이버 fallback) KOSPI %d개 + KOSDAQ %d개 수집 완료", len(kospi_tickers), len(kosdaq_tickers))
         KR_NAMES.update(all_names)
         return all_kr
     except Exception as e:
-        print(f"  KR 종목 수집 최종 실패 ({e}), 기본 유니버스 사용")
+        logger.warning("  KR 종목 수집 최종 실패 (%s), 기본 유니버스 사용", e)
         fallback = list(sc.KR_UNIVERSE.keys())
         _fill_kr_names_pykrx(fallback)
         return fallback
@@ -128,9 +131,9 @@ def _fill_kr_names_pykrx(tickers: list[str]) -> None:
                 KR_NAMES[t] = name
         filled = sum(1 for t in missing if t in KR_NAMES)
         if filled:
-            print(f"  pykrx로 종목명 {filled}개 보완 완료")
+            logger.info("  pykrx로 종목명 %d개 보완 완료", filled)
     except Exception as pe:
-        print(f"  pykrx 종목명 보완 실패 ({pe})")
+        logger.warning("  pykrx 종목명 보완 실패 (%s)", pe)
 
 
 def fetch_kr_tickers(kospi_n=200, kosdaq_n=150):
@@ -169,10 +172,10 @@ def fetch_kr_tickers(kospi_n=200, kosdaq_n=150):
             KR_NAMES[ticker] = str(row[name_col])
 
         all_kr = kospi_tickers + kosdaq_tickers
-        print(f"  KR KOSPI {len(kospi_tickers)}개 + KOSDAQ {len(kosdaq_tickers)}개 수집 완료")
+        logger.info("  KR KOSPI %d개 + KOSDAQ %d개 수집 완료", len(kospi_tickers), len(kosdaq_tickers))
         return all_kr
     except Exception as e:
-        print(f"  KRX (kind.krx.co.kr) 실패 ({e}), 네이버 금융으로 재시도...")
+        logger.warning("  KRX (kind.krx.co.kr) 실패 (%s), 네이버 금융으로 재시도...", e)
         return _fetch_kr_from_naver(kospi_n, kosdaq_n)
 
 
@@ -348,7 +351,7 @@ def calculate_btc_signal() -> dict:
         }
 
     try:
-        print("BTC V10 시그널 계산 중...")
+        logger.info("BTC V10 시그널 계산 중...")
         # MA200(200봉) + 웜업(210봉) + 여유 확보 → 최소 500봉
         # 2024-01-01 이후 데이터는 약 1100봉 이상 (충분)
         df = get_btc_data_4h("2024-01-01")
@@ -382,7 +385,7 @@ def calculate_btc_signal() -> dict:
                     break
 
             reason = _infer_v10_reason(df, entry_idx) if entry_idx is not None else "포지션 보유 중"
-            print(f"  → 매수 신호 (현재가 ${last_close:,.0f}, 레짐: {regime})")
+            logger.info("  → 매수 신호 (현재가 $%s, 레짐: %s)", f"{last_close:,.0f}", regime)
             return {
                 "signal": "buy",
                 "price": round(last_close, 2),
@@ -392,7 +395,7 @@ def calculate_btc_signal() -> dict:
                 "timestamp": last_time,
             }
         else:
-            print(f"  → 관망 (현재가 ${last_close:,.0f}, 레짐: {regime})")
+            logger.info("  → 관망 (현재가 $%s, 레짐: %s)", f"{last_close:,.0f}", regime)
             return {
                 "signal": "hold",
                 "price": round(last_close, 2),
@@ -403,7 +406,7 @@ def calculate_btc_signal() -> dict:
             }
 
     except Exception as e:
-        print(f"  BTC 시그널 계산 실패: {e}")
+        logger.warning("  BTC 시그널 계산 실패: %s", e)
         return {
             "signal": "hold",
             "price": None,
@@ -421,20 +424,20 @@ def check_kospi_market() -> dict | None:
         # pre-market/장 개장 직전 시각에 마지막 행이 NaN으로 반환될 수 있으므로 dropna 적용
         close = ks["Close"].squeeze().dropna()
         if close.empty:
-            print("  KOSPI 데이터 없음")
+            logger.warning("  KOSPI 데이터 없음")
             return None
         ma20 = float(close.rolling(20).mean().iloc[-1])
         ma60 = float(close.rolling(60).mean().iloc[-1])
         price = float(close.iloc[-1])
         import math
         if any(math.isnan(v) for v in [price, ma20, ma60]):
-            print("  KOSPI 데이터 NaN — 조회 건너뜀")
+            logger.warning("  KOSPI 데이터 NaN — 조회 건너뜀")
             return None
         gap = (ma20 - ma60) / ma60 * 100
         return {"price": price, "ma20": ma20, "ma60": ma60,
                 "gap_pct": gap, "is_golden": ma20 > ma60}
     except Exception as e:
-        print(f"  KOSPI 시장 상태 조회 실패 ({e})")
+        logger.warning("  KOSPI 시장 상태 조회 실패 (%s)", e)
         return None
 
 
@@ -451,7 +454,7 @@ def fetch_market_cap_top20(
     import yfinance as yf
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    print("시총 Top 20 수집 중...")
+    logger.info("시총 Top 20 수집 중...")
 
     def _get_mc(ticker: str) -> tuple[str, float | None]:
         try:
@@ -508,7 +511,7 @@ def fetch_market_cap_top20(
     ]
 
     new_entrants = [r["ticker"] for r in results if r["is_new_entrant"]]
-    print(f"  시총 Top 20 수집 완료 ({len(results)}개), 신규 진입: {new_entrants or '없음'}")
+    logger.info("  시총 Top 20 수집 완료 (%d개), 신규 진입: %s", len(results), new_entrants or "없음")
     return {
         "updated_at": now,
         "note": "매매 전략이 아닌 시장 트렌드 모니터링 참고 도구입니다.",
@@ -528,7 +531,7 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
     now = datetime.now()
     is_history_only = screening_date is not None
     if is_history_only:
-        print(f"히스토리 모드: {screening_date} 날짜 기준 데이터 생성")
+        logger.info("히스토리 모드: %s 날짜 기준 데이터 생성", screening_date)
 
     # 시장 상태 (SPY)
     mkt = sc.check_market()
@@ -560,7 +563,7 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
         }
 
     # 동적 유니버스 수집
-    print("유니버스 수집 중...")
+    logger.info("유니버스 수집 중...")
     us_tickers, us_sectors = fetch_sp500_tickers()
     ndx_tickers, ndx_sectors = fetch_nasdaq100_tickers()
 
@@ -568,7 +571,7 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
     sp500_set = set(us_tickers)
     ndx_new = [t for t in ndx_tickers if t not in sp500_set]
     ndx_new_sectors = {t: s for t, s in ndx_sectors.items() if t not in sp500_set}
-    print(f"  NASDAQ-100 신규 추가: {len(ndx_new)}개 (S&P500 중복 {len(ndx_tickers) - len(ndx_new)}개 제거)")
+    logger.info("  NASDAQ-100 신규 추가: %d개 (S&P500 중복 %d개 제거)", len(ndx_new), len(ndx_tickers) - len(ndx_new))
 
     us_tickers = us_tickers + ndx_new
     us_sectors = {**us_sectors, **ndx_new_sectors}
@@ -582,7 +585,7 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
 
     # 데이터 다운로드 (1회)
     # screening_date가 지정된 경우 해당 날짜까지의 데이터를 다운로드
-    print("데이터 다운로드 중...")
+    logger.info("데이터 다운로드 중...")
     us_data, kr_data, etf_data = {}, {}, {}
     for i in range(0, len(us_tickers), 50):
         us_data.update(download_for_date(us_tickers[i:i + 50], screening_date))
@@ -595,7 +598,7 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
     all_data = {**us_data, **kr_data}
 
     # 지표 계산 (1회)
-    print(f"지표 계산 중 ({len(all_data)}개 종목)...")
+    logger.info("지표 계산 중 (%d개 종목)...", len(all_data))
     all_data_ind = {}
     for t, df in all_data.items():
         all_data_ind[t] = sc.calc_indicators(df)
@@ -608,7 +611,7 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
     for key, preset in STRATEGIES.items():
         atr_mult = preset["atr_mult"]
         top_n = preset["top_n"]
-        print(f"  {preset['label']} (ATR={atr_mult}, TOP={top_n}) 스크리닝 중...")
+        logger.info("  %s (ATR=%s, TOP=%s) 스크리닝 중...", preset["label"], atr_mult, top_n)
         passed = run_screening_with_atr(all_data_ind, etf_data, atr_mult)
         results = build_results(passed, etf_data, top_n)
 
@@ -674,21 +677,21 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
         mc_path = output_dir / "market_cap.json"
         with open(mc_path, "w", encoding="utf-8") as f:
             json.dump(mc_data, f, ensure_ascii=False, indent=2)
-        print(f"  시총 Top 20 저장: {mc_path}")
+        logger.info("  시총 Top 20 저장: %s", mc_path)
     except Exception as e:
-        print(f"  시총 Top 20 수집 실패 ({e}), 건너뜀")
+        logger.warning("  시총 Top 20 수집 실패 (%s), 건너뜀", e)
 
     # history/{date}.json 저장 및 index.json 업데이트
     save_history(output_dir, output, run_dt)
 
     date_label = screening_date or run_dt.strftime("%Y-%m-%d")
-    print(f"\n완료 ({date_label}):")
+    logger.info("완료 (%s):", date_label)
     for k in ("aggressive", "balanced", "conservative"):
         s = strategies_output[k]
-        print(f"  {s['label']}: {len(s['results'])}종목 선정 / {s['total_passed']}개 통과")
+        logger.info("  %s: %d종목 선정 / %d개 통과", s["label"], len(s["results"]), s["total_passed"])
     s = strategies_output["adaptive"]
-    print(f"  {s['label']}: {len(s['results'])}종목 선정 / {s['total_passed']}개 통과 "
-          f"(현재 국면: {STRATEGIES[adaptive_regime]['label']})")
+    logger.info("  %s: %d종목 선정 / %d개 통과 (현재 국면: %s)",
+                s["label"], len(s["results"]), s["total_passed"], STRATEGIES[adaptive_regime]["label"])
     return output
 
 
@@ -698,15 +701,15 @@ def fetch_usdkrw() -> "float | None":
         import yfinance as yf
         df = yf.download("USDKRW=X", period="5d", auto_adjust=True, progress=False)
         if df.empty:
-            print("  환율 조회 결과 없음")
+            logger.warning("  환율 조회 결과 없음")
             return None
         # yfinance 최신 버전은 단일 ticker도 multi-level column을 반환하므로 squeeze() 필요
         close = df["Close"].squeeze()
         rate = float(close.dropna().iloc[-1])
-        print(f"  USD/KRW 환율: {rate:,.2f}")
+        logger.info("  USD/KRW 환율: %s", f"{rate:,.2f}")
         return rate
     except Exception as e:
-        print(f"  환율 조회 실패 ({e})")
+        logger.warning("  환율 조회 실패 (%s)", e)
         return None
 
 
@@ -768,17 +771,17 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
     }
 
     if found is None:
-        print("  portfolio.xlsx 파일 없음 — 빈 포트폴리오 저장")
+        logger.info("  portfolio.xlsx 파일 없음 — 빈 포트폴리오 저장")
         output_dir.mkdir(parents=True, exist_ok=True)
         with open(output_dir / "portfolio.json", "w", encoding="utf-8") as f:
             json.dump(empty_output, f, ensure_ascii=False, indent=2)
         return
 
-    print(f"  포트폴리오 파일 로드: {found}")
+    logger.info("  포트폴리오 파일 로드: %s", found)
     try:
         df = pd.read_excel(found, sheet_name="Portfolio", dtype=str)
     except Exception as e:
-        print(f"  엑셀 읽기 실패 ({e}) — 빈 포트폴리오 저장")
+        logger.warning("  엑셀 읽기 실패 (%s) — 빈 포트폴리오 저장", e)
         output_dir.mkdir(parents=True, exist_ok=True)
         with open(output_dir / "portfolio.json", "w", encoding="utf-8") as f:
             json.dump(empty_output, f, ensure_ascii=False, indent=2)
@@ -802,7 +805,7 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
     df = df[df.get("ticker", pd.Series(dtype=str)).notna()].copy()
     df = df[df["ticker"].str.strip() != ""]
     if df.empty:
-        print("  포트폴리오 종목 없음 — 빈 포트폴리오 저장")
+        logger.info("  포트폴리오 종목 없음 — 빈 포트폴리오 저장")
         output_dir.mkdir(parents=True, exist_ok=True)
         with open(output_dir / "portfolio.json", "w", encoding="utf-8") as f:
             json.dump(empty_output, f, ensure_ascii=False, indent=2)
@@ -816,7 +819,7 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
     tickers = df["ticker"].str.strip().tolist()
-    print(f"  현재가 조회 중 ({len(tickers)}개 종목)...")
+    logger.info("  현재가 조회 중 (%d개 종목)...", len(tickers))
 
     # yfinance 일괄 조회 (60일 OHLC — ATR 계산에 필요)
     price_map: dict[str, float] = {}
@@ -834,7 +837,7 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
                     series = close[t].dropna()
                     price_map[t] = float(series.iloc[-1]) if not series.empty else None
     except Exception as e:
-        print(f"  yfinance 일괄 조회 실패 ({e}), 개별 조회로 재시도...")
+        logger.warning("  yfinance 일괄 조회 실패 (%s), 개별 조회로 재시도...", e)
         for t in tickers:
             try:
                 series = yf.download(t, period="2d", auto_adjust=True, progress=False)["Close"].squeeze().dropna()
@@ -980,7 +983,7 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
-    print(f"  포트폴리오 JSON 저장 완료: {out_path} ({len(holdings)}개 종목)")
+    logger.info("  포트폴리오 JSON 저장 완료: %s (%d개 종목)", out_path, len(holdings))
 
 
 def _sanitize_nan(obj):
@@ -1010,7 +1013,7 @@ def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int =
     day_path = history_dir / f"{today}.json"
     with open(day_path, "w", encoding="utf-8") as f:
         json.dump(_sanitize_nan(output), f, ensure_ascii=False, indent=2)
-    print(f"  history 저장: {day_path}")
+    logger.info("  history 저장: %s", day_path)
 
     # 기존 history 파일 NaN 정규화 (Python json은 NaN 읽기 허용하나 Dart는 불가)
     for existing_path in history_dir.glob("????-??-??.json"):
@@ -1023,9 +1026,9 @@ def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int =
             if sanitized != existing_data:
                 with open(existing_path, "w", encoding="utf-8") as f:
                     json.dump(sanitized, f, ensure_ascii=False, indent=2)
-                print(f"  history NaN 정규화: {existing_path.name}")
+                logger.info("  history NaN 정규화: %s", existing_path.name)
         except Exception as e:
-            print(f"  history 정규화 실패 ({existing_path.name}): {e}")
+            logger.warning("  history 정규화 실패 (%s): %s", existing_path.name, e)
 
     # 기존 날짜 파일 목록 수집 (YYYY-MM-DD.json 패턴)
     existing = sorted(
@@ -1039,7 +1042,7 @@ def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int =
         archive_dir.mkdir(parents=True, exist_ok=True)
         dest = archive_dir / f"{old_date}.json"
         shutil.move(str(old_path), str(dest))
-        print(f"  history 아카이브 이동: {old_date}.json → archive/")
+        logger.info("  history 아카이브 이동: %s.json → archive/", old_date)
 
     # 최신 날짜 목록으로 index.json 갱신
     dates = sorted(
@@ -1049,7 +1052,7 @@ def save_history(output_dir: Path, output: dict, now: datetime, keep_days: int =
     index_path = history_dir / "index.json"
     with open(index_path, "w", encoding="utf-8") as f:
         json.dump({"dates": dates}, f, ensure_ascii=False, indent=2)
-    print(f"  history index 갱신: {dates}")
+    logger.info("  history index 갱신: %s", dates)
 
 
 def save_to_db(output: dict, now: datetime) -> None:
@@ -1105,7 +1108,7 @@ def save_to_db(output: dict, now: datetime) -> None:
                 ))
 
         db.commit()
-        print(f"  DB 저장 완료: {today} ({len(output.get('strategies', {}))}개 전략)")
+        logger.info("  DB 저장 완료: %s (%d개 전략)", today, len(output.get("strategies", {})))
     except Exception as exc:
         db.rollback()
         print(f"  DB 저장 실패: {exc}", file=sys.stderr)
@@ -1121,7 +1124,7 @@ def generate_history_batch(output_dir: Path, dates: list[str]) -> None:
     각 날짜별로 데이터를 슬라이싱하여 스크리닝을 실행한다.
     """
     if not dates:
-        print("생성할 날짜 목록이 없습니다.")
+        logger.warning("생성할 날짜 목록이 없습니다.")
         return
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1132,14 +1135,14 @@ def generate_history_batch(output_dir: Path, dates: list[str]) -> None:
     existing = {p.stem for p in history_dir.glob("????-??-??.json")}
     dates_to_gen = [d for d in dates if d not in existing]
     if not dates_to_gen:
-        print("모든 날짜의 히스토리가 이미 존재합니다.")
+        logger.info("모든 날짜의 히스토리가 이미 존재합니다.")
         return
 
-    print(f"배치 히스토리 생성: {dates_to_gen}")
+    logger.info("배치 히스토리 생성: %s", dates_to_gen)
     latest_date = max(dates_to_gen)
 
     # 유니버스 수집
-    print("유니버스 수집 중...")
+    logger.info("유니버스 수집 중...")
     us_tickers, us_sectors = fetch_sp500_tickers()
     ndx_tickers, ndx_sectors = fetch_nasdaq100_tickers()
     sp500_set = set(us_tickers)
@@ -1154,7 +1157,7 @@ def generate_history_batch(output_dir: Path, dates: list[str]) -> None:
     sc.ALL_UNIVERSE = {**sc.US_UNIVERSE, **sc.KR_UNIVERSE}
 
     # 최신 날짜 기준으로 데이터 1회 다운로드
-    print(f"데이터 다운로드 중 (기준일: {latest_date})...")
+    logger.info("데이터 다운로드 중 (기준일: %s)...", latest_date)
     us_data_raw, kr_data_raw, etf_data_raw = {}, {}, {}
     for i in range(0, len(us_tickers), 50):
         us_data_raw.update(download_for_date(us_tickers[i:i + 50], latest_date))
@@ -1164,7 +1167,7 @@ def generate_history_batch(output_dir: Path, dates: list[str]) -> None:
 
     # 각 날짜별 처리
     for target_date in sorted(dates_to_gen):
-        print(f"\n=== {target_date} 스크리닝 ===")
+        logger.info("\n=== %s 스크리닝 ===", target_date)
         cutoff = pd.Timestamp(target_date)
 
         # 해당 날짜까지 데이터 슬라이싱
@@ -1179,7 +1182,7 @@ def generate_history_batch(output_dir: Path, dates: list[str]) -> None:
                 etf_data[t] = sc.calc_indicators(sliced)
 
         all_data = {**us_data, **kr_data}
-        print(f"  지표 계산 중 ({len(all_data)}개 종목)...")
+        logger.info("  지표 계산 중 (%d개 종목)...", len(all_data))
         all_data_ind = {t: sc.calc_indicators(df) for t, df in all_data.items()}
 
         # 시장 상태 (SPY 기준 해당 날짜)
@@ -1227,7 +1230,7 @@ def generate_history_batch(output_dir: Path, dates: list[str]) -> None:
                 strategy_info["current_regime"] = adaptive_regime
                 strategy_info["regime_label"] = STRATEGIES[adaptive_regime]["label"]
             strategies_output[key] = strategy_info
-            print(f"  {preset['label']}: {len(results)}종목 선정 / {len(passed)}개 통과")
+            logger.info("  %s: %d종목 선정 / %d개 통과", preset["label"], len(results), len(passed))
 
         run_dt = datetime.strptime(target_date, "%Y-%m-%d")
         output = {
@@ -1239,7 +1242,7 @@ def generate_history_batch(output_dir: Path, dates: list[str]) -> None:
         }
         save_history(output_dir, output, run_dt)
 
-    print("\n배치 히스토리 생성 완료!")
+    logger.info("배치 히스토리 생성 완료!")
 
 
 if __name__ == "__main__":
@@ -1257,13 +1260,19 @@ if __name__ == "__main__":
                              "(screening_latest.json, screening_strategies.json은 갱신하지 않음)")
     parser.add_argument("--batch-dates", type=str, default=None,
                         help="배치 히스토리 모드: 쉼표로 구분된 날짜 목록 (예: 2026-03-23,2026-03-24)")
+    parser.add_argument("--verbose", action="store_true", help="진행 상황 출력")
     args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
 
     output_path = Path(args.output)
     xlsx_path = Path(args.xlsx) if args.xlsx else None
 
     if args.portfolio_only:
-        print("포트폴리오 JSON 생성 중...")
+        logger.info("포트폴리오 JSON 생성 중...")
         portfolio_to_json(output_path, xlsx_path)
     elif args.batch_dates:
         dates_list = [d.strip() for d in args.batch_dates.split(",")]
@@ -1272,11 +1281,11 @@ if __name__ == "__main__":
         try:
             _output = export_all_strategies(output_path, screening_date=args.date)
             if args.db and _output is not None:
-                print("\nDB 저장 중...")
+                logger.info("DB 저장 중...")
                 save_to_db(_output, datetime.now())
         except Exception as e:
-            print(f"\n[경고] 스크리닝 실패: {e}")
-            print("스크리닝은 건너뛰고 포트폴리오 현재가 업데이트를 계속합니다.")
+            print(f"\n[경고] 스크리닝 실패: {e}", file=sys.stderr)
+            print("스크리닝은 건너뛰고 포트폴리오 현재가 업데이트를 계속합니다.", file=sys.stderr)
         if not args.date:
-            print("\n포트폴리오 JSON 생성 중...")
+            logger.info("포트폴리오 JSON 생성 중...")
             portfolio_to_json(output_path, xlsx_path)

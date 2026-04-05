@@ -14,6 +14,8 @@ import sys
 import warnings
 warnings.filterwarnings("ignore")
 
+logger = logging.getLogger(__name__)
+
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -302,10 +304,10 @@ def metrics(nav_list, label):
     }
 
 def print_m(m):
-    print(f"  {'─'*52}")
-    print(f"  {m['label']}")
-    print(f"  총수익률 {m['총수익률']:>+8.1%}  CAGR {m['CAGR']:>+8.1%}")
-    print(f"  MDD      {m['MDD']:>+8.1%}  샤프 {m['샤프']:>8.2f}  월승률 {m['월승률']:.1%}")
+    logger.info(f"  {'─'*52}")
+    logger.info(f"  {m['label']}")
+    logger.info(f"  총수익률 {m['총수익률']:>+8.1%}  CAGR {m['CAGR']:>+8.1%}")
+    logger.info(f"  MDD      {m['MDD']:>+8.1%}  샤프 {m['샤프']:>8.2f}  월승률 {m['월승률']:.1%}")
 
 
 # ── 차트 ──────────────────────────────────────────────────────
@@ -350,7 +352,7 @@ def plot(results, spy_nav):
     ax3.grid(axis="y", alpha=0.25); plt.sca(ax3); plt.xticks(rotation=20, fontsize=7)
 
     plt.savefig(RESULTS_DIR / "backtest_v3_result.png", dpi=150, bbox_inches="tight")
-    print("\n  차트 저장: backtest_v3_result.png")
+    logger.info("\n  차트 저장: backtest_v3_result.png")
     plt.show()
 
 
@@ -358,25 +360,41 @@ def plot(results, spy_nav):
 # MAIN
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    print("=" * 60)
-    print("  v3 개선 백테스트: ATR 스톱 + 점수 비례 포지션")
-    print(f"  기간: {START} ~ {END}")
-    print("=" * 60)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
+    args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+
+    if args.verbose:
+        print("=" * 60)
+        print("  v3 개선 백테스트: ATR 스톱 + 점수 비례 포지션")
+        print(f"  기간: {START} ~ {END}")
+        print("=" * 60)
 
     # 데이터
-    print("\n[데이터 다운로드]")
+    if args.verbose:
+        print("\n[데이터 다운로드]")
     all_tickers = list(ALL_UNIVERSE.keys())
-    print(f"  종목 {len(all_tickers)}개...")
+    if args.verbose:
+        print(f"  종목 {len(all_tickers)}개...")
     all_data = download_all(all_tickers, START, END)
-    print(f"  → {len(all_data)}개 완료")
+    if args.verbose:
+        print(f"  → {len(all_data)}개 완료")
 
     etf_tickers = list(set(SECTOR_ETF.values()))
-    print(f"  섹터 ETF {len(etf_tickers)}개...")
+    if args.verbose:
+        print(f"  섹터 ETF {len(etf_tickers)}개...")
     etf_raw = download_all(etf_tickers, START, END)
     etf_data = {t: add_indicators(df) for t, df in etf_raw.items()}
-    print(f"  → {len(etf_data)}개 완료")
+    if args.verbose:
+        print(f"  → {len(etf_data)}개 완료")
 
-    print("  SPY 벤치마크...")
+    if args.verbose:
+        print("  SPY 벤치마크...")
     spy_raw     = yf.download("SPY", start=START, end=END,
                                auto_adjust=True, progress=False)
     spy_close   = spy_raw["Close"].squeeze()
@@ -384,15 +402,17 @@ if __name__ == "__main__":
     spy_nav     = [1.0] + list((1+spy_monthly).cumprod().values.flatten())
 
     # 지표 계산
-    print(f"\n  지표 계산 ({len(all_data)}개)...")
+    if args.verbose:
+        print(f"\n  지표 계산 ({len(all_data)}개)...")
     for t in list(all_data.keys()):
         all_data[t] = add_indicators(all_data[t])
 
     results = []
 
     # A) v2 베이스: 고정 스톱 + 동일비중
-    print("\n" + "═"*60)
-    print("  [A] v2 베이스: 고정 스톱(-10%) + 동일비중")
+    if args.verbose:
+        print("\n" + "═"*60)
+        print("  [A] v2 베이스: 고정 스톱(-10%) + 동일비중")
     nav_a = run_backtest(all_data, etf_data,
                          "A", use_atr_stop=False, equal_weight=True)
     m_a = metrics(nav_a, "A: 고정스톱 + 동일비중")
@@ -400,54 +420,62 @@ if __name__ == "__main__":
     results.append(("A: 고정스톱+동일비중", nav_a))
 
     # B) ATR 스톱 + 동일비중
-    print("\n" + "═"*60)
-    print("  [B] ATR 스톱(×2.5) + 동일비중")
+    if args.verbose:
+        print("\n" + "═"*60)
+        print("  [B] ATR 스톱(×2.5) + 동일비중")
     nav_b = run_backtest(all_data, etf_data,
                          "B", use_atr_stop=True, equal_weight=True)
     m_b = metrics(nav_b, "B: ATR스톱 + 동일비중")
     print_m(m_b)
-    dc = m_b["CAGR"] - m_a["CAGR"]
-    dm = m_b["MDD"]  - m_a["MDD"]
-    print(f"\n  A 대비 → CAGR {dc:+.1%}  MDD {dm:+.1%}")
+    if args.verbose:
+        dc = m_b["CAGR"] - m_a["CAGR"]
+        dm = m_b["MDD"]  - m_a["MDD"]
+        print(f"\n  A 대비 → CAGR {dc:+.1%}  MDD {dm:+.1%}")
     results.append(("B: ATR스톱+동일비중", nav_b))
 
     # C) 고정 스톱 + 점수비례
-    print("\n" + "═"*60)
-    print("  [C] 고정 스톱(-10%) + 점수비례 배분(상한 20%)")
+    if args.verbose:
+        print("\n" + "═"*60)
+        print("  [C] 고정 스톱(-10%) + 점수비례 배분(상한 20%)")
     nav_c = run_backtest(all_data, etf_data,
                          "C", use_atr_stop=False, equal_weight=False)
     m_c = metrics(nav_c, "C: 고정스톱 + 점수비례")
     print_m(m_c)
-    dc = m_c["CAGR"] - m_a["CAGR"]
-    dm = m_c["MDD"]  - m_a["MDD"]
-    print(f"\n  A 대비 → CAGR {dc:+.1%}  MDD {dm:+.1%}")
+    if args.verbose:
+        dc = m_c["CAGR"] - m_a["CAGR"]
+        dm = m_c["MDD"]  - m_a["MDD"]
+        print(f"\n  A 대비 → CAGR {dc:+.1%}  MDD {dm:+.1%}")
     results.append(("C: 고정스톱+점수비례", nav_c))
 
     # D) v3 최종: ATR 스톱 + 점수비례
-    print("\n" + "═"*60)
-    print("  [D] v3 최종: ATR 스톱(×2.5) + 점수비례(상한 20%)")
+    if args.verbose:
+        print("\n" + "═"*60)
+        print("  [D] v3 최종: ATR 스톱(×2.5) + 점수비례(상한 20%)")
     nav_d = run_backtest(all_data, etf_data,
                          "D", use_atr_stop=True, equal_weight=False)
     m_d = metrics(nav_d, "D: v3 최종")
     print_m(m_d)
-    dc = m_d["CAGR"] - m_a["CAGR"]
-    dm = m_d["MDD"]  - m_a["MDD"]
-    ds = m_d["샤프"] - m_a["샤프"]
-    print(f"\n  A 대비 → CAGR {dc:+.1%}  MDD {dm:+.1%}  샤프 {ds:+.2f}")
+    if args.verbose:
+        dc = m_d["CAGR"] - m_a["CAGR"]
+        dm = m_d["MDD"]  - m_a["MDD"]
+        ds = m_d["샤프"] - m_a["샤프"]
+        print(f"\n  A 대비 → CAGR {dc:+.1%}  MDD {dm:+.1%}  샤프 {ds:+.2f}")
     results.append(("D: v3(ATR+점수비례)", nav_d))
 
     # 종합 비교
-    print("\n" + "═"*60)
-    print("  종합 비교")
-    print("═"*60)
+    if args.verbose:
+        print("\n" + "═"*60)
+        print("  종합 비교")
+        print("═"*60)
     all_m = [m_a, m_b, m_c, m_d, metrics(spy_nav,"SPY")]
-    print(f"  {'전략':<26} {'총수익률':>8} {'CAGR':>8} "
-          f"{'MDD':>8} {'샤프':>7} {'월승률':>7}")
-    print("  " + "─"*66)
-    for m in all_m:
-        mark = " ◀ 최종" if "v3" in m["label"] else ""
-        print(f"  {m['label']:<26} {m['총수익률']:>+8.1%} {m['CAGR']:>+8.1%} "
-              f"{m['MDD']:>+8.1%} {m['샤프']:>7.2f} {m['월승률']:>7.1%}{mark}")
+    if args.verbose:
+        print(f"  {'전략':<26} {'총수익률':>8} {'CAGR':>8} "
+              f"{'MDD':>8} {'샤프':>7} {'월승률':>7}")
+        print("  " + "─"*66)
+        for m in all_m:
+            mark = " ◀ 최종" if "v3" in m["label"] else ""
+            print(f"  {m['label']:<26} {m['총수익률']:>+8.1%} {m['CAGR']:>+8.1%} "
+                  f"{m['MDD']:>+8.1%} {m['샤프']:>7.2f} {m['월승률']:>7.1%}{mark}")
 
     # CSV 저장
     rows = [{"전략":m["label"], "총수익률":f"{m['총수익률']:+.1%}",
@@ -456,6 +484,7 @@ if __name__ == "__main__":
             for m in all_m]
     pd.DataFrame(rows).to_csv(RESULTS_DIR / "backtest_v3_comparison.csv",
                                index=False, encoding="utf-8-sig")
-    print("\n  결과 저장: backtest_v3_comparison.csv")
+    if args.verbose:
+        print("\n  결과 저장: backtest_v3_comparison.csv")
 
     plot(results, spy_nav)

@@ -42,6 +42,8 @@ import matplotlib.gridspec as gridspec
 from pathlib import Path
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
+
 # 공용 데이터 캐시 모듈 (scripts/data_cache.py)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from data_cache import load_full_universe
@@ -592,9 +594,9 @@ def run_backtest(all_data: dict, etf_data: dict, spy_data: pd.DataFrame,
     # SPY 시장 상태 캐시 (B, C 전략 또는 adaptive용)
     spy_state_cache = {}
     if strategy in ("B", "C") or adaptive:
-        print(f"  SPY 시장 상태 캐시 생성 중 ({len(rebal_dates)}개 날짜)...", end="", flush=True)
+        logger.info(f"  SPY 시장 상태 캐시 생성 중 ({len(rebal_dates)}개 날짜)...")
         spy_state_cache = build_spy_state_cache(spy_data, rebal_dates)
-        print(" 완료")
+        logger.info("  SPY 시장 상태 캐시 생성 완료")
 
     nav      = [1.0]
     holdings = {}
@@ -744,10 +746,10 @@ def calc_metrics(nav_list: list, label: str) -> dict:
 
 
 def print_metrics(m: dict):
-    print(f"  {'─'*60}")
-    print(f"  {m['label']}")
-    print(f"  총수익률 {m['총수익률']:>+8.1%}   CAGR {m['CAGR']:>+8.1%}")
-    print(f"  MDD      {m['MDD']:>+8.1%}   샤프 {m['샤프']:>8.2f}   월승률 {m['월승률']:.1%}")
+    logger.info(f"  {'─'*60}")
+    logger.info(f"  {m['label']}")
+    logger.info(f"  총수익률 {m['총수익률']:>+8.1%}   CAGR {m['CAGR']:>+8.1%}")
+    logger.info(f"  MDD      {m['MDD']:>+8.1%}   샤프 {m['샤프']:>8.2f}   월승률 {m['월승률']:.1%}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -834,69 +836,86 @@ def plot_results(results: list, spy_nav: list, state_df: pd.DataFrame):
 
     path = RESULTS_DIR / "hybrid_entry_comparison.png"
     plt.savefig(path, dpi=150, bbox_inches="tight")
-    print(f"\n  차트 저장: {path}")
+    logger.info(f"\n  차트 저장: {path}")
 
 
 # ══════════════════════════════════════════════════════════════
 # MAIN
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    print("=" * 70)
-    print("  하이브리드 진입 전략 백테스트 — 4전략 × 3진입방식")
-    print(f"  기간: {START} ~ {END}")
-    print(f"  수수료: 편도 {COMMISSION*100:.1f}% (왕복 {COMMISSION*2*100:.1f}%)")
-    print(f"  유니버스: 풀 유니버스 (S&P500 + NASDAQ-100 + KOSPI200 + KOSDAQ150)")
-    print("=" * 70)
-    print()
-    print("  [전략 파라미터]")
-    print("  공격적: ATR1.5, 주간 리밸런싱, TOP15")
-    print("  균형형: ATR2.0, 월간 리밸런싱, TOP10")
-    print("  보수적: ATR2.5, 월간 리밸런싱, TOP7")
-    print("  적응형: 국면별 동적 전환 (데드→ATR2.5/7, 바닥→ATR2.0/10, 골든→ATR1.5/15)")
-    print()
-    print("  [진입방식]")
-    print("  A: 기존 MA 정배열 — 시장 상태 무관하게 항상 스크리닝")
-    print("  B: 하이브리드    — SPY 바닥확인 시 스크리닝 ON + 종목 MA 정배열 유지")
-    print("  C: 하이브리드+3단계 — B + SPY 단계별 포지션 비중 조절(50→80→100%)")
-    print()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
+    args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+
+    if args.verbose:
+        print("=" * 70)
+        print("  하이브리드 진입 전략 백테스트 — 4전략 × 3진입방식")
+        print(f"  기간: {START} ~ {END}")
+        print(f"  수수료: 편도 {COMMISSION*100:.1f}% (왕복 {COMMISSION*2*100:.1f}%)")
+        print(f"  유니버스: 풀 유니버스 (S&P500 + NASDAQ-100 + KOSPI200 + KOSDAQ150)")
+        print("=" * 70)
+        print()
+        print("  [전략 파라미터]")
+        print("  공격적: ATR1.5, 주간 리밸런싱, TOP15")
+        print("  균형형: ATR2.0, 월간 리밸런싱, TOP10")
+        print("  보수적: ATR2.5, 월간 리밸런싱, TOP7")
+        print("  적응형: 국면별 동적 전환 (데드→ATR2.5/7, 바닥→ATR2.0/10, 골든→ATR1.5/15)")
+        print()
+        print("  [진입방식]")
+        print("  A: 기존 MA 정배열 — 시장 상태 무관하게 항상 스크리닝")
+        print("  B: 하이브리드    — SPY 바닥확인 시 스크리닝 ON + 종목 MA 정배열 유지")
+        print("  C: 하이브리드+3단계 — B + SPY 단계별 포지션 비중 조절(50→80→100%)")
+        print()
 
     # ── 데이터 로드 (공용 캐시 → 없으면 자동 다운로드)
-    print("[1] 데이터 로드")
+    if args.verbose:
+        print("[1] 데이터 로드")
     all_data_raw, spy_df, etf_raw, universe_map = load_full_universe(START)
     ALL_UNIVERSE.update(universe_map)
-    print(f"  → 종목 {len(all_data_raw)}개 로드 완료 (유니버스: {len(universe_map)}개)")
+    if args.verbose:
+        print(f"  → 종목 {len(all_data_raw)}개 로드 완료 (유니버스: {len(universe_map)}개)")
 
     etf_data = {t: add_indicators(df) for t, df in etf_raw.items()}
-    print(f"  섹터 ETF {len(etf_data)}개 완료")
+    if args.verbose:
+        print(f"  섹터 ETF {len(etf_data)}개 완료")
 
-    print("  SPY 지표 계산...")
+        print("  SPY 지표 계산...")
     spy_data  = add_indicators(spy_df)
     spy_close = spy_df["Close"].squeeze()
     spy_monthly = spy_close.resample("BME").last().pct_change().fillna(0)
     spy_nav     = [1.0] + list((1 + spy_monthly).cumprod().values.flatten())
 
     # ── 지표 계산
-    print(f"\n[2] 종목 지표 계산 ({len(all_data_raw)}종목)...")
+    if args.verbose:
+        print(f"\n[2] 종목 지표 계산 ({len(all_data_raw)}종목)...")
     all_data = {t: add_indicators(df) for t, df in all_data_raw.items()}
-    print("  완료")
+    if args.verbose:
+        print("  완료")
 
     # ── SPY 시장 상태 분석
-    print("\n[3] SPY 시장 상태 분석...")
+    if args.verbose:
+        print("\n[3] SPY 시장 상태 분석...")
     state_df = analyze_market_states(spy_data)
     state_counts = state_df["state"].value_counts()
     total_months = len(state_df)
-    print(f"  분석 기간: {total_months}개월")
-    state_label_map = {
-        "dead_cross":       "데드크로스(현금화)",
-        "bottom_confirmed": "바닥확인(50%)",
-        "stage2":           "MA50반등(80%)",
-        "golden_cross":     "골든크로스(100%)",
-        "neutral":          "중립(100%)",
-    }
-    for state, cnt in state_counts.items():
-        pct = cnt / total_months * 100
-        label = state_label_map.get(state, state)
-        print(f"  {label:<22}: {cnt:>4}개월 ({pct:.1f}%)")
+    if args.verbose:
+        print(f"  분석 기간: {total_months}개월")
+        state_label_map = {
+            "dead_cross":       "데드크로스(현금화)",
+            "bottom_confirmed": "바닥확인(50%)",
+            "stage2":           "MA50반등(80%)",
+            "golden_cross":     "골든크로스(100%)",
+            "neutral":          "중립(100%)",
+        }
+        for state, cnt in state_counts.items():
+            pct = cnt / total_months * 100
+            label = state_label_map.get(state, state)
+            print(f"  {label:<22}: {cnt:>4}개월 ({pct:.1f}%)")
 
     # ── 전략 정의
     # (이름, atr_mult, top_n, rebal_freq, adaptive)
@@ -916,15 +935,17 @@ if __name__ == "__main__":
     results_for_chart = []   # 차트용 (전략명, nav)
 
     for strat_name, atr_m, tn, freq, is_adaptive in strategy_configs:
-        print("\n" + "═" * 70)
-        print(f"  [{strat_name}] ATR{atr_m}, TOP{tn}, freq={freq}"
-              + (" (adaptive)" if is_adaptive else ""))
-        print("═" * 70)
+        if args.verbose:
+            print("\n" + "═" * 70)
+            print(f"  [{strat_name}] ATR{atr_m}, TOP{tn}, freq={freq}"
+                  + (" (adaptive)" if is_adaptive else ""))
+            print("═" * 70)
 
         group_metrics = []
         for entry_code, entry_name in entry_methods:
             label = f"{strat_name}-{entry_code}({entry_name})"
-            print(f"\n  ▶ {label}")
+            if args.verbose:
+                print(f"\n  ▶ {label}")
             nav = run_backtest(
                 all_data, etf_data, spy_data,
                 strategy=entry_code,
@@ -941,32 +962,34 @@ if __name__ == "__main__":
                 results_for_chart.append((label, nav))
 
         # 그룹 내 A 대비 B/C 비교
-        m_a = group_metrics[0]
-        for m_x in group_metrics[1:]:
-            tag = m_x["label"].split("-")[1][0]
-            dc = m_x["CAGR"] - m_a["CAGR"]
-            dm = m_x["MDD"]  - m_a["MDD"]
-            print(f"  {tag} vs A → CAGR {dc:+.1%}  MDD {dm:+.1%}")
+        if args.verbose:
+            m_a = group_metrics[0]
+            for m_x in group_metrics[1:]:
+                tag = m_x["label"].split("-")[1][0]
+                dc = m_x["CAGR"] - m_a["CAGR"]
+                dm = m_x["MDD"]  - m_a["MDD"]
+                print(f"  {tag} vs A → CAGR {dc:+.1%}  MDD {dm:+.1%}")
 
     # ── SPY 벤치마크
     m_spy = calc_metrics(spy_nav, "SPY 벤치마크")
     all_metrics.append(m_spy)
 
     # ── 종합 비교 표
-    print("\n" + "═" * 70)
-    print("  종합 성과 비교 (4전략 × 3진입방식 + SPY)")
-    print("═" * 70)
-    print(f"  {'전략':<35} {'CAGR':>8} {'MDD':>8} {'샤프':>7} {'월승률':>7}")
-    print("  " + "─" * 67)
-    prev_strat = None
-    for m in all_metrics:
-        cur_strat = m["label"].split("-")[0] if "-" in m["label"] else m["label"]
-        if cur_strat != prev_strat:
-            if prev_strat is not None:
-                print("  " + "─" * 67)
-            prev_strat = cur_strat
-        print(f"  {m['label']:<35} {m['CAGR']:>+8.1%} "
-              f"{m['MDD']:>+8.1%} {m['샤프']:>7.2f} {m['월승률']:>7.1%}")
+    if args.verbose:
+        print("\n" + "═" * 70)
+        print("  종합 성과 비교 (4전략 × 3진입방식 + SPY)")
+        print("═" * 70)
+        print(f"  {'전략':<35} {'CAGR':>8} {'MDD':>8} {'샤프':>7} {'월승률':>7}")
+        print("  " + "─" * 67)
+        prev_strat = None
+        for m in all_metrics:
+            cur_strat = m["label"].split("-")[0] if "-" in m["label"] else m["label"]
+            if cur_strat != prev_strat:
+                if prev_strat is not None:
+                    print("  " + "─" * 67)
+                prev_strat = cur_strat
+            print(f"  {m['label']:<35} {m['CAGR']:>+8.1%} "
+                  f"{m['MDD']:>+8.1%} {m['샤프']:>7.2f} {m['월승률']:>7.1%}")
 
     # ── CSV 저장
     rows = [{
@@ -979,17 +1002,20 @@ if __name__ == "__main__":
     } for m in all_metrics]
     csv_path = RESULTS_DIR / "hybrid_entry_all_strategies.csv"
     pd.DataFrame(rows).to_csv(csv_path, index=False, encoding="utf-8-sig")
-    print(f"\n  결과 CSV: {csv_path}")
+    if args.verbose:
+        print(f"\n  결과 CSV: {csv_path}")
 
     # 시장 상태 CSV
     state_csv = RESULTS_DIR / "spy_market_states.csv"
     state_df.to_csv(state_csv, index=False, encoding="utf-8-sig")
-    print(f"  SPY 상태 CSV:  {state_csv}")
+    if args.verbose:
+        print(f"  SPY 상태 CSV:  {state_csv}")
 
     # ── 차트 (균형형 3개 + SPY)
     if results_for_chart:
         plot_results(results_for_chart, spy_nav, state_df)
 
-    print("\n" + "=" * 70)
-    print("  백테스트 완료")
-    print("=" * 70)
+    if args.verbose:
+        print("\n" + "=" * 70)
+        print("  백테스트 완료")
+        print("=" * 70)

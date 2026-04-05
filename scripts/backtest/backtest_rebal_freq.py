@@ -13,8 +13,11 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import json
+import logging
 import os
 import sys
+
+logger = logging.getLogger(__name__)
 
 import numpy as np
 import pandas as pd
@@ -52,7 +55,7 @@ MANIFEST  = os.path.join(DATA_DIR, "manifest.json")
 def load_local_data():
     """data/ 디렉토리에서 parquet 파일 로드. (all_data, etf_data, spy_close) 반환."""
     if not os.path.exists(MANIFEST):
-        print(f"  ✗ {MANIFEST} 없음. 먼저 python download_data.py 를 실행하세요.")
+        logger.warning(f"  ✗ {MANIFEST} 없음. 먼저 python download_data.py 를 실행하세요.")
         sys.exit(1)
 
     with open(MANIFEST, "r", encoding="utf-8") as f:
@@ -247,7 +250,7 @@ def run_backtest(all_data, etf_data, freq):
     total = len(rebal_dates)
     for i, rd in enumerate(rebal_dates):
         if (i+1) % 50 == 0 or i == total - 1:
-            print(f"\r    진행: {i+1}/{total} ({(i+1)/total:.0%})", end="", flush=True)
+            logger.info(f"    진행: {i+1}/{total} ({(i+1)/total:.0%})")
 
         if prev_dt and holdings:
             holdings = check_stops(holdings, all_data, prev_dt, rd)
@@ -298,7 +301,7 @@ def run_backtest(all_data, etf_data, freq):
         holdings = new_holdings
         prev_dt  = rd
 
-    print()  # 줄바꿈
+    logger.info("")
     return nav_series, trade_count
 
 
@@ -338,11 +341,11 @@ def calc_metrics(nav_series, label, freq, trade_count):
 
 
 def print_m(m):
-    print(f"  {'─'*56}")
-    print(f"  {m['label']}")
-    print(f"  총수익률 {m['총수익률']:>+10.1%}  CAGR {m['CAGR']:>+8.1%}")
-    print(f"  MDD      {m['MDD']:>+10.1%}  샤프 {m['샤프']:>8.2f}  승률 {m['승률']:.1%}")
-    print(f"  총 거래 {m['거래횟수']:>5d}회  (연평균 {m['연평균거래']:.0f}회)")
+    logger.info(f"  {'─'*56}")
+    logger.info(f"  {m['label']}")
+    logger.info(f"  총수익률 {m['총수익률']:>+10.1%}  CAGR {m['CAGR']:>+8.1%}")
+    logger.info(f"  MDD      {m['MDD']:>+10.1%}  샤프 {m['샤프']:>8.2f}  승률 {m['승률']:.1%}")
+    logger.info(f"  총 거래 {m['거래횟수']:>5d}회  (연평균 {m['연평균거래']:.0f}회)")
 
 
 # ── 차트 ──────────────────────────────────────────────────────
@@ -406,7 +409,7 @@ def plot(all_metrics, spy_close):
     plt.sca(ax4); plt.xticks(rotation=15, fontsize=8)
 
     plt.savefig(RESULTS_DIR / "backtest_rebal_freq.png", dpi=150, bbox_inches="tight")
-    print("\n  차트 저장: backtest_rebal_freq.png")
+    logger.info("\n  차트 저장: backtest_rebal_freq.png")
     plt.close()
 
 
@@ -414,23 +417,37 @@ def plot(all_metrics, spy_close):
 # MAIN
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    print("=" * 62)
-    print("  리밸런싱 주기별 백테스트 비교 (로컬 데이터)")
-    print(f"  전략: v3 최종 (ATR×{ATR_MULT} 스톱 + 점수비례 상한{MAX_WEIGHT:.0%})")
-    print(f"  기간: {START} ~ {END}")
-    print("=" * 62)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
+    args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+
+    if args.verbose:
+        print("=" * 62)
+        print("  리밸런싱 주기별 백테스트 비교 (로컬 데이터)")
+        print(f"  전략: v3 최종 (ATR×{ATR_MULT} 스톱 + 점수비례 상한{MAX_WEIGHT:.0%})")
+        print(f"  기간: {START} ~ {END}")
+        print("=" * 62)
 
     # ── 로컬 데이터 로드 ──
-    print("\n[데이터 로드]")
+    if args.verbose:
+        print("\n[데이터 로드]")
     all_data, etf_raw, spy_close = load_local_data()
-    print(f"  종목 {len(all_data)}개, ETF {len(etf_raw)}개, SPY {'✓' if spy_close is not None else '✗'}")
+    if args.verbose:
+        print(f"  종목 {len(all_data)}개, ETF {len(etf_raw)}개, SPY {'✓' if spy_close is not None else '✗'}")
 
     if spy_close is None:
-        print("  ✗ SPY 데이터 없음. download_data.py를 실행하세요.")
+        if args.verbose:
+            print("  ✗ SPY 데이터 없음. download_data.py를 실행하세요.")
         sys.exit(1)
 
     # ── 지표 계산 ──
-    print(f"  지표 계산 ({len(all_data)}개)...")
+    if args.verbose:
+        print(f"  지표 계산 ({len(all_data)}개)...")
     for t in list(all_data.keys()):
         all_data[t] = add_indicators(all_data[t])
     etf_data = {t: add_indicators(df) for t, df in etf_raw.items()}
@@ -444,33 +461,35 @@ if __name__ == "__main__":
 
     all_metrics = []
     for freq, label in configs:
-        print(f"\n{'═'*62}")
-        print(f"  [{label}] 리밸런싱 주기: {label}")
+        if args.verbose:
+            print(f"\n{'═'*62}")
+            print(f"  [{label}] 리밸런싱 주기: {label}")
         nav_s, trades = run_backtest(all_data, etf_data, freq)
         m = calc_metrics(nav_s, label, freq, trades)
         print_m(m)
         all_metrics.append(m)
 
     # ── 종합 비교 ──
-    print(f"\n{'═'*62}")
-    print("  종합 비교")
-    print("═" * 62)
-    header = (f"  {'주기':<12} {'총수익률':>10} {'CAGR':>8} "
-              f"{'MDD':>8} {'샤프':>7} {'승률':>7} {'연거래':>7}")
-    print(header)
-    print("  " + "─" * 60)
+    if args.verbose:
+        print(f"\n{'═'*62}")
+        print("  종합 비교")
+        print("═" * 62)
+        header = (f"  {'주기':<12} {'총수익률':>10} {'CAGR':>8} "
+                  f"{'MDD':>8} {'샤프':>7} {'승률':>7} {'연거래':>7}")
+        print(header)
+        print("  " + "─" * 60)
 
-    for m in all_metrics:
-        print(f"  {m['label']:<12} {m['총수익률']:>+10.1%} {m['CAGR']:>+8.1%} "
-              f"{m['MDD']:>+8.1%} {m['샤프']:>7.2f} {m['승률']:>7.1%} "
-              f"{m['연평균거래']:>5.0f}회")
+        for m in all_metrics:
+            print(f"  {m['label']:<12} {m['총수익률']:>+10.1%} {m['CAGR']:>+8.1%} "
+                  f"{m['MDD']:>+8.1%} {m['샤프']:>7.2f} {m['승률']:>7.1%} "
+                  f"{m['연평균거래']:>5.0f}회")
 
-    spy_total = float(spy_close.iloc[-1] / spy_close.iloc[0]) - 1
-    spy_years = (spy_close.index[-1] - spy_close.index[0]).days / 365.25
-    spy_cagr  = ((1 + spy_total) ** (1/spy_years)) - 1
-    spy_dd    = ((spy_close - spy_close.cummax()) / spy_close.cummax()).min()
-    print(f"  {'SPY':<12} {spy_total:>+10.1%} {spy_cagr:>+8.1%} "
-          f"{spy_dd:>+8.1%}       -       -       -")
+        spy_total = float(spy_close.iloc[-1] / spy_close.iloc[0]) - 1
+        spy_years = (spy_close.index[-1] - spy_close.index[0]).days / 365.25
+        spy_cagr  = ((1 + spy_total) ** (1/spy_years)) - 1
+        spy_dd    = ((spy_close - spy_close.cummax()) / spy_close.cummax()).min()
+        print(f"  {'SPY':<12} {spy_total:>+10.1%} {spy_cagr:>+8.1%} "
+              f"{spy_dd:>+8.1%}       -       -       -")
 
     # ── CSV 저장 ──
     rows = []
@@ -487,6 +506,7 @@ if __name__ == "__main__":
         })
     pd.DataFrame(rows).to_csv(RESULTS_DIR / "backtest_rebal_freq.csv",
                                index=False, encoding="utf-8-sig")
-    print(f"\n  결과 저장: backtest_rebal_freq.csv")
+    if args.verbose:
+        print(f"\n  결과 저장: backtest_rebal_freq.csv")
 
     plot(all_metrics, spy_close)

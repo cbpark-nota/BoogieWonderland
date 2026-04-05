@@ -260,18 +260,31 @@ def check_market():
 
 # ── 메인 ──────────────────────────────────────────────────────
 if __name__ == "__main__":
+    import argparse as _argparse
+    _parser = _argparse.ArgumentParser(description="모멘텀 종목 스크리너 v3")
+    _parser.add_argument("--verbose", action="store_true", help="진행 상황 출력")
+    _args = _parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO if _args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+    _v = _args.verbose
+
     from data_cache import fetch_sp500_tickers, fetch_nasdaq100_tickers, fetch_kr_tickers
 
     today = datetime.now().strftime("%Y-%m-%d")
 
     # ── 동적 유니버스 수집 (CLAUDE.md 규칙 8: 풀 유니버스 사용) ──
-    print("유니버스 수집 중...")
+    if _v:
+        print("유니버스 수집 중...")
     _us_tickers, _us_sectors = fetch_sp500_tickers()
     _ndx_tickers, _ndx_sectors = fetch_nasdaq100_tickers()
     _sp500_set = set(_us_tickers)
     _ndx_new = [t for t in _ndx_tickers if t not in _sp500_set]
     _ndx_new_sec = {t: s for t, s in _ndx_sectors.items() if t not in _sp500_set}
-    print(f"  NASDAQ-100 신규 추가: {len(_ndx_new)}개 (S&P500 중복 {len(_ndx_tickers) - len(_ndx_new)}개 제거)")
+    if _v:
+        print(f"  NASDAQ-100 신규 추가: {len(_ndx_new)}개 (S&P500 중복 {len(_ndx_tickers) - len(_ndx_new)}개 제거)")
     _us_tickers = _us_tickers + _ndx_new
     _us_sectors = {**_us_sectors, **_ndx_new_sec}
     _kr_tickers = fetch_kr_tickers()
@@ -282,19 +295,20 @@ if __name__ == "__main__":
     ALL_UNIVERSE.update({**_us_sectors, **_kr_sectors})
 
     _all_tickers = list(ALL_UNIVERSE.keys())
-    print(f"  유니버스 합계: US {len(_us_tickers)}종목 + KR {len(_kr_tickers)}종목 = {len(_all_tickers)}종목")
-
-    print("=" * 64)
-    print(f"  모멘텀 종목 스크리너 v3   기준일: {today}")
-    print(f"  유니버스: 미국 {len(_us_tickers)}개 + 국내 {len(_kr_tickers)}개 (동적 수집)")
-    print(f"  스톱로스: ATR({ATR_PERIOD}) × {ATR_MULT}  │  "
-          f"포지션: {SIZING_MODE} (상한 {MAX_WEIGHT:.0%})")
-    print("=" * 64)
+    if _v:
+        print(f"  유니버스 합계: US {len(_us_tickers)}종목 + KR {len(_kr_tickers)}종목 = {len(_all_tickers)}종목")
+        print("=" * 64)
+        print(f"  모멘텀 종목 스크리너 v3   기준일: {today}")
+        print(f"  유니버스: 미국 {len(_us_tickers)}개 + 국내 {len(_kr_tickers)}개 (동적 수집)")
+        print(f"  스톱로스: ATR({ATR_PERIOD}) × {ATR_MULT}  │  "
+              f"포지션: {SIZING_MODE} (상한 {MAX_WEIGHT:.0%})")
+        print("=" * 64)
 
     # 시장 상태
-    print("\n[0/3] 시장 상태 확인...")
+    if _v:
+        print("\n[0/3] 시장 상태 확인...")
     mkt = check_market()
-    if mkt:
+    if mkt and _v:
         status = "골든크로스 ✅" if mkt["is_golden"] else "데드크로스 ⚠️"
         arrow  = "▲" if mkt["gap_pct"] >= 0 else "▼"
         print(f"  SPY ${mkt['price']:.2f}  │  20MA ${mkt['ma20']:.2f}  │  "
@@ -307,7 +321,8 @@ if __name__ == "__main__":
             print("  └──────────────────────────────────────────────────┘")
 
     # 다운로드
-    print("\n[1/3] 데이터 다운로드 중...")
+    if _v:
+        print("\n[1/3] 데이터 다운로드 중...")
     us_data, kr_data, etf_data = {}, {}, {}
     for i in range(0, len(_us_tickers), 50):
         us_data.update(download(_us_tickers[i:i+50]))
@@ -318,24 +333,26 @@ if __name__ == "__main__":
         etf_data[t] = calc_indicators(df)
 
     all_data = {**us_data, **kr_data}
-    print(f"  종목 {len(all_data)}개, ETF {len(etf_data)}개 수신 완료")
-
-    # 지표 계산 + 스크리닝
-    print("\n[2/3] 지표 계산 및 스크리닝 중...")
+    if _v:
+        print(f"  종목 {len(all_data)}개, ETF {len(etf_data)}개 수신 완료")
+        print("\n[2/3] 지표 계산 및 스크리닝 중...")
     passed = {}
     for t, df in all_data.items():
         df_ind = calc_indicators(df)
         ok, metrics = screen(df_ind)
         if ok:
             passed[t] = metrics
-    print(f"  스크리닝 통과: {len(passed)}개 / {len(all_data)}개")
+    if _v:
+        print(f"  스크리닝 통과: {len(passed)}개 / {len(all_data)}개")
 
     if not passed:
-        print("\n  ※ 현재 조건을 통과한 종목이 없습니다.")
+        if _v:
+            print("\n  ※ 현재 조건을 통과한 종목이 없습니다.")
         exit()
 
     # 랭킹 + 포지션 사이징
-    print("\n[3/3] 복합점수 계산 및 포지션 배분 중...")
+    if _v:
+        print("\n[3/3] 복합점수 계산 및 포지션 배분 중...")
     ranked = rank_stocks(passed, etf_data)
     top10  = ranked.head(TOP_N).copy()
 
@@ -344,43 +361,44 @@ if __name__ == "__main__":
     top10["weight"] = weights
 
     # 결과 출력
-    print("\n" + "=" * 64)
-    print(f"  ★ 복합점수 상위 {TOP_N}개  (v3 — ATR스톱 + 점수비례배분)")
-    print("=" * 64)
-    print(f"  {'순위'} {'종목':<13} {'비중':>6} {'점수':>6} "
-          f"{'ADX':>5} {'RSI':>5} {'3M수익':>7} "
-          f"{'스톱가':>9} {'스톱거리':>8}")
-    print("  " + "─" * 66)
+    if _v:
+        print("\n" + "=" * 64)
+        print(f"  ★ 복합점수 상위 {TOP_N}개  (v3 — ATR스톱 + 점수비례배분)")
+        print("=" * 64)
+        print(f"  {'순위'} {'종목':<13} {'비중':>6} {'점수':>6} "
+              f"{'ADX':>5} {'RSI':>5} {'3M수익':>7} "
+              f"{'스톱가':>9} {'스톱거리':>8}")
+        print("  " + "─" * 66)
 
-    for rank, (ticker, row) in enumerate(top10.iterrows(), 1):
-        flag    = "🇺🇸" if not ticker.endswith(".KS") else "🇰🇷"
-        ret_str = f"{row['ret3m']:+.1%}" if not pd.isna(row["ret3m"]) else " N/A"
-        stop_s  = f"{row['stop_price']:>9,.2f}" \
-                  if not pd.isna(row["stop_price"]) else "      N/A"
-        dist_s  = f"{row['stop_dist']:>+.1%}" \
-                  if not pd.isna(row["stop_dist"]) else "   N/A"
-        print(
-            f"  {rank:2d}위 {flag} {ticker:<11}"
-            f" {row['weight']:>5.1%}"
-            f" {row['score']:>6.3f}"
-            f" {row['ADX']:>5.1f}"
-            f" {row['RSI']:>5.1f}"
-            f" {ret_str:>7}"
-            f" {stop_s}"
-            f" {dist_s}"
-        )
+        for rank, (ticker, row) in enumerate(top10.iterrows(), 1):
+            flag    = "🇺🇸" if not ticker.endswith(".KS") else "🇰🇷"
+            ret_str = f"{row['ret3m']:+.1%}" if not pd.isna(row["ret3m"]) else " N/A"
+            stop_s  = f"{row['stop_price']:>9,.2f}" \
+                      if not pd.isna(row["stop_price"]) else "      N/A"
+            dist_s  = f"{row['stop_dist']:>+.1%}" \
+                      if not pd.isna(row["stop_dist"]) else "   N/A"
+            print(
+                f"  {rank:2d}위 {flag} {ticker:<11}"
+                f" {row['weight']:>5.1%}"
+                f" {row['score']:>6.3f}"
+                f" {row['ADX']:>5.1f}"
+                f" {row['RSI']:>5.1f}"
+                f" {ret_str:>7}"
+                f" {stop_s}"
+                f" {dist_s}"
+            )
 
-    # 포지션 사이징 방식 비교 출력
-    print(f"\n  [포지션 사이징 비교]")
-    eq_w  = pd.Series([1/len(top10)] * len(top10), index=top10.index)
-    sc_w  = calc_position_weights(top10["score"], "score", MAX_WEIGHT)
-    cap_w = calc_position_weights(top10["score"], "score_capped", MAX_WEIGHT)
+        # 포지션 사이징 방식 비교 출력
+        print(f"\n  [포지션 사이징 비교]")
+        eq_w  = pd.Series([1/len(top10)] * len(top10), index=top10.index)
+        sc_w  = calc_position_weights(top10["score"], "score", MAX_WEIGHT)
+        cap_w = calc_position_weights(top10["score"], "score_capped", MAX_WEIGHT)
 
-    print(f"  {'종목':<13} {'동일비중':>8} {'점수비례':>8} {'점수비례+상한':>12}")
-    print("  " + "─" * 44)
-    for t in top10.index:
-        print(f"  {t:<13} {eq_w[t]:>8.1%} {sc_w[t]:>8.1%} {cap_w[t]:>12.1%}")
-    print(f"  {'합계':<13} {eq_w.sum():>8.1%} {sc_w.sum():>8.1%} {cap_w.sum():>12.1%}")
+        print(f"  {'종목':<13} {'동일비중':>8} {'점수비례':>8} {'점수비례+상한':>12}")
+        print("  " + "─" * 44)
+        for t in top10.index:
+            print(f"  {t:<13} {eq_w[t]:>8.1%} {sc_w[t]:>8.1%} {cap_w[t]:>12.1%}")
+        print(f"  {'합계':<13} {eq_w.sum():>8.1%} {sc_w.sum():>8.1%} {cap_w.sum():>12.1%}")
 
     # CSV 저장
     save_cols = ["weight","score","ADX","RSI","ret3m",
@@ -389,4 +407,5 @@ if __name__ == "__main__":
     out = top10[save_cols].copy()
     out.index.name = "종목코드"
     out.to_csv("screener_v3_result.csv", encoding="utf-8-sig")
-    print(f"\n  결과 저장: screener_v3_result.csv")
+    if _v:
+        print(f"\n  결과 저장: screener_v3_result.csv")

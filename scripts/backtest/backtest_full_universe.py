@@ -17,6 +17,7 @@ warnings.filterwarnings("ignore")
 
 import io
 import json
+import logging
 import os
 import sys
 import time
@@ -28,6 +29,8 @@ import requests
 import yfinance as yf
 import matplotlib
 matplotlib.use("Agg")
+
+logger = logging.getLogger(__name__)
 import matplotlib.pyplot as plt
 from pathlib import Path
 
@@ -97,7 +100,7 @@ def get_shares_outstanding(tickers, batch_size=50):
     total = len(tickers)
     for i in range(0, total, batch_size):
         batch = tickers[i:i+batch_size]
-        print(f"\r    발행주식수: {i}/{total}", end="", flush=True)
+        logger.info(f"    발행주식수: {i}/{total}")
         for t in batch:
             try:
                 info = yf.Ticker(t).fast_info
@@ -106,7 +109,7 @@ def get_shares_outstanding(tickers, batch_size=50):
                     shares[t] = int(s)
             except Exception:
                 pass
-    print(f"\r    발행주식수: {total}/{total} → {len(shares)}개 확보")
+    logger.info(f"    발행주식수: {total}/{total} → {len(shares)}개 확보")
     return shares
 
 
@@ -118,7 +121,7 @@ def download_prices(tickers, start, end, label=""):
 
     for i in range(0, total, batch_size):
         batch = tickers[i:i+batch_size]
-        print(f"\r    {label} 다운로드: {i}/{total}", end="", flush=True)
+        logger.info(f"    {label} 다운로드: {i}/{total}")
         try:
             raw = yf.download(batch, start=start, end=end,
                               auto_adjust=True, progress=False, threads=True)
@@ -135,7 +138,7 @@ def download_prices(tickers, start, end, label=""):
         except Exception:
             pass
 
-    print(f"\r    {label} 다운로드: {total}/{total} → {len(all_data)}개 확보")
+    logger.info(f"    {label} 다운로드: {total}/{total} → {len(all_data)}개 확보")
     return all_data
 
 
@@ -159,7 +162,7 @@ def save_universe_cache(all_data, shares, spy_close, etf_data, us_sectors):
     with open(DATA_DIR / "manifest.json", "w") as f:
         json.dump(manifest, f, indent=2)
 
-    print(f"  캐시 저장: {DATA_DIR} ({len(all_data)}종목)")
+    logger.info(f"  캐시 저장: {DATA_DIR} ({len(all_data)}종목)")
 
 
 def load_universe_cache():
@@ -448,7 +451,7 @@ def run_backtest(all_data_ind, etf_data, spy_close, shares, sectors,
 
     for i, rd in enumerate(rebal_dates):
         if (i+1) % 100 == 0 or i == total-1:
-            print(f"\r    {strategy_name}: {i+1}/{total} ({(i+1)/total:.0%})", end="", flush=True)
+            logger.info(f"    {strategy_name}: {i+1}/{total} ({(i+1)/total:.0%})")
 
         cur_atr = atr_mult
         should_rebal = True
@@ -510,7 +513,7 @@ def run_backtest(all_data_ind, etf_data, spy_close, shares, sectors,
         prev_dt = rd
         nav_series[rd] = nav
 
-    print()
+    logger.info("")
     return nav_series, trades
 
 
@@ -531,6 +534,15 @@ def calc_metrics(nav, label):
 # ══════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
+    args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+
     t0_total = time.time()
 
     WINDOWS = [
@@ -538,38 +550,48 @@ if __name__ == "__main__":
         ("C_최근변동성", "2020-01-01", "2024-12-31"),
     ]
 
-    print("=" * 70)
-    print("  풀 유니버스 백테스트")
-    print("  US: S&P500 전체 / KR: KOSPI 상위200 + KOSDAQ 상위150")
-    print(f"  거래비용: 편도 {COST_PER_SIDE*100:.1f}%")
-    print("=" * 70)
+    if args.verbose:
+        print("=" * 70)
+        print("  풀 유니버스 백테스트")
+        print("  US: S&P500 전체 / KR: KOSPI 상위200 + KOSDAQ 상위150")
+        print(f"  거래비용: 편도 {COST_PER_SIDE*100:.1f}%")
+        print("=" * 70)
 
     # ── 데이터 로드 또는 다운로드 ──
     cached = load_universe_cache()
     if cached[0] is not None and len(cached[0]) > 100:
-        print("\n[캐시 로드]")
+        if args.verbose:
+            print("\n[캐시 로드]")
         all_data, shares, spy_close, etf_data_raw, us_sectors = cached
-        print(f"  종목 {len(all_data)}개, 발행주식수 {len(shares)}개")
+        if args.verbose:
+            print(f"  종목 {len(all_data)}개, 발행주식수 {len(shares)}개")
     else:
-        print("\n[유니버스 구축]")
+        if args.verbose:
+            print("\n[유니버스 구축]")
         t0 = time.time()
 
         # S&P500
-        print("  S&P500 목록 가져오기...")
+        if args.verbose:
+            print("  S&P500 목록 가져오기...")
         us_tickers, us_sectors = fetch_sp500_tickers()
-        print(f"    {len(us_tickers)}개")
+        if args.verbose:
+            print(f"    {len(us_tickers)}개")
 
         # 한국
-        print("  KRX 목록 가져오기...")
+        if args.verbose:
+            print("  KRX 목록 가져오기...")
         kr_ks, kr_kq = fetch_kr_tickers()
-        print(f"    KOSPI {len(kr_ks)}개, KOSDAQ {len(kr_kq)}개")
+        if args.verbose:
+            print(f"    KOSPI {len(kr_ks)}개, KOSDAQ {len(kr_kq)}개")
 
         # 발행주식수 (시총 계산용)
-        print("  발행주식수 가져오기 (한국 종목)...")
+        if args.verbose:
+            print("  발행주식수 가져오기 (한국 종목)...")
         kr_shares = get_shares_outstanding(kr_ks + kr_kq)
 
         # 가격 다운로드
-        print("\n  가격 데이터 다운로드...")
+        if args.verbose:
+            print("\n  가격 데이터 다운로드...")
         t_dl = time.time()
 
         all_data = {}
@@ -589,7 +611,8 @@ if __name__ == "__main__":
         spy_close = spy_raw["Close"].squeeze()
 
         dl_time = time.time() - t_dl
-        print(f"\n  다운로드 완료: {len(all_data)}종목, {dl_time:.0f}초")
+        if args.verbose:
+            print(f"\n  다운로드 완료: {len(all_data)}종목, {dl_time:.0f}초")
 
         # 발행주식수 병합
         shares = kr_shares
@@ -598,19 +621,22 @@ if __name__ == "__main__":
         save_universe_cache(all_data, shares, spy_close, etf_data_raw, us_sectors)
 
         build_time = time.time() - t0
-        print(f"  유니버스 구축 총 시간: {build_time:.0f}초 ({build_time/60:.1f}분)")
+        if args.verbose:
+            print(f"  유니버스 구축 총 시간: {build_time:.0f}초 ({build_time/60:.1f}분)")
 
     # 지표 계산
-    print(f"\n[지표 계산] {len(all_data)}개 종목...")
+    if args.verbose:
+        print(f"\n[지표 계산] {len(all_data)}개 종목...")
     t_ind = time.time()
     all_data_ind = {}
     for i, (t, df) in enumerate(all_data.items()):
-        if (i+1) % 100 == 0:
+        if args.verbose and (i+1) % 100 == 0:
             print(f"\r  {i+1}/{len(all_data)}", end="", flush=True)
         all_data_ind[t] = add_indicators(df)
     etf_data = {t: add_indicators(df) for t, df in etf_data_raw.items()}
     ind_time = time.time() - t_ind
-    print(f"\r  {len(all_data_ind)}개 완료 ({ind_time:.0f}초)")
+    if args.verbose:
+        print(f"\r  {len(all_data_ind)}개 완료 ({ind_time:.0f}초)")
 
     # 섹터 매핑 (한국 종목은 Unknown으로)
     sectors = dict(us_sectors) if us_sectors else {}
@@ -620,9 +646,10 @@ if __name__ == "__main__":
     for wlabel, wstart, wend in WINDOWS:
         START, END = wstart, wend
 
-        print(f"\n{'█'*70}")
-        print(f"  [{wlabel}] {wstart} ~ {wend}")
-        print(f"{'█'*70}")
+        if args.verbose:
+            print(f"\n{'█'*70}")
+            print(f"  [{wlabel}] {wstart} ~ {wend}")
+            print(f"{'█'*70}")
 
         strategies = [
             ("공격적 (ATR=2.0 주간)", "W",  2.0, False),
@@ -641,7 +668,8 @@ if __name__ == "__main__":
             m = calc_metrics(nav, sname)
             m["elapsed"] = elapsed
             results.append(m)
-            print(f"      → {elapsed:.0f}초")
+            if args.verbose:
+                print(f"      → {elapsed:.0f}초")
 
         # SPY
         spy_start = spy_close[spy_close.index >= wstart]
@@ -652,12 +680,13 @@ if __name__ == "__main__":
         results.append(m_spy)
 
         # 출력
-        print(f"\n  {'전략':<22} {'CAGR':>8} {'총수익':>10} {'MDD':>8} {'샤프':>6} {'승률':>6} {'시간':>6}")
-        print("  " + "─" * 68)
-        for r in results:
-            t_str = f"{r['elapsed']:.0f}s" if r['elapsed'] > 0 else "-"
-            print(f"  {r['label']:<22} {r['CAGR']:>+8.1%} {r['총수익']:>+9.0%}"
-                  f" {r['MDD']:>+8.1%} {r['샤프']:>6.2f} {r['승률']:>6.1%} {t_str:>6}")
+        if args.verbose:
+            print(f"\n  {'전략':<22} {'CAGR':>8} {'총수익':>10} {'MDD':>8} {'샤프':>6} {'승률':>6} {'시간':>6}")
+            print("  " + "─" * 68)
+            for r in results:
+                t_str = f"{r['elapsed']:.0f}s" if r['elapsed'] > 0 else "-"
+                print(f"  {r['label']:<22} {r['CAGR']:>+8.1%} {r['총수익']:>+9.0%}"
+                      f" {r['MDD']:>+8.1%} {r['샤프']:>6.2f} {r['승률']:>6.1%} {t_str:>6}")
 
         for r in results:
             all_rows.append({
@@ -683,7 +712,8 @@ if __name__ == "__main__":
         ax.set_title(f"[풀 유니버스] {wlabel} ({wstart}~{wend})", fontsize=13, fontweight="bold")
         plt.tight_layout()
         plt.savefig(RESULTS_DIR / f"backtest_full_{wlabel}.png", dpi=150, bbox_inches="tight")
-        print(f"  차트: backtest_full_{wlabel}.png")
+        if args.verbose:
+            print(f"  차트: backtest_full_{wlabel}.png")
         plt.close()
 
     # 통합 CSV
@@ -691,7 +721,8 @@ if __name__ == "__main__":
                                    index=False, encoding="utf-8-sig")
 
     total_time = time.time() - t0_total
-    print(f"\n{'═'*70}")
-    print(f"  총 소요 시간: {total_time:.0f}초 ({total_time/60:.1f}분)")
-    print(f"  결과: backtest_full_universe.csv")
-    print(f"{'═'*70}")
+    if args.verbose:
+        print(f"\n{'═'*70}")
+        print(f"  총 소요 시간: {total_time:.0f}초 ({total_time/60:.1f}분)")
+        print(f"  결과: backtest_full_universe.csv")
+        print(f"{'═'*70}")

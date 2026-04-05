@@ -10,9 +10,12 @@
 """
 import argparse
 import json
+import logging
 import sys
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # 샘플 데이터 (네트워크 없이 빠른 UI 확인용)
 SAMPLE_DATA = [
@@ -78,7 +81,7 @@ def fetch_real_data(min_short_float: float = 15.0, top_n: int = 20) -> list[dict
             })
             checked += 1
             if len(results) % 5 == 0:
-                print(f"  진행: {len(results)}개 발견 (검사: {checked}개)", flush=True)
+                logger.info("  진행: %d개 발견 (검사: %d개)", len(results), checked)
         except Exception:
             continue
 
@@ -89,13 +92,13 @@ def fetch_real_data(min_short_float: float = 15.0, top_n: int = 20) -> list[dict
 def generate_json(use_sample: bool, output_dir: Path, top_n: int = 20) -> Path:
     now = datetime.now()
     if use_sample:
-        print("샘플 데이터 사용 (--sample 플래그)")
+        logger.info("샘플 데이터 사용 (--sample 플래그)")
         data = sorted(SAMPLE_DATA, key=lambda x: x["short_float_pct"], reverse=True)[:top_n]
     else:
-        print("실시간 숏 포지션 데이터 수집 중...")
+        logger.info("실시간 숏 포지션 데이터 수집 중...")
         data = fetch_real_data(top_n=top_n)
         if not data:
-            print("데이터 수집 실패 — 샘플 데이터로 대체")
+            logger.warning("데이터 수집 실패 — 샘플 데이터로 대체")
             data = sorted(SAMPLE_DATA, key=lambda x: x["short_float_pct"], reverse=True)[:top_n]
 
     output = {
@@ -113,7 +116,7 @@ def generate_json(use_sample: bool, output_dir: Path, top_n: int = 20) -> Path:
     out_path = output_dir / "short_squeeze_latest.json"
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
-    print(f"short_squeeze_latest.json 저장: {out_path} ({len(data)}개 종목)")
+    logger.info("short_squeeze_latest.json 저장: %s (%d개 종목)", out_path, len(data))
     return out_path
 
 
@@ -122,7 +125,13 @@ if __name__ == "__main__":
     parser.add_argument("--sample", action="store_true", help="샘플 데이터 사용 (네트워크 불필요)")
     parser.add_argument("--output", type=str, default="frontend/web/data/", help="출력 디렉토리")
     parser.add_argument("--top-n", type=int, default=20, help="상위 N개 종목")
+    parser.add_argument("--verbose", action="store_true", help="진행 상황 출력")
     args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
 
     generate_json(
         use_sample=args.sample,

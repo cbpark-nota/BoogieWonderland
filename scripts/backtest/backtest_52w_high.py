@@ -31,6 +31,7 @@
 import warnings
 warnings.filterwarnings("ignore")
 
+import logging
 import sys
 import numpy as np
 import pandas as pd
@@ -40,6 +41,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 # ── 경로 설정 ──────────────────────────────────────────────
 _THIS_DIR = Path(__file__).parent
@@ -395,7 +398,7 @@ def plot_results(nav_list: list, spy_nav: list, dates: list, metrics: dict):
     path = RESULTS_DIR / "backtest_52w_high.png"
     plt.tight_layout()
     plt.savefig(path, dpi=150, bbox_inches="tight")
-    print(f"\n  차트 저장: {path}")
+    logger.info(f"\n  차트 저장: {path}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -403,60 +406,77 @@ def plot_results(nav_list: list, spy_nav: list, dates: list, metrics: dict):
 # ══════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    print("=" * 70)
-    print("  52주 신고가 돌파 전략 백테스트")
-    print(f"  기간       : {START} ~ {END}")
-    print(f"  수수료     : 편도 {COMMISSION*100:.1f}%")
-    print(f"  유니버스   : 풀 유니버스 (S&P500 + NASDAQ-100 + KOSPI200 + KOSDAQ150)")
-    print("=" * 70)
-    print()
-    print("  [전략 파라미터] — 시나리오 B 최적화 (튜닝 A~G 중 CAGR 최고·MDD 기준 충족)")
-    print(f"  HIGH_52W_THRESHOLD      = {HIGH_52W_THRESHOLD}  (52주 고점의 {HIGH_52W_THRESHOLD*100:.0f}% 이상)")
-    print(f"  VOLUME_SPIKE            = {VOLUME_SPIKE}   (20일 평균 거래량의 {VOLUME_SPIKE}배)")
-    print(f"  SURGE_EXCLUDE           = {SURGE_EXCLUDE}  (5일 내 {SURGE_EXCLUDE*100:.0f}% 급등 제외)")
-    print(f"  ADX_MIN                 = {ADX_MIN}")
-    print(f"  RSI_MAX                 = {RSI_MAX}")
-    print(f"  ATR_MULT                = {ATR_MULT}   (트레일링 스톱)")
-    print(f"  MAX_HOLD_DAYS           = {MAX_HOLD_DAYS}  (최대 보유기간)")
-    print(f"  MAX_POSITIONS           = {MAX_POSITIONS}  (최대 동시 보유)")
-    print(f"  FIRST_BREAKOUT_ONLY     = {FIRST_BREAKOUT_ONLY}  (최근 {FIRST_BREAKOUT_LOOKBACK}일 내 첫 돌파만)")
-    print()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
+    args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+
+    if args.verbose:
+        print("=" * 70)
+        print("  52주 신고가 돌파 전략 백테스트")
+        print(f"  기간       : {START} ~ {END}")
+        print(f"  수수료     : 편도 {COMMISSION*100:.1f}%")
+        print(f"  유니버스   : 풀 유니버스 (S&P500 + NASDAQ-100 + KOSPI200 + KOSDAQ150)")
+        print("=" * 70)
+        print()
+        print("  [전략 파라미터] — 시나리오 B 최적화 (튜닝 A~G 중 CAGR 최고·MDD 기준 충족)")
+        print(f"  HIGH_52W_THRESHOLD      = {HIGH_52W_THRESHOLD}  (52주 고점의 {HIGH_52W_THRESHOLD*100:.0f}% 이상)")
+        print(f"  VOLUME_SPIKE            = {VOLUME_SPIKE}   (20일 평균 거래량의 {VOLUME_SPIKE}배)")
+        print(f"  SURGE_EXCLUDE           = {SURGE_EXCLUDE}  (5일 내 {SURGE_EXCLUDE*100:.0f}% 급등 제외)")
+        print(f"  ADX_MIN                 = {ADX_MIN}")
+        print(f"  RSI_MAX                 = {RSI_MAX}")
+        print(f"  ATR_MULT                = {ATR_MULT}   (트레일링 스톱)")
+        print(f"  MAX_HOLD_DAYS           = {MAX_HOLD_DAYS}  (최대 보유기간)")
+        print(f"  MAX_POSITIONS           = {MAX_POSITIONS}  (최대 동시 보유)")
+        print(f"  FIRST_BREAKOUT_ONLY     = {FIRST_BREAKOUT_ONLY}  (최근 {FIRST_BREAKOUT_LOOKBACK}일 내 첫 돌파만)")
+        print()
 
     # ── [1] 데이터 로드 ──────────────────────────────────────
-    print("[1] 데이터 로드 (캐시 또는 yfinance 다운로드)...")
+    if args.verbose:
+        print("[1] 데이터 로드 (캐시 또는 yfinance 다운로드)...")
     all_data_raw, spy_df, etf_raw, universe_map = load_full_universe(START)
-    print(f"  → 종목 {len(all_data_raw)}개 로드 완료")
+    if args.verbose:
+        print(f"  → 종목 {len(all_data_raw)}개 로드 완료")
 
     # ── [2] 지표 계산 ─────────────────────────────────────────
-    print(f"\n[2] 종목 지표 계산 ({len(all_data_raw)}종목)...")
+    if args.verbose:
+        print(f"\n[2] 종목 지표 계산 ({len(all_data_raw)}종목)...")
     all_data = {}
     for i, (t, df) in enumerate(all_data_raw.items()):
-        if i % 100 == 0:
+        if args.verbose and i % 100 == 0:
             print(f"\r  진행: {i}/{len(all_data_raw)}", end="", flush=True)
         all_data[t] = add_indicators(df)
-    print(f"\r  완료: {len(all_data)}종목 지표 계산 완료", flush=True)
+    if args.verbose:
+        print(f"\r  완료: {len(all_data)}종목 지표 계산 완료", flush=True)
 
     # ── [3] 백테스트 실행 ─────────────────────────────────────
-    print(f"\n[3] 백테스트 실행 중... (기간: {START} ~ {END})")
+    if args.verbose:
+        print(f"\n[3] 백테스트 실행 중... (기간: {START} ~ {END})")
     nav_list, trade_log, dates = run_backtest(all_data)
-    print(f"  완료: {len(trade_log)}건 거래 (매수 {sum(1 for t in trade_log if t['action']=='BUY')}건 / 매도 {sum(1 for t in trade_log if t['action']=='SELL')}건)")
+    if args.verbose:
+        print(f"  완료: {len(trade_log)}건 거래 (매수 {sum(1 for t in trade_log if t['action']=='BUY')}건 / 매도 {sum(1 for t in trade_log if t['action']=='SELL')}건)")
 
     # ── [4] 성과 지표 ─────────────────────────────────────────
     metrics = calc_metrics(nav_list)
     spy_nav = calc_spy_nav(spy_df)
     spy_met = calc_metrics(spy_nav)
 
-    print("\n" + "═" * 70)
-    print("  성과 비교")
-    print("═" * 70)
-    print(f"  {'전략':<30} {'총수익률':>9} {'CAGR':>8} {'MDD':>8} {'샤프':>7} {'승률':>7}")
-    print("  " + "─" * 65)
-    print(f"  {'52W High 전략':<30} {metrics['총수익률']:>+9.1%} {metrics['CAGR']:>+8.1%} "
-          f"{metrics['MDD']:>+8.1%} {metrics['샤프']:>7.2f} {metrics['승률']:>7.1%}")
-    print(f"  {'SPY Buy&Hold':<30} {spy_met['총수익률']:>+9.1%} {spy_met['CAGR']:>+8.1%} "
-          f"{spy_met['MDD']:>+8.1%} {spy_met['샤프']:>7.2f} {spy_met['승률']:>7.1%}")
-    print()
-    print(f"  기간: {metrics['기간(년)']}년 ({metrics['거래일수']}거래일)")
+    if args.verbose:
+        print("\n" + "═" * 70)
+        print("  성과 비교")
+        print("═" * 70)
+        print(f"  {'전략':<30} {'총수익률':>9} {'CAGR':>8} {'MDD':>8} {'샤프':>7} {'승률':>7}")
+        print("  " + "─" * 65)
+        print(f"  {'52W High 전략':<30} {metrics['총수익률']:>+9.1%} {metrics['CAGR']:>+8.1%} "
+              f"{metrics['MDD']:>+8.1%} {metrics['샤프']:>7.2f} {metrics['승률']:>7.1%}")
+        print(f"  {'SPY Buy&Hold':<30} {spy_met['총수익률']:>+9.1%} {spy_met['CAGR']:>+8.1%} "
+              f"{spy_met['MDD']:>+8.1%} {spy_met['샤프']:>7.2f} {spy_met['승률']:>7.1%}")
+        print()
+        print(f"  기간: {metrics['기간(년)']}년 ({metrics['거래일수']}거래일)")
 
     # ── [5] 거래 내역 CSV ─────────────────────────────────────
     if trade_log:
@@ -467,27 +487,31 @@ if __name__ == "__main__":
             avg_pnl    = df_trades["pnl_pct"].mean()
             avg_hold   = df_trades["hold_days"].mean()
             reason_cnt = df_trades["reason"].value_counts()
-            print(f"\n  [거래 분석]")
-            print(f"  완결 거래: {len(sells)}건")
-            print(f"  승률     : {win_trades/len(sells):.1%} ({win_trades}/{len(sells)})")
-            print(f"  평균 수익: {avg_pnl:+.2f}%")
-            print(f"  평균 보유: {avg_hold:.1f}일")
-            print(f"  청산 이유: {reason_cnt.to_dict()}")
+            if args.verbose:
+                print(f"\n  [거래 분석]")
+                print(f"  완결 거래: {len(sells)}건")
+                print(f"  승률     : {win_trades/len(sells):.1%} ({win_trades}/{len(sells)})")
+                print(f"  평균 수익: {avg_pnl:+.2f}%")
+                print(f"  평균 보유: {avg_hold:.1f}일")
+                print(f"  청산 이유: {reason_cnt.to_dict()}")
 
             csv_path = RESULTS_DIR / "backtest_52w_high_trades.csv"
             df_trades.to_csv(csv_path, index=False, encoding="utf-8-sig")
-            print(f"\n  거래 내역 CSV: {csv_path}")
+            if args.verbose:
+                print(f"\n  거래 내역 CSV: {csv_path}")
 
     # NAV CSV
     nav_df = pd.DataFrame({"date": [START] + [str(d.date()) for d in dates],
                             "nav":  nav_list[:len(dates) + 1]})
     nav_csv = RESULTS_DIR / "backtest_52w_high_nav.csv"
     nav_df.to_csv(nav_csv, index=False, encoding="utf-8-sig")
-    print(f"  NAV CSV      : {nav_csv}")
+    if args.verbose:
+        print(f"  NAV CSV      : {nav_csv}")
 
     # ── [6] 차트 ─────────────────────────────────────────────
     plot_results(nav_list, spy_nav, dates, metrics)
 
-    print("\n" + "=" * 70)
-    print("  백테스트 완료")
-    print("=" * 70)
+    if args.verbose:
+        print("\n" + "=" * 70)
+        print("  백테스트 완료")
+        print("=" * 70)
