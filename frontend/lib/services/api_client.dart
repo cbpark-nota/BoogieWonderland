@@ -24,12 +24,41 @@ class ApiClient {
 
   Future<Map<String, dynamic>> getLatestScreening() async {
     final res = await dio.get('${ApiConfig.screening}/latest');
-    return res.data;
+    return _unwrapScreeningResponse(res.data);
+  }
+
+  Future<Map<String, dynamic>> getScreeningByDate(String date) async {
+    final res = await dio.get('${ApiConfig.screening}/history/$date');
+    return _unwrapScreeningResponse(res.data);
+  }
+
+  Future<List<String>> getScreeningHistoryDates({int days = 30}) async {
+    final res = await dio.get(
+      '${ApiConfig.screening}/history',
+      queryParameters: {'days': days},
+    );
+    final list = res.data as List;
+    return list
+        .map((e) => (e as Map<String, dynamic>)['date'] as String)
+        .toList();
   }
 
   Future<List<dynamic>> getScreeningHistory({int limit = 20}) async {
     final res = await dio.get('${ApiConfig.screening}/history', queryParameters: {'limit': limit});
     return res.data;
+  }
+
+  /// 백엔드 응답 {date, data: {...}, created_at} 구조를 벗겨 내부 data 반환.
+  /// run_date가 없으면 외부 date로 보완한다.
+  Map<String, dynamic> _unwrapScreeningResponse(dynamic raw) {
+    if (raw is Map<String, dynamic> &&
+        raw.containsKey('data') &&
+        raw['data'] is Map) {
+      final inner = Map<String, dynamic>.from(raw['data'] as Map);
+      inner['run_date'] ??= raw['date'];
+      return inner;
+    }
+    return raw as Map<String, dynamic>;
   }
 
   // Portfolio
