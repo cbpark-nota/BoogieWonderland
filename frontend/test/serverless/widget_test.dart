@@ -15,7 +15,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:momentum_app/main.dart';
 import 'package:momentum_app/providers/screening_provider.dart';
 import 'package:momentum_app/providers/market_provider.dart';
+import 'package:momentum_app/providers/serverless_providers.dart';
 import 'package:momentum_app/models/screening_result.dart';
+import 'package:momentum_app/models/portfolio_data.dart';
+
+/// DEPLOY_ENV 기본값이 serverless로 변경됨에 따라
+/// IndexedStack이 모든 화면을 pre-build할 때 네트워크 호출을 막기 위한 공통 overrides.
+List<dynamic> _serverlessOverrides() => [
+      portfolioDataProvider.overrideWith((ref) async => PortfolioData.fromJson({})),
+      historyDatesProvider.overrideWith((ref) async => []),
+      strategyDataProvider.overrideWith((ref) async => null),
+      rebalanceSignalProvider.overrideWith(
+          (ref) async => const RebalanceSignal(screeningTickers: {})),
+    ];
 
 void main() {
   // 입력: Mock provider로 앱 렌더링
@@ -26,6 +38,7 @@ void main() {
         overrides: [
           marketStatusProvider.overrideWith((ref) async => null),
           screeningProvider.overrideWith(() => _MockScreeningNotifier()),
+          ..._serverlessOverrides(),
         ],
         child: const MomentumApp(),
       ),
@@ -45,6 +58,7 @@ void main() {
         overrides: [
           marketStatusProvider.overrideWith((ref) async => null),
           screeningProvider.overrideWith(() => _MockScreeningNotifier()),
+          ..._serverlessOverrides(),
         ],
         child: const MomentumApp(),
       ),

@@ -1,6 +1,7 @@
 """스크리닝 결과 API 테스트 (SQLite 인메모리 DB 사용)."""
 import json
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -51,12 +52,21 @@ def client():
     return TestClient(app)
 
 
+def _recent_dates():
+    """오늘 기준 최근 날짜 2개를 반환 (default days=7 범위 내)."""
+    today = datetime.now().date()
+    return (today - timedelta(days=1)).isoformat(), (today - timedelta(days=2)).isoformat()
+
+
 @pytest.fixture()
 def sample_history():
-    """테스트용 스크리닝 히스토리 데이터 삽입."""
+    """테스트용 스크리닝 히스토리 데이터 삽입 (오늘 기준 상대 날짜 사용)."""
+    date1, date2 = _recent_dates()
+    run_id1 = int(date1.replace("-", ""))
+    run_id2 = int(date2.replace("-", ""))
     data = {
-        "run_id": 20260331,
-        "run_date": "2026-03-31T09:00:00",
+        "run_id": run_id1,
+        "run_date": f"{date1}T09:00:00",
         "market_status": {"spy_price": 500.0, "is_golden_cross": True},
         "strategies": {
             "balanced": {
@@ -77,26 +87,26 @@ def sample_history():
     db = _TestSession()
     try:
         db.add(ScreeningHistory(
-            date="2026-03-31",
+            date=date1,
             data_json=json.dumps(data, ensure_ascii=False),
         ))
         db.add(ScreeningHistory(
-            date="2026-03-30",
-            data_json=json.dumps({**data, "run_id": 20260330}, ensure_ascii=False),
+            date=date2,
+            data_json=json.dumps({**data, "run_id": run_id2}, ensure_ascii=False),
         ))
         # screening_result 행 추가
         db.add(ScreeningResult(
-            date="2026-03-31", strategy="balanced",
+            date=date1, strategy="balanced",
             ticker="AAPL", name="Apple Inc.", rank=1, score=95.0, market="US",
         ))
         db.add(ScreeningResult(
-            date="2026-03-31", strategy="balanced",
+            date=date1, strategy="balanced",
             ticker="MSFT", name="Microsoft", rank=2, score=90.0, market="US",
         ))
         db.commit()
     finally:
         db.close()
-    return data
+    return data, date1, date2
 
 
 # ──────────────────────────────────────────────────
@@ -109,12 +119,13 @@ class TestGetLatest:
         assert resp.status_code == 404
 
     def test_latest_returns_most_recent(self, client, sample_history):
+        _, date1, _ = sample_history
         resp = client.get("/api/screening/latest")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["date"] == "2026-03-31"
+        assert body["date"] == date1
         assert "data" in body
-        assert body["data"]["run_id"] == 20260331
+        assert body["data"]["run_id"] == int(date1.replace("-", ""))
 
 
 # ──────────────────────────────────────────────────
@@ -128,17 +139,17 @@ class TestGetHistory:
         assert resp.json() == []
 
     def test_history_default_days(self, client, sample_history):
+        _, date1, date2 = sample_history
         resp = client.get("/api/screening/history")
         assert resp.status_code == 200
         dates = [item["date"] for item in resp.json()]
-        assert "2026-03-31" in dates
-        assert "2026-03-30" in dates
+        assert date1 in dates
+        assert date2 in dates
 
     def test_history_days_param(self, client, sample_history):
         resp = client.get("/api/screening/history?days=1")
         assert resp.status_code == 200
-        # days=1 이면 오늘(2026-03-31)만 반환 (테스트 환경에서는 today가 실제 날짜이므로
-        # sample 데이터가 과거일 수 있어 0~2건이 맞음)
+        # days=1이면 오늘 데이터만 반환 (sample 데이터는 어제/그제이므로 0건이 정상)
         assert isinstance(resp.json(), list)
 
     def test_history_days_validation(self, client):
@@ -159,11 +170,12 @@ class TestGetHistoryByDate:
         assert resp.status_code == 404
 
     def test_date_found(self, client, sample_history):
-        resp = client.get("/api/screening/history/2026-03-31")
+        _, date1, _ = sample_history
+        resp = client.get(f"/api/screening/history/{date1}")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["date"] == "2026-03-31"
-        assert body["data"]["run_id"] == 20260331
+        assert body["date"] == date1
+        assert body["data"]["run_id"] == int(date1.replace("-", ""))
 
     def test_date_invalid_format(self, client):
         resp = client.get("/api/screening/history/20260331")

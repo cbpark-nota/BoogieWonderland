@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'config/app_config.dart';
+import 'config/deploy_env.dart';
 import 'models/screening_result.dart';
 import 'providers/screening_provider.dart';
 import 'providers/portfolio_provider.dart';
@@ -15,7 +15,7 @@ import 'screens/strategy_guide_tabs_screen.dart';
 import 'screens/market_cap_screen.dart';
 
 void main() {
-  if (AppConfig.isServerless) {
+  if (DeployConfig.useStaticData) {
     runApp(ProviderScope(
       overrides: [
         screeningProvider.overrideWith(() => ServerlessScreeningNotifier()),

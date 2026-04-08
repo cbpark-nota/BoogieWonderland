@@ -38,8 +38,7 @@ services:
       context: ../../frontend
       dockerfile: Dockerfile
       args:
-        API_URL: ""
-        DEPLOY_MODE: fullstack
+        DEPLOY_ENV: local
         BASE_HREF: /
     ports:
       - "${FRONTEND_PORT:-80}:80"

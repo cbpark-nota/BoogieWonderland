@@ -8,13 +8,12 @@ RUN flutter pub get
 COPY . .
 
 ARG API_URL=http://localhost:8000
-ARG DEPLOY_MODE=fullstack
+ARG DEPLOY_ENV=local
 ARG BASE_HREF=/
 
 RUN flutter build web --release \
     --base-href "${BASE_HREF}" \
-    --dart-define=API_URL=${API_URL} \
-    --dart-define=DEPLOY_MODE=${DEPLOY_MODE}
+    --dart-define=DEPLOY_ENV=${DEPLOY_ENV}
 
 # Stage 2: Nginx 서빙
 FROM nginx:alpine

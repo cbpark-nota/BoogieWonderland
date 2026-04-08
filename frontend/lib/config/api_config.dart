@@ -1,8 +1,7 @@
+import 'deploy_env.dart';
+
 class ApiConfig {
-  static const String baseUrl = String.fromEnvironment(
-    'API_URL',
-    defaultValue: 'http://localhost:8002',
-  );
+  static String get baseUrl => DeployConfig.apiBaseUrl;
 
   static const String screening = '/api/screening';
   static const String portfolio = '/api/portfolio';

@@ -15,6 +15,7 @@ v3.1 추가 개선:
 ══════════════════════════════════════════════════════════
 """
 import logging
+import os
 import sys
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -30,6 +31,21 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.constants import US_UNIVERSE, KR_UNIVERSE, ALL_UNIVERSE, SECTOR_ETF
+
+# ── 배포 환경 설정 ────────────────────────────────────────────
+# DEPLOY_ENV: "serverless" | "local" | "cloud"  (기본값: "local")
+DEPLOY_ENV = os.environ.get("DEPLOY_ENV", "local")
+
+# 환경별 CSV 출력 경로 결정
+_SCRIPT_DIR = Path(__file__).parent
+_PROJECT_ROOT = _SCRIPT_DIR.parent.parent
+_OUTPUT_DIR: Path
+if DEPLOY_ENV == "serverless":
+    _OUTPUT_DIR = _PROJECT_ROOT / "frontend" / "web" / "data"
+elif DEPLOY_ENV == "cloud":
+    _OUTPUT_DIR = _SCRIPT_DIR / "results"
+else:  # local
+    _OUTPUT_DIR = _SCRIPT_DIR / "results"
 
 # ── 기본 스크리닝 파라미터 ────────────────────────────────────
 ATR_PERIOD   = 14
@@ -556,6 +572,8 @@ if __name__ == "__main__":
     save_cols = [c for c in save_cols if c in top_final.columns]
     out = top_final[save_cols].copy()
     out.index.name = "종목코드"
-    out.to_csv("screener_v3_result.csv", encoding="utf-8-sig")
+    _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    csv_path = _OUTPUT_DIR / "screener_v3_result.csv"
+    out.to_csv(csv_path, encoding="utf-8-sig")
     if _v:
-        print(f"\n  결과 저장: screener_v3_result.csv")
+        print(f"\n  결과 저장: {csv_path}  [DEPLOY_ENV={DEPLOY_ENV}]")

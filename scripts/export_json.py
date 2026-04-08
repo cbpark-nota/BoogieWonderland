@@ -12,10 +12,20 @@ import argparse
 import io
 import json
 import logging
+import os
 import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
+
+# DEPLOY_ENV: "serverless" | "local" | "cloud"  (기본값: "serverless")
+# export_json.py는 serverless 배포용 정적 JSON 생성 스크립트이므로 기본값을 serverless로 설정.
+DEPLOY_ENV = os.environ.get("DEPLOY_ENV", "serverless")
+if DEPLOY_ENV != "serverless":
+    logging.warning(
+        "export_json.py는 DEPLOY_ENV=serverless 환경을 위한 스크립트입니다. "
+        f"현재 DEPLOY_ENV={DEPLOY_ENV}"
+    )
 
 import numpy as np
 import pandas as pd
