@@ -48,7 +48,11 @@ PRICE_52W    = 0.75   # v3 최적: 80% → 75%
 
 # ── v3.1 신규 파라미터 ────────────────────────────────────────
 INCLUDE_KR_MARKET  = False   # 변경 1: 한국 시장 제외 (True = 포함)
-REGIME_FILTER      = True    # 변경 2: SPY MA20 < MA60 시 빈 결과 반환
+# 변경 2: 레짐 필터 모드
+#   "off"   — 레짐 필터 적용 안 함
+#   "info"  — 레짐 상태를 결과에 포함하되 필터링하지 않음 (배포 기본값)
+#   "block" — 데드크로스 시 빈 결과 반환 (백테스트용)
+REGIME_FILTER_MODE = "info"
 VOL_TARGET         = 0.15    # 변경 3: 변동성 스케일링 목표 연환산 변동성
 HOLD_SPREAD        = 2.5     # 변경 5: 보유 종목 Top N×HOLD_SPREAD까지 유지
 USE_MKTCAP_WEIGHT  = True    # 변경 6: 시가총액 가중 활성화
@@ -344,7 +348,13 @@ if __name__ == "__main__":
     _parser.add_argument("--verbose", action="store_true", help="진행 상황 출력")
     _parser.add_argument("--held", nargs="*", default=[],
                          help="현재 보유 중인 종목 코드 목록 (Buy/Hold Spread 적용)")
+    _parser.add_argument("--regime-block", action="store_true",
+                         help="백테스트용: 데드크로스 시 빈 결과 반환 (block 모드 강제)")
     _args = _parser.parse_args()
+
+    # --regime-block 플래그로 block 모드 강제 활성화
+    if _args.regime_block:
+        REGIME_FILTER_MODE = "block"
 
     logging.basicConfig(
         level=logging.INFO if _args.verbose else logging.WARNING,
@@ -389,7 +399,7 @@ if __name__ == "__main__":
         print(f"  모멘텀 종목 스크리너 v3.1   기준일: {today}")
         print(f"  스톱로스: ATR({ATR_PERIOD}) × {ATR_MULT}  │  "
               f"포지션: {SIZING_MODE} (상한 {MAX_WEIGHT:.0%})")
-        print(f"  레짐 필터: {'ON' if REGIME_FILTER else 'OFF'}  │  "
+        print(f"  레짐 필터: {REGIME_FILTER_MODE}  │  "
               f"변동성 목표: {VOL_TARGET:.0%}  │  "
               f"시가총액 가중: {'ON' if USE_MKTCAP_WEIGHT else 'OFF'}")
         print("=" * 64)
@@ -406,12 +416,12 @@ if __name__ == "__main__":
         print(f"  SPY ${mkt['price']:.2f}  │  20MA ${mkt['ma20']:.2f}  │  "
               f"60MA ${mkt['ma60']:.2f}  │  {arrow}{abs(mkt['gap_pct']):.2f}%  {status}")
 
-    # 변경 2: 레짐 필터 — 데드크로스면 빈 결과 반환
-    if REGIME_FILTER and mkt and not mkt["is_golden"]:
+    # 변경 2: 레짐 필터 — block 모드에서 데드크로스면 빈 결과 반환
+    if REGIME_FILTER_MODE == "block" and mkt and not mkt["is_golden"]:
         if _v:
             print()
             print("  ┌──────────────────────────────────────────────────┐")
-            print("  │  ⚠️  레짐 필터: SPY MA20 < MA60 데드크로스           │")
+            print("  │  ⚠️  레짐 필터(block): SPY MA20 < MA60 데드크로스    │")
             print("  │  신규 진입 차단 — 빈 결과를 반환합니다.             │")
             print("  └──────────────────────────────────────────────────┘")
         exit()
@@ -526,6 +536,18 @@ if __name__ == "__main__":
                 f" {stop_s}"
                 f" {dist_s}"
             )
+
+    # ── info 모드: market_regime 필드 출력 ───────────────────────
+    if REGIME_FILTER_MODE == "info" and mkt:
+        regime_info = {
+            "golden_cross": mkt["is_golden"],
+            "spy_ma20"    : round(mkt["ma20"], 2),
+            "spy_ma60"    : round(mkt["ma60"], 2),
+            "gap_pct"     : round(mkt["gap_pct"], 2),
+        }
+        if _v:
+            status = "골든크로스" if regime_info["golden_cross"] else "데드크로스"
+            print(f"\n  market_regime: {regime_info}  ({status})")
 
     # ── CSV 저장 ──────────────────────────────────────────────
     save_cols = ["weight", "weight_raw", "score", "ADX", "RSI",

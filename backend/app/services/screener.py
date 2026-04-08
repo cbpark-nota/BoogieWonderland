@@ -65,7 +65,11 @@ MAX_WEIGHT = 0.20
 
 # ── v3.1 신규 파라미터 ────────────────────────────────────────
 INCLUDE_KR_MARKET = False   # 변경 1: 한국 시장 제외
-REGIME_FILTER     = True    # 변경 2: SPY MA20 < MA60 시 빈 결과 반환
+# 변경 2: 레짐 필터 모드
+#   "off"   — 레짐 필터 적용 안 함
+#   "info"  — 레짐 상태를 결과에 포함하되 필터링하지 않음 (배포 기본값)
+#   "block" — 데드크로스 시 빈 결과 반환 (백테스트용)
+REGIME_FILTER_MODE = "info"
 VOL_TARGET        = 0.15    # 변경 3: 변동성 스케일링 목표 연환산 변동성
 HOLD_SPREAD       = 2.5     # 변경 5: 보유 종목 Top N×HOLD_SPREAD까지 유지
 USE_MKTCAP_WEIGHT = True    # 변경 6: 시가총액 가중 활성화
@@ -297,7 +301,7 @@ def run_screening(held_tickers: list[str] | None = None) -> dict:
     market = check_market()
     spy_close_series = market["close"] if market else None
 
-    if REGIME_FILTER and market and not market["is_golden"]:
+    if REGIME_FILTER_MODE == "block" and market and not market["is_golden"]:
         return {
             "market": {k: v for k, v in market.items() if k != "close"},
             "regime_blocked": True,
@@ -383,8 +387,20 @@ def run_screening(held_tickers: list[str] | None = None) -> dict:
             })
 
     market_out = {k: v for k, v in market.items() if k != "close"} if market else None
+
+    # info 모드: market_regime 필드 구성
+    market_regime = None
+    if REGIME_FILTER_MODE == "info" and market:
+        market_regime = {
+            "golden_cross": market["is_golden"],
+            "spy_ma20"    : round(market["ma20"], 2),
+            "spy_ma60"    : round(market["ma60"], 2),
+            "gap_pct"     : round(market["gap_pct"], 2),
+        }
+
     return {
         "market": market_out,
+        "market_regime": market_regime,
         "vol_scale": vol_scale,
         "regime_blocked": False,
         "total_screened": len(all_data),

@@ -3,7 +3,7 @@ V3.0 vs V3.1 알고리즘 비교 백테스트
 ══════════════════════════════════════════════════════════════
 V3.0 (기존):
   - INCLUDE_KR_MARKET = True  (한국 포함)
-  - REGIME_FILTER = False     (시장 레짐 필터 없음)
+  - REGIME_FILTER_MODE = "off"  (시장 레짐 필터 없음)
   - VOL_TARGET 미적용
   - ret3m 사용
   - Buy/Hold Spread 없음
@@ -12,7 +12,7 @@ V3.0 (기존):
 
 V3.1 (개선):
   - INCLUDE_KR_MARKET = False (미국만)
-  - REGIME_FILTER = True      (SPY MA20 < MA60 → 진입 없음)
+  - REGIME_FILTER_MODE = "block" (SPY MA20 < MA60 → 진입 없음)
   - VOL_TARGET = 0.15         (SPY 실현변동성 기반 포지션 스케일)
   - ret12m_skip1 사용
   - Buy/Hold Spread = 2.5     (Top 25까지 보유 유지)
