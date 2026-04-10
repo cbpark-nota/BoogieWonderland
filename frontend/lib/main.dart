@@ -218,6 +218,29 @@ class _MainNavigationState extends State<MainNavigation> {
                 );
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.show_chart),
+              title: const Text('트렌드 분석'),
+              subtitle: const Text('시총 Top 20 모니터링', style: TextStyle(fontSize: 11)),
+              onTap: () {
+                _scaffoldKey.currentState?.closeDrawer();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (ctx) => Scaffold(
+                      appBar: AppBar(
+                        leading: IconButton(
+                          icon: const Icon(Icons.arrow_back_ios),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                        title: const Text('트렌드 분석'),
+                      ),
+                      body: const StrategyGuideScreen(),
+                    ),
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
