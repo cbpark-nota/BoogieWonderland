@@ -790,6 +790,9 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
                 json.dump(kr_output, f, ensure_ascii=False, indent=2)
             logger.info("  KR 전략 결과 저장: %s", kr_full_path)
 
+        # 숏스퀴즈 스크리닝
+        export_short_squeeze(output_dir, us_tickers, kr_tickers_pykrx, run_dt)
+
     # 시총 Top 20 (트렌드 모니터링)
     try:
         mc_data = fetch_market_cap_top20(us_tickers, us_sectors, output_dir)
@@ -1109,6 +1112,57 @@ def portfolio_to_json(output_dir: Path, xlsx_path: Path | None = None) -> None:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
     logger.info("  포트폴리오 JSON 저장 완료: %s (%d개 종목)", out_path, len(holdings))
+
+
+def export_short_squeeze(
+    output_dir: Path,
+    us_tickers: list[str],
+    kr_tickers: list[str],
+    now: datetime,
+) -> None:
+    """숏스퀴즈 스크리닝 실행 후 short_squeeze_latest.json으로 저장.
+
+    screener/short_squeeze_screener.py의 run_us_screening / run_kr_screening을
+    호출하여 결과를 output_dir/short_squeeze_latest.json에 저장한다.
+    실패 시 경고 로그만 남기고 전체 스크리닝 파이프라인은 계속 진행한다.
+    """
+    try:
+        import short_squeeze_screener as sqz  # screener/ 경로는 sys.path에 추가됨
+
+        logger.info(
+            "숏스퀴즈 스크리닝 중 (US %d개, KR %d개)...",
+            len(us_tickers), len(kr_tickers),
+        )
+        us_df = sqz.run_us_screening(us_tickers)
+        kr_df = sqz.run_kr_screening(kr_tickers)
+
+        sq_output: dict = {
+            "run_id":            int(now.strftime("%Y%m%d")),
+            "run_date":          now.strftime("%Y-%m-%dT%H:%M:%S"),
+            "params": {
+                "us_si_float_min":  float(sqz.US_SI_FLOAT_MIN),
+                "us_dtc_min":       float(sqz.US_DTC_MIN),
+                "us_ctb_min":       float(sqz.US_CTB_MIN),
+                "us_vol_ratio_min": float(sqz.US_VOL_RATIO_MIN),
+                "kr_si_pct_min":    float(sqz.KR_SI_PCT_MIN),
+            },
+            "total_us_screened": len(us_tickers),
+            "total_kr_screened": len(kr_tickers),
+            "total_us_passed":   len(us_df),
+            "total_kr_passed":   len(kr_df),
+            "us_results":        sqz.build_output_records(us_df),
+            "kr_results":        sqz.build_output_records(kr_df),
+        }
+
+        out_path = output_dir / "short_squeeze_latest.json"
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(_sanitize_nan(sq_output), f, ensure_ascii=False, indent=2)
+        logger.info(
+            "  숏스퀴즈 결과 저장: %s (US %d개, KR %d개)",
+            out_path, len(us_df), len(kr_df),
+        )
+    except Exception as e:
+        logger.warning("  숏스퀴즈 스크리닝 실패 (%s), 건너뜀", e)
 
 
 def _sanitize_nan(obj):
