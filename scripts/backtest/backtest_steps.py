@@ -353,14 +353,14 @@ def calc_metrics(nav_list, label):
     }
 
 def print_metrics(m):
-    logger.info(f"  {'─'*52}")
-    logger.info(f"  {m['label']}")
-    logger.info(f"  {'─'*52}")
-    logger.info(f"  총수익률  {m['총수익률']:>+8.1%}   "
-                f"CAGR      {m['CAGR']:>+8.1%}")
-    logger.info(f"  MDD       {m['MDD']:>+8.1%}   "
-                f"샤프지수  {m['샤프']:>8.2f}")
-    logger.info(f"  월간승률  {m['월승률']:>8.1%}")
+    print(f"  {'─'*52}")
+    print(f"  {m['label']}")
+    print(f"  {'─'*52}")
+    print(f"  총수익률  {m['총수익률']:>+8.1%}   "
+          f"CAGR      {m['CAGR']:>+8.1%}")
+    print(f"  MDD       {m['MDD']:>+8.1%}   "
+          f"샤프지수  {m['샤프']:>8.2f}")
+    print(f"  월간승률  {m['월승률']:>8.1%}")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -412,7 +412,7 @@ def plot_all(results, spy_nav):
     plt.xticks(rotation=15, fontsize=8)
 
     plt.savefig(RESULTS_DIR / "backtest_steps_result.png", dpi=150, bbox_inches="tight")
-    logger.info("\n  차트 저장: backtest_steps_result.png")
+    print("\n  차트 저장: backtest_steps_result.png")
     plt.show()
 
 
@@ -425,59 +425,49 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
     args = parser.parse_args()
     logging.basicConfig(
-        level=logging.INFO if args.verbose else logging.WARNING,
+        level=logging.DEBUG if args.verbose else logging.WARNING,
         format="%(message)s",
     )
 
-    if args.verbose:
-        print("=" * 60)
-        print("  단계별 알고리즘 개선 백테스트")
-        print(f"  기간: {START} ~ {END} | 리밸런싱: 매월 말")
-        print("=" * 60)
+    logger.debug("=" * 60)
+    logger.debug("  단계별 알고리즘 개선 백테스트")
+    logger.debug(f"  기간: {START} ~ {END} | 리밸런싱: 매월 말")
+    logger.debug("=" * 60)
 
     # ── 데이터 다운로드 ──────────────────────────────────────
-    if args.verbose:
-        print("\n[데이터 다운로드]")
+    logger.debug("\n[데이터 다운로드]")
     all_tickers = list(ALL_UNIVERSE.keys())
-    if args.verbose:
-        print(f"  종목 데이터 ({len(all_tickers)}개) 다운로드 중...")
+    logger.debug(f"  종목 데이터 ({len(all_tickers)}개) 다운로드 중...")
     all_data = download_all(all_tickers, START, END)
-    if args.verbose:
-        print(f"  → {len(all_data)}개 수신 완료")
+    logger.debug(f"  → {len(all_data)}개 수신 완료")
 
     # 섹터 ETF 데이터 (Step4용)
     etf_tickers = list(set(SECTOR_ETF.values()))
-    if args.verbose:
-        print(f"  섹터 ETF ({len(etf_tickers)}개) 다운로드 중...")
+    logger.debug(f"  섹터 ETF ({len(etf_tickers)}개) 다운로드 중...")
     etf_data = download_all(etf_tickers, START, END)
-    if args.verbose:
-        print(f"  → {len(etf_data)}개 수신 완료")
+    logger.debug(f"  → {len(etf_data)}개 수신 완료")
 
     # SPY 벤치마크
-    if args.verbose:
-        print("  SPY 벤치마크 다운로드 중...")
+    logger.debug("  SPY 벤치마크 다운로드 중...")
     spy_raw = yf.download("SPY", start=START, end=END,
                           auto_adjust=True, progress=False)
     spy_monthly = spy_raw["Close"].resample("BME").last().pct_change().fillna(0)
     spy_nav = [1.0] + list((1 + spy_monthly).cumprod().values)
 
     # 지표 계산
-    if args.verbose:
-        print(f"\n  지표 계산 중 ({len(all_data)}개)...")
+    logger.debug(f"\n  지표 계산 중 ({len(all_data)}개)...")
     for t in list(all_data.keys()):
         all_data[t] = add_indicators(all_data[t])
     for t in list(etf_data.keys()):
         etf_data[t] = add_indicators(etf_data[t])
-    if args.verbose:
-        print("  완료")
+    logger.debug("  완료")
 
     results = []
 
     # ── 베이스라인 ───────────────────────────────────────────
-    if args.verbose:
-        print("\n" + "═"*60)
-        print("  [베이스라인] 원본 알고리즘")
-        print("═"*60)
+    logger.debug("\n" + "═"*60)
+    logger.debug("  [베이스라인] 원본 알고리즘")
+    logger.debug("═"*60)
     cfg_base = dict(rsi_max=70, swing_hh_hl=False,
                     use_etf_sector=False, use_52w_filter=False)
     nav_base = run_backtest(all_data, ALL_UNIVERSE, cfg_base,
@@ -487,112 +477,100 @@ if __name__ == "__main__":
     results.append(("베이스라인", nav_base))
 
     # ── Step 1: 스톱로스 ─────────────────────────────────────
-    if args.verbose:
-        print("\n" + "═"*60)
-        print("  [Step 1] 트레일링 스톱로스 추가 (-10%)")
-        print("═"*60)
+    logger.debug("\n" + "═"*60)
+    logger.debug("  [Step 1] 트레일링 스톱로스 추가 (-10%)")
+    logger.debug("═"*60)
     nav_s1 = run_backtest(all_data, ALL_UNIVERSE, cfg_base,
                           "Step1", stop_pct=-0.10)
     m_s1 = calc_metrics(nav_s1, "Step1: 스톱로스 (-10%)")
     print_metrics(m_s1)
-    if args.verbose:
-        d_cagr = m_s1["CAGR"] - m_base["CAGR"]
-        d_mdd  = m_s1["MDD"]  - m_base["MDD"]
-        print(f"\n  베이스 대비 → CAGR {d_cagr:+.1%}  MDD {d_mdd:+.1%}")
+    d_cagr = m_s1["CAGR"] - m_base["CAGR"]
+    d_mdd  = m_s1["MDD"]  - m_base["MDD"]
+    print(f"\n  베이스 대비 → CAGR {d_cagr:+.1%}  MDD {d_mdd:+.1%}")
     results.append(("Step1: 스톱로스", nav_s1))
 
     # ── Step 2: RSI 상한 조정 ─────────────────────────────────
-    if args.verbose:
-        print("\n" + "═"*60)
-        print("  [Step 2] RSI 상한 70 → 75 (+ Step1 포함)")
-        print("═"*60)
+    logger.debug("\n" + "═"*60)
+    logger.debug("  [Step 2] RSI 상한 70 → 75 (+ Step1 포함)")
+    logger.debug("═"*60)
     cfg_s2 = dict(rsi_max=75, swing_hh_hl=False,
                   use_etf_sector=False, use_52w_filter=False)
     nav_s2 = run_backtest(all_data, ALL_UNIVERSE, cfg_s2,
                           "Step2", stop_pct=-0.10)
     m_s2 = calc_metrics(nav_s2, "Step2: RSI 상한 75")
     print_metrics(m_s2)
-    if args.verbose:
-        d_cagr = m_s2["CAGR"] - m_s1["CAGR"]
-        d_mdd  = m_s2["MDD"]  - m_s1["MDD"]
-        print(f"\n  Step1 대비 → CAGR {d_cagr:+.1%}  MDD {d_mdd:+.1%}")
+    d_cagr = m_s2["CAGR"] - m_s1["CAGR"]
+    d_mdd  = m_s2["MDD"]  - m_s1["MDD"]
+    print(f"\n  Step1 대비 → CAGR {d_cagr:+.1%}  MDD {d_mdd:+.1%}")
     results.append(("Step2: RSI 75", nav_s2))
 
     # ── Step 3: HH-HL 스윙 포인트 ────────────────────────────
-    if args.verbose:
-        print("\n" + "═"*60)
-        print("  [Step 3] HH-HL 일봉 → 스윙 포인트 기준 (+ Step1,2 포함)")
-        print("═"*60)
+    logger.debug("\n" + "═"*60)
+    logger.debug("  [Step 3] HH-HL 일봉 → 스윙 포인트 기준 (+ Step1,2 포함)")
+    logger.debug("═"*60)
     cfg_s3 = dict(rsi_max=75, swing_hh_hl=True,
                   use_etf_sector=False, use_52w_filter=False)
     nav_s3 = run_backtest(all_data, ALL_UNIVERSE, cfg_s3,
                           "Step3", stop_pct=-0.10)
     m_s3 = calc_metrics(nav_s3, "Step3: HH-HL 스윙 기준")
     print_metrics(m_s3)
-    if args.verbose:
-        d_cagr = m_s3["CAGR"] - m_s2["CAGR"]
-        d_mdd  = m_s3["MDD"]  - m_s2["MDD"]
-        print(f"\n  Step2 대비 → CAGR {d_cagr:+.1%}  MDD {d_mdd:+.1%}")
+    d_cagr = m_s3["CAGR"] - m_s2["CAGR"]
+    d_mdd  = m_s3["MDD"]  - m_s2["MDD"]
+    print(f"\n  Step2 대비 → CAGR {d_cagr:+.1%}  MDD {d_mdd:+.1%}")
     results.append(("Step3: HH-HL 스윙", nav_s3))
 
     # ── Step 4: 섹터 ETF 기준 ────────────────────────────────
-    if args.verbose:
-        print("\n" + "═"*60)
-        print("  [Step 4] 섹터 강도 → ETF 초과수익률 기준 (+ Step1,2,3 포함)")
-        print("═"*60)
+    logger.debug("\n" + "═"*60)
+    logger.debug("  [Step 4] 섹터 강도 → ETF 초과수익률 기준 (+ Step1,2,3 포함)")
+    logger.debug("═"*60)
     cfg_s4 = dict(rsi_max=75, swing_hh_hl=True,
                   use_etf_sector=True, use_52w_filter=False)
     nav_s4 = run_backtest(all_data, ALL_UNIVERSE, cfg_s4,
                           "Step4", etf_data=etf_data, stop_pct=-0.10)
     m_s4 = calc_metrics(nav_s4, "Step4: 섹터 ETF 기준")
     print_metrics(m_s4)
-    if args.verbose:
-        d_cagr = m_s4["CAGR"] - m_s3["CAGR"]
-        d_mdd  = m_s4["MDD"]  - m_s3["MDD"]
-        print(f"\n  Step3 대비 → CAGR {d_cagr:+.1%}  MDD {d_mdd:+.1%}")
+    d_cagr = m_s4["CAGR"] - m_s3["CAGR"]
+    d_mdd  = m_s4["MDD"]  - m_s3["MDD"]
+    print(f"\n  Step3 대비 → CAGR {d_cagr:+.1%}  MDD {d_mdd:+.1%}")
     results.append(("Step4: 섹터 ETF", nav_s4))
 
     # ── Step 5: 52주 신고가 필터 ──────────────────────────────
-    if args.verbose:
-        print("\n" + "═"*60)
-        print("  [Step 5] 52주 신고가 20% 이내 필터 (전체 누적)")
-        print("═"*60)
+    logger.debug("\n" + "═"*60)
+    logger.debug("  [Step 5] 52주 신고가 20% 이내 필터 (전체 누적)")
+    logger.debug("═"*60)
     cfg_s5 = dict(rsi_max=75, swing_hh_hl=True,
                   use_etf_sector=True, use_52w_filter=True)
     nav_s5 = run_backtest(all_data, ALL_UNIVERSE, cfg_s5,
                           "Step5", etf_data=etf_data, stop_pct=-0.10)
     m_s5 = calc_metrics(nav_s5, "Step5: 52주 신고가 필터")
     print_metrics(m_s5)
-    if args.verbose:
-        d_cagr = m_s5["CAGR"] - m_s4["CAGR"]
-        d_mdd  = m_s5["MDD"]  - m_s4["MDD"]
-        print(f"\n  Step4 대비 → CAGR {d_cagr:+.1%}  MDD {d_mdd:+.1%}")
+    d_cagr = m_s5["CAGR"] - m_s4["CAGR"]
+    d_mdd  = m_s5["MDD"]  - m_s4["MDD"]
+    print(f"\n  Step4 대비 → CAGR {d_cagr:+.1%}  MDD {d_mdd:+.1%}")
     results.append(("Step5: 최종", nav_s5))
 
     # ── 종합 비교표 ──────────────────────────────────────────
-    if args.verbose:
-        print("\n" + "═"*60)
-        print("  종합 비교")
-        print("═"*60)
+    print("\n" + "═"*60)
+    print("  종합 비교")
+    print("═"*60)
     all_metrics = [m_base, m_s1, m_s2, m_s3, m_s4, m_s5]
     spy_m = calc_metrics(spy_nav, "S&P500 (SPY)")
     all_metrics.append(spy_m)
 
-    if args.verbose:
-        header = f"  {'전략':<22} {'총수익률':>8} {'CAGR':>8} {'MDD':>8} {'샤프':>7} {'월승률':>7}"
-        print(header)
-        print("  " + "─" * 62)
-        for m in all_metrics:
-            mark = " ◀ 최종" if "Step5" in m["label"] else ""
-            print(
-                f"  {m['label']:<22} "
-                f"{m['총수익률']:>+8.1%} "
-                f"{m['CAGR']:>+8.1%} "
-                f"{m['MDD']:>+8.1%} "
-                f"{m['샤프']:>7.2f} "
-                f"{m['월승률']:>7.1%}"
-                f"{mark}"
-            )
+    header = f"  {'전략':<22} {'총수익률':>8} {'CAGR':>8} {'MDD':>8} {'샤프':>7} {'월승률':>7}"
+    print(header)
+    print("  " + "─" * 62)
+    for m in all_metrics:
+        mark = " ◀ 최종" if "Step5" in m["label"] else ""
+        print(
+            f"  {m['label']:<22} "
+            f"{m['총수익률']:>+8.1%} "
+            f"{m['CAGR']:>+8.1%} "
+            f"{m['MDD']:>+8.1%} "
+            f"{m['샤프']:>7.2f} "
+            f"{m['월승률']:>7.1%}"
+            f"{mark}"
+        )
 
     # ── 결과 저장 ────────────────────────────────────────────
     rows = []
@@ -607,8 +585,7 @@ if __name__ == "__main__":
         })
     pd.DataFrame(rows).to_csv(RESULTS_DIR / "step_comparison.csv",
                                index=False, encoding="utf-8-sig")
-    if args.verbose:
-        print("\n  비교 결과 저장: step_comparison.csv")
+    print("\n  비교 결과 저장: step_comparison.csv")
 
     # ── 차트 출력 ────────────────────────────────────────────
     plot_all(results, spy_nav)

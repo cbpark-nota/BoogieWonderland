@@ -656,10 +656,10 @@ def calc_metrics(nav_list: list, label: str) -> dict:
 
 
 def print_metrics(m: dict):
-    logger.info(f"  {'─'*56}")
-    logger.info(f"  {m['label']}")
-    logger.info(f"  총수익률 {m['총수익률']:>+8.1%}   CAGR {m['CAGR']:>+8.1%}")
-    logger.info(f"  MDD      {m['MDD']:>+8.1%}   샤프 {m['샤프']:>8.2f}   월승률 {m['월승률']:.1%}")
+    print(f"  {'─'*56}")
+    print(f"  {m['label']}")
+    print(f"  총수익률 {m['총수익률']:>+8.1%}   CAGR {m['CAGR']:>+8.1%}")
+    print(f"  MDD      {m['MDD']:>+8.1%}   샤프 {m['샤프']:>8.2f}   월승률 {m['월승률']:.1%}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -710,7 +710,7 @@ def plot_results(results: list, spy_nav: list):
 
     path = RESULTS_DIR / "entry_timing_comparison.png"
     plt.savefig(path, dpi=150, bbox_inches="tight")
-    logger.info(f"\n  차트 저장: {path}")
+    print(f"\n  차트 저장: {path}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -722,35 +722,29 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
     args = parser.parse_args()
     logging.basicConfig(
-        level=logging.INFO if args.verbose else logging.WARNING,
+        level=logging.DEBUG if args.verbose else logging.WARNING,
         format="%(message)s",
     )
 
-    if args.verbose:
-        print("=" * 64)
-        print("  바닥 확인 진입 타이밍 전략 백테스트")
-        print(f"  기간: {START} ~ {END}")
-        print(f"  수수료: 편도 {COMMISSION*100:.1f}% (왕복 {COMMISSION*2*100:.1f}%)")
-        print(f"  유니버스: US {len(US_UNIVERSE)}종목 + KR {len(KR_UNIVERSE)}종목")
-        print("=" * 64)
+    logger.debug("=" * 64)
+    logger.debug("  바닥 확인 진입 타이밍 전략 백테스트")
+    logger.debug(f"  기간: {START} ~ {END}")
+    logger.debug(f"  수수료: 편도 {COMMISSION*100:.1f}% (왕복 {COMMISSION*2*100:.1f}%)")
+    logger.debug(f"  유니버스: US {len(US_UNIVERSE)}종목 + KR {len(KR_UNIVERSE)}종목")
+    logger.debug("=" * 64)
 
     # ── 데이터 다운로드
-    if args.verbose:
-        print("\n[1] 데이터 다운로드")
+    logger.debug("\n[1] 데이터 다운로드")
     all_tickers = list(ALL_UNIVERSE.keys())
-    if args.verbose:
-        print(f"  전체 {len(all_tickers)}종목 다운로드 중...")
+    logger.debug(f"  전체 {len(all_tickers)}종목 다운로드 중...")
     all_data_raw = download_all(all_tickers, START, END)
-    if args.verbose:
-        print(f"  → {len(all_data_raw)}개 완료")
+    logger.debug(f"  → {len(all_data_raw)}개 완료")
 
     etf_tickers = list(set(SECTOR_ETF.values()))
     etf_raw  = download_all(etf_tickers, START, END)
     etf_data = {t: add_indicators(df) for t, df in etf_raw.items()}
-    if args.verbose:
-        print(f"  섹터 ETF {len(etf_data)}개 완료")
-
-        print("  SPY 다운로드...")
+    logger.debug(f"  섹터 ETF {len(etf_data)}개 완료")
+    logger.debug("  SPY 다운로드...")
     spy_raw     = yf.download("SPY", start=START, end=END,
                                auto_adjust=True, progress=False)
     spy_close   = spy_raw["Close"].squeeze()
@@ -758,19 +752,16 @@ if __name__ == "__main__":
     spy_nav     = [1.0] + list((1 + spy_monthly).cumprod().values.flatten())
 
     # ── 지표 계산
-    if args.verbose:
-        print(f"\n[2] 지표 계산 ({len(all_data_raw)}종목)...")
+    logger.debug(f"\n[2] 지표 계산 ({len(all_data_raw)}종목)...")
     all_data = {t: add_indicators(df) for t, df in all_data_raw.items()}
-    if args.verbose:
-        print("  완료")
+    logger.debug("  완료")
 
     results = []
     all_metrics = []
 
     # ── 전략 A: 기존 방식
-    if args.verbose:
-        print("\n" + "═" * 64)
-        print("  [전략 A] 기존 방식 — MA20 > MA50 > MA200 정배열")
+    logger.debug("\n" + "═" * 64)
+    logger.debug("  [전략 A] 기존 방식 — MA20 > MA50 > MA200 정배열")
     nav_a = run_backtest(all_data, etf_data, strategy="A")
     m_a = calc_metrics(nav_a, "A: 기존(MA정배열)")
     print_metrics(m_a)
@@ -778,30 +769,26 @@ if __name__ == "__main__":
     all_metrics.append(m_a)
 
     # ── 전략 B: 바닥 확인
-    if args.verbose:
-        print("\n" + "═" * 64)
-        print("  [전략 B] 신규 — MA20/MA60 데드크로스 → 30일 바닥 확인")
+    logger.debug("\n" + "═" * 64)
+    logger.debug("  [전략 B] 신규 — MA20/MA60 데드크로스 → 30일 바닥 확인")
     nav_b = run_backtest(all_data, etf_data, strategy="B")
     m_b = calc_metrics(nav_b, "B: 바닥확인")
     print_metrics(m_b)
-    if args.verbose:
-        dc = m_b["CAGR"] - m_a["CAGR"]
-        dm = m_b["MDD"]  - m_a["MDD"]
-        print(f"\n  A 대비 → CAGR {dc:+.1%}  MDD {dm:+.1%}")
+    dc = m_b["CAGR"] - m_a["CAGR"]
+    dm = m_b["MDD"]  - m_a["MDD"]
+    print(f"\n  A 대비 → CAGR {dc:+.1%}  MDD {dm:+.1%}")
     results.append(("B: 바닥확인", nav_b))
     all_metrics.append(m_b)
 
     # ── 전략 C: 3단계 진입
-    if args.verbose:
-        print("\n" + "═" * 64)
-        print("  [전략 C] 3단계 진입 — 바닥50% → MA50기울기80% → 골든크로스100%")
+    logger.debug("\n" + "═" * 64)
+    logger.debug("  [전략 C] 3단계 진입 — 바닥50% → MA50기울기80% → 골든크로스100%")
     nav_c = run_backtest(all_data, etf_data, strategy="C")
     m_c = calc_metrics(nav_c, "C: 3단계진입")
     print_metrics(m_c)
-    if args.verbose:
-        dc = m_c["CAGR"] - m_a["CAGR"]
-        dm = m_c["MDD"]  - m_a["MDD"]
-        print(f"\n  A 대비 → CAGR {dc:+.1%}  MDD {dm:+.1%}")
+    dc = m_c["CAGR"] - m_a["CAGR"]
+    dm = m_c["MDD"]  - m_a["MDD"]
+    print(f"\n  A 대비 → CAGR {dc:+.1%}  MDD {dm:+.1%}")
     results.append(("C: 3단계진입", nav_c))
     all_metrics.append(m_c)
 
@@ -810,48 +797,43 @@ if __name__ == "__main__":
     all_metrics.append(m_spy)
 
     # ── 종합 비교 표
-    if args.verbose:
-        print("\n" + "═" * 64)
-        print("  종합 성과 비교")
-        print("═" * 64)
-        print(f"  {'전략':<24} {'총수익률':>8} {'CAGR':>8} "
-              f"{'MDD':>8} {'샤프':>7} {'월승률':>7}")
-        print("  " + "─" * 62)
-        for m in all_metrics:
-            mark = " ◀ 신규" if m["label"].startswith("B") else \
-                   " ◀ 3단계" if m["label"].startswith("C") else ""
-            print(f"  {m['label']:<24} {m['총수익률']:>+8.1%} {m['CAGR']:>+8.1%} "
-                  f"{m['MDD']:>+8.1%} {m['샤프']:>7.2f} {m['월승률']:>7.1%}{mark}")
+    print("\n" + "═" * 64)
+    print("  종합 성과 비교")
+    print("═" * 64)
+    print(f"  {'전략':<24} {'총수익률':>8} {'CAGR':>8} "
+          f"{'MDD':>8} {'샤프':>7} {'월승률':>7}")
+    print("  " + "─" * 62)
+    for m in all_metrics:
+        mark = " ◀ 신규" if m["label"].startswith("B") else \
+               " ◀ 3단계" if m["label"].startswith("C") else ""
+        print(f"  {m['label']:<24} {m['총수익률']:>+8.1%} {m['CAGR']:>+8.1%} "
+              f"{m['MDD']:>+8.1%} {m['샤프']:>7.2f} {m['월승률']:>7.1%}{mark}")
 
     # ── 위양성 분석
-    if args.verbose:
-        print("\n" + "═" * 64)
-        print("  [위양성 분석] 바닥 확인 후 60일 내 신저점 발생률")
+    logger.debug("\n" + "═" * 64)
+    logger.debug("  [위양성 분석] 바닥 확인 후 60일 내 신저점 발생률")
     fp_df = analyze_false_positives(all_data, lookforward=60)
     if len(fp_df) > 0:
         total   = len(fp_df)
         fp_cnt  = fp_df["false_positive"].sum()
         fp_rate = fp_cnt / total
-        if args.verbose:
-            print(f"  총 바닥확인 이벤트: {total}건")
-            print(f"  위양성(신저점 재발생): {int(fp_cnt)}건 ({fp_rate:.1%})")
-            print(f"  진양성(바닥 유지):    {total-int(fp_cnt)}건 ({1-fp_rate:.1%})")
+        print(f"  총 바닥확인 이벤트: {total}건")
+        print(f"  위양성(신저점 재발생): {int(fp_cnt)}건 ({fp_rate:.1%})")
+        print(f"  진양성(바닥 유지):    {total-int(fp_cnt)}건 ({1-fp_rate:.1%})")
 
-            # 마켓별 분석
-            fp_df["market"] = fp_df["ticker"].apply(
-                lambda t: "KR" if t.endswith(".KS") or t.endswith(".KQ") else "US"
-            )
-            for mkt, grp in fp_df.groupby("market"):
-                r = grp["false_positive"].mean()
-                print(f"    {mkt}: {r:.1%} 위양성 ({len(grp)}건 중 {int(grp['false_positive'].sum())}건)")
+        # 마켓별 분석
+        fp_df["market"] = fp_df["ticker"].apply(
+            lambda t: "KR" if t.endswith(".KS") or t.endswith(".KQ") else "US"
+        )
+        for mkt, grp in fp_df.groupby("market"):
+            r = grp["false_positive"].mean()
+            print(f"    {mkt}: {r:.1%} 위양성 ({len(grp)}건 중 {int(grp['false_positive'].sum())}건)")
 
         fp_df.to_csv(RESULTS_DIR / "entry_timing_fp_analysis.csv",
                      index=False, encoding="utf-8-sig")
-        if args.verbose:
-            print("  위양성 상세: entry_timing_fp_analysis.csv")
+        print("  위양성 상세: entry_timing_fp_analysis.csv")
     else:
-        if args.verbose:
-            print("  바닥확인 이벤트 없음")
+        print("  바닥확인 이벤트 없음")
 
     # ── CSV 저장
     rows = [{
@@ -864,13 +846,11 @@ if __name__ == "__main__":
     } for m in all_metrics]
     csv_path = RESULTS_DIR / "entry_timing_comparison.csv"
     pd.DataFrame(rows).to_csv(csv_path, index=False, encoding="utf-8-sig")
-    if args.verbose:
-        print(f"\n  비교 결과: {csv_path}")
+    print(f"\n  비교 결과: {csv_path}")
 
     # ── 차트
     plot_results(results, spy_nav)
 
-    if args.verbose:
-        print("\n" + "=" * 64)
-        print("  백테스트 완료")
-        print("=" * 64)
+    print("\n" + "=" * 64)
+    print("  백테스트 완료")
+    print("=" * 64)

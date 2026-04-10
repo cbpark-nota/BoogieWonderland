@@ -88,10 +88,10 @@ def calc_metrics_biweekly(nav_list: list, label: str) -> dict:
 
 
 def print_metrics(m: dict):
-    logger.info(f"  {'─'*60}")
-    logger.info(f"  {m['label']}")
-    logger.info(f"  총수익률 {m['총수익률']:>+8.1%}   CAGR {m['CAGR']:>+8.1%}")
-    logger.info(f"  MDD      {m['MDD']:>+8.1%}   샤프 {m['샤프']:>8.2f}   기간승률 {m['기간승률']:.1%}")
+    print(f"  {'─'*60}")
+    print(f"  {m['label']}")
+    print(f"  총수익률 {m['총수익률']:>+8.1%}   CAGR {m['CAGR']:>+8.1%}")
+    print(f"  MDD      {m['MDD']:>+8.1%}   샤프 {m['샤프']:>8.2f}   기간승률 {m['기간승률']:.1%}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -142,7 +142,7 @@ def plot_results(results: list, spy_nav: list):
     path = RESULTS_DIR / "biweekly_A_all_strategies.png"
     plt.tight_layout()
     plt.savefig(path, dpi=150, bbox_inches="tight")
-    logger.info(f"\n  차트 저장: {path}")
+    print(f"\n  차트 저장: {path}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -154,46 +154,41 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
     args = parser.parse_args()
     logging.basicConfig(
-        level=logging.INFO if args.verbose else logging.WARNING,
+        level=logging.DEBUG if args.verbose else logging.WARNING,
         format="%(message)s",
     )
 
-    if args.verbose:
-        print("=" * 70)
-        print("  격주(2W) 리밸런싱 × 4전략 × A진입방식(MA정배열) 백테스트")
-        print(f"  기간     : {START} ~ {END}")
-        print(f"  리밸런싱 : 격주 ({REBAL_FREQ})")
-        print(f"  수수료   : 편도 {bhe.COMMISSION*100:.1f}% (왕복 {bhe.COMMISSION*2*100:.1f}%)")
-        print(f"  유니버스 : 풀 유니버스 (S&P500 + NASDAQ-100 + KOSPI200 + KOSDAQ150)")
-        print("=" * 70)
-        print()
-        print("  [전략 파라미터]")
-        print("  공격적: ATR1.5, TOP15, 격주")
-        print("  균형형: ATR2.0, TOP10, 격주")
-        print("  보수적: ATR2.5, TOP7,  격주")
-        print("  적응형: ATR2.0, TOP10, 격주 + 국면별 동적 전환")
-        print()
+    logger.debug("=" * 70)
+    logger.debug("  격주(2W) 리밸런싱 × 4전략 × A진입방식(MA정배열) 백테스트")
+    logger.debug(f"  기간     : {START} ~ {END}")
+    logger.debug(f"  리밸런싱 : 격주 ({REBAL_FREQ})")
+    logger.debug(f"  수수료   : 편도 {bhe.COMMISSION*100:.1f}% (왕복 {bhe.COMMISSION*2*100:.1f}%)")
+    logger.debug(f"  유니버스 : 풀 유니버스 (S&P500 + NASDAQ-100 + KOSPI200 + KOSDAQ150)")
+    logger.debug("=" * 70)
+    logger.debug("")
+    logger.debug("  [전략 파라미터]")
+    logger.debug("  공격적: ATR1.5, TOP15, 격주")
+    logger.debug("  균형형: ATR2.0, TOP10, 격주")
+    logger.debug("  보수적: ATR2.5, TOP7,  격주")
+    logger.debug("  적응형: ATR2.0, TOP10, 격주 + 국면별 동적 전환")
+    logger.debug("")
 
     # ── [1] 데이터 로드 ──────────────────────────────────────
-    if args.verbose:
-        print("[1] 데이터 로드 (캐시 또는 yfinance 다운로드)...")
+    logger.debug("[1] 데이터 로드 (캐시 또는 yfinance 다운로드)...")
     all_data_raw, spy_df, etf_raw, universe_map = load_full_universe(START)
 
     # 모듈 전역 유니버스/섹터 업데이트 (rank_stocks 에서 참조)
     bhe.ALL_UNIVERSE.update(universe_map)
     bhe.SECTOR_ETF.update(CACHE_SECTOR_ETF)
 
-    if args.verbose:
-        print(f"  → 종목 {len(all_data_raw)}개 로드 완료 (유니버스: {len(universe_map)}개)")
+    logger.debug(f"  → 종목 {len(all_data_raw)}개 로드 완료 (유니버스: {len(universe_map)}개)")
 
     # ── [2] 지표 계산 ─────────────────────────────────────────
-    if args.verbose:
-        print(f"\n[2] 종목 지표 계산 ({len(all_data_raw)}종목)...")
+    logger.debug(f"\n[2] 종목 지표 계산 ({len(all_data_raw)}종목)...")
     all_data = {t: bhe.add_indicators(df) for t, df in all_data_raw.items()}
     etf_data = {t: bhe.add_indicators(df) for t, df in etf_raw.items()}
     spy_data = bhe.add_indicators(spy_df)
-    if args.verbose:
-        print("  완료")
+    logger.debug("  완료")
 
     # SPY 벤치마크 NAV (격주 기준)
     spy_close    = spy_df["Close"].squeeze()
@@ -201,17 +196,15 @@ if __name__ == "__main__":
     spy_nav      = [1.0] + list((1 + spy_biweekly).cumprod().values.flatten())
 
     # ── [3] 백테스트 실행 ─────────────────────────────────────
-    if args.verbose:
-        print(f"\n[3] 백테스트 실행 (진입방식: A, 리밸런싱: {REBAL_FREQ})")
+    logger.debug(f"\n[3] 백테스트 실행 (진입방식: A, 리밸런싱: {REBAL_FREQ})")
 
     all_metrics      = []
     results_for_chart = []
 
     for strat_name, atr_m, tn, is_adaptive in STRATEGY_CONFIGS:
         label = f"{strat_name}-A(격주)"
-        if args.verbose:
-            print(f"\n  ▶ {label}  ATR={atr_m}, TOP={tn}"
-                  + (" [adaptive]" if is_adaptive else ""))
+        logger.debug(f"\n  ▶ {label}  ATR={atr_m}, TOP={tn}"
+                     + (" [adaptive]" if is_adaptive else ""))
 
         nav = bhe.run_backtest(
             all_data, etf_data, spy_data,
@@ -231,15 +224,14 @@ if __name__ == "__main__":
     all_metrics.append(m_spy)
 
     # ── [4] 종합 비교 표 ──────────────────────────────────────
-    if args.verbose:
-        print("\n" + "═" * 70)
-        print("  종합 성과 비교 (4전략 × A진입방식 + SPY, 격주 리밸런싱)")
-        print("═" * 70)
-        print(f"  {'전략':<32} {'CAGR':>8} {'MDD':>8} {'샤프':>7} {'기간승률':>8}")
-        print("  " + "─" * 65)
-        for m in all_metrics:
-            print(f"  {m['label']:<32} {m['CAGR']:>+8.1%} "
-                  f"{m['MDD']:>+8.1%} {m['샤프']:>7.2f} {m['기간승률']:>8.1%}")
+    print("\n" + "═" * 70)
+    print("  종합 성과 비교 (4전략 × A진입방식 + SPY, 격주 리밸런싱)")
+    print("═" * 70)
+    print(f"  {'전략':<32} {'CAGR':>8} {'MDD':>8} {'샤프':>7} {'기간승률':>8}")
+    print("  " + "─" * 65)
+    for m in all_metrics:
+        print(f"  {m['label']:<32} {m['CAGR']:>+8.1%} "
+              f"{m['MDD']:>+8.1%} {m['샤프']:>7.2f} {m['기간승률']:>8.1%}")
 
     # ── [5] CSV 저장 ──────────────────────────────────────────
     rows = [{
@@ -252,13 +244,11 @@ if __name__ == "__main__":
     } for m in all_metrics]
     csv_path = RESULTS_DIR / "biweekly_A_all_strategies.csv"
     pd.DataFrame(rows).to_csv(csv_path, index=False, encoding="utf-8-sig")
-    if args.verbose:
-        print(f"\n  결과 CSV: {csv_path}")
+    print(f"\n  결과 CSV: {csv_path}")
 
     # ── [6] 차트 ─────────────────────────────────────────────
     plot_results(results_for_chart, spy_nav)
 
-    if args.verbose:
-        print("\n" + "=" * 70)
-        print("  백테스트 완료")
-        print("=" * 70)
+    print("\n" + "=" * 70)
+    print("  백테스트 완료")
+    print("=" * 70)

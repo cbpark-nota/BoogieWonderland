@@ -391,7 +391,7 @@ def run_v30(all_data_ind: dict, etf_data: dict, spy_close: pd.Series,
 
     for i, rd in enumerate(rebal_dates):
         if (i + 1) % 50 == 0 or i == total - 1:
-            logger.info(f"  V3.0: {i+1}/{total} ({(i+1)/total:.0%})")
+            logger.debug(f"  V3.0: {i+1}/{total} ({(i+1)/total:.0%})")
 
         if prev_dt and holdings:
             holdings = check_stops(holdings, all_data_ind, prev_dt, rd)
@@ -461,7 +461,7 @@ def run_v31(all_data_ind: dict, etf_data: dict, spy_close: pd.Series,
 
     for i, rd in enumerate(rebal_dates):
         if (i + 1) % 50 == 0 or i == total - 1:
-            logger.info(f"  V3.1: {i+1}/{total} ({(i+1)/total:.0%})")
+            logger.debug(f"  V3.1: {i+1}/{total} ({(i+1)/total:.0%})")
 
         if prev_dt and holdings:
             holdings = check_stops(holdings, all_data_ind, prev_dt, rd)
@@ -619,16 +619,16 @@ def fetch_mktcaps_fast(us_tickers: list) -> dict:
     """US 종목 시가총액을 yfinance fast_info로 일괄 수집 (V3.1용)."""
     import yfinance as yf
     caps = {}
-    logger.info(f"  시가총액 수집: {len(us_tickers)}개...")
+    logger.debug(f"  시가총액 수집: {len(us_tickers)}개...")
     for i, t in enumerate(us_tickers):
         if (i + 1) % 100 == 0:
-            logger.info(f"    {i+1}/{len(us_tickers)}")
+            logger.debug(f"    {i+1}/{len(us_tickers)}")
         try:
             mc = yf.Ticker(t).fast_info.market_cap
             caps[t] = float(mc) if mc and mc > 0 else 1.0
         except Exception:
             caps[t] = 1.0
-    logger.info(f"  시가총액 수집 완료: {sum(1 for v in caps.values() if v > 1.0)}/{len(us_tickers)}개")
+    logger.debug(f"  시가총액 수집 완료: {sum(1 for v in caps.values() if v > 1.0)}/{len(us_tickers)}개")
     return caps
 
 
@@ -641,57 +641,57 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
     logging.basicConfig(
-        level=logging.INFO if args.verbose else logging.WARNING,
-        format="%(message)s",
+        level=logging.DEBUG if args.verbose else logging.WARNING,
+        format="%(levelname)s: %(message)s",
     )
 
     t0 = time.time()
-    print("=" * 68)
-    print("  V3.0 vs V3.1 모멘텀 알고리즘 비교 백테스트")
-    print(f"  기간: {START} ~ {END}  |  격주 리밸런싱  |  거래비용 편도 {COST_PER_SIDE:.1%}")
-    print("=" * 68)
+    logger.debug("=" * 68)
+    logger.debug("  V3.0 vs V3.1 모멘텀 알고리즘 비교 백테스트")
+    logger.debug(f"  기간: {START} ~ {END}  |  격주 리밸런싱  |  거래비용 편도 {COST_PER_SIDE:.1%}")
+    logger.debug("=" * 68)
 
     # ── 데이터 로드 ──
-    print("\n[1/5] 데이터 로드 중...")
+    logger.debug("\n[1/5] 데이터 로드 중...")
     all_data, spy_df, etf_data_raw, universe_map = load_full_universe("2015-01-01")
     spy_close = spy_df["Close"].squeeze()
-    print(f"  종목 {len(all_data)}개, SPY {len(spy_df)}행, ETF {len(etf_data_raw)}개 로드 완료")
+    logger.debug(f"  종목 {len(all_data)}개, SPY {len(spy_df)}행, ETF {len(etf_data_raw)}개 로드 완료")
 
     # 유니버스 분류
     us_tickers = {t for t in all_data if not (t.endswith(".KS") or t.endswith(".KQ"))}
     kr_tickers = {t for t in all_data if t.endswith(".KS") or t.endswith(".KQ")}
-    print(f"  US {len(us_tickers)}개 / KR {len(kr_tickers)}개")
+    logger.debug(f"  US {len(us_tickers)}개 / KR {len(kr_tickers)}개")
 
     # ── 지표 계산 ──
-    print(f"\n[2/5] 지표 계산 중... ({len(all_data)}개)")
+    logger.debug(f"\n[2/5] 지표 계산 중... ({len(all_data)}개)")
     t_ind = time.time()
     all_data_ind = {}
     for i, (t, df) in enumerate(all_data.items()):
         if (i + 1) % 100 == 0:
-            print(f"\r  {i+1}/{len(all_data)}", end="", flush=True)
+            logger.debug(f"  {i+1}/{len(all_data)}")
         all_data_ind[t] = add_indicators(df)
     etf_data = {t: add_indicators(df) for t, df in etf_data_raw.items()}
-    print(f"\r  {len(all_data_ind)}개 완료 ({time.time()-t_ind:.0f}초)")
+    logger.debug(f"  {len(all_data_ind)}개 완료 ({time.time()-t_ind:.0f}초)")
 
     # ── 시가총액 수집 (V3.1) ──
-    print(f"\n[3/5] 시가총액 수집 (V3.1용)...")
+    logger.debug(f"\n[3/5] 시가총액 수집 (V3.1용)...")
     mktcaps = fetch_mktcaps_fast(list(us_tickers))
 
     # ── V3.0 백테스트 ──
-    print(f"\n[4/5] V3.0 백테스트 실행 중...")
+    logger.debug(f"\n[4/5] V3.0 백테스트 실행 중...")
     t_v30 = time.time()
     nav_v30, trades_v30, prets_v30 = run_v30(
         all_data_ind, etf_data, spy_close, universe_map, us_tickers, kr_tickers
     )
-    print(f"  완료 ({time.time()-t_v30:.0f}초)")
+    logger.debug(f"  완료 ({time.time()-t_v30:.0f}초)")
 
     # ── V3.1 백테스트 ──
-    print(f"\n[5/5] V3.1 백테스트 실행 중...")
+    logger.debug(f"\n[5/5] V3.1 백테스트 실행 중...")
     t_v31 = time.time()
     nav_v31, trades_v31, prets_v31 = run_v31(
         all_data_ind, etf_data, spy_close, universe_map, us_tickers, mktcaps
     )
-    print(f"  완료 ({time.time()-t_v31:.0f}초)")
+    logger.debug(f"  완료 ({time.time()-t_v31:.0f}초)")
 
     # ── 결과 계산 ──
     m30  = calc_metrics(nav_v30, prets_v30, trades_v30, "V3.0 (기존)")
@@ -700,7 +700,7 @@ if __name__ == "__main__":
 
     # ── 결과 출력 ──
     total_time = time.time() - t0
-    print(f"\n총 소요 시간: {total_time:.0f}초 ({total_time/60:.1f}분)")
+    logger.debug(f"\n총 소요 시간: {total_time:.0f}초 ({total_time/60:.1f}분)")
     print("\n" + "=" * 68)
     print("  알고리즘 비교 결과")
     print("=" * 68)

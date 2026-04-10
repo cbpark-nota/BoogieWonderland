@@ -267,7 +267,7 @@ def run_backtest(all_data, etf_data, freq, atr_mult, cost_per_side):
     total = len(rebal_dates)
     for i, rd in enumerate(rebal_dates):
         if (i+1) % 100 == 0 or i == total - 1:
-            logger.info(f"    진행: {i+1}/{total} ({(i+1)/total:.0%})")
+            logger.debug(f"    진행: {i+1}/{total} ({(i+1)/total:.0%})")
 
         # 스톱 체크
         if prev_dt and holdings:
@@ -331,7 +331,7 @@ def run_backtest(all_data, etf_data, freq, atr_mult, cost_per_side):
         nav_gross_series[rd] = nav_gross
         nav_net_series[rd]   = nav_net
 
-    logger.info("")
+    logger.debug("")
     return nav_gross_series, nav_net_series, trade_count, total_cost
 
 
@@ -395,7 +395,7 @@ def plot_heatmaps(results_df):
 
     plt.tight_layout()
     plt.savefig(RESULTS_DIR / "backtest_atr_tuning.png", dpi=150, bbox_inches="tight")
-    logger.info("  차트 저장: backtest_atr_tuning.png")
+    logger.debug("  차트 저장: backtest_atr_tuning.png")
     plt.close()
 
 
@@ -419,7 +419,7 @@ def plot_nav_curves(best_results, spy_close):
     ax.grid(alpha=0.25)
     plt.tight_layout()
     plt.savefig(RESULTS_DIR / "backtest_atr_tuning_nav.png", dpi=150, bbox_inches="tight")
-    logger.info("  차트 저장: backtest_atr_tuning_nav.png")
+    logger.debug("  차트 저장: backtest_atr_tuning_nav.png")
     plt.close()
 
 
@@ -432,7 +432,7 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
     args = parser.parse_args()
     logging.basicConfig(
-        level=logging.INFO if args.verbose else logging.WARNING,
+        level=logging.DEBUG if args.verbose else logging.WARNING,
         format="%(message)s",
     )
 
@@ -440,24 +440,20 @@ if __name__ == "__main__":
     freq_labels = {"W": "주간", "2W": "격주", "M": "월간"}
     combos = list(itertools.product(ATR_MULTS, freqs))
 
-    if args.verbose:
-        print("=" * 66)
-        print("  ATR 승수 튜닝 + 거래비용 반영 백테스트")
-        print(f"  ATR 승수: {ATR_MULTS}")
-        print(f"  리밸런싱: {[freq_labels[f] for f in freqs]}")
-        print(f"  거래비용: 편도 {COST_PER_SIDE*100:.1f}%")
-        print(f"  기간: {START} ~ {END}")
-        print(f"  총 {len(combos)}개 조합")
-        print("=" * 66)
+    logger.debug("=" * 66)
+    logger.debug("  ATR 승수 튜닝 + 거래비용 반영 백테스트")
+    logger.debug(f"  ATR 승수: {ATR_MULTS}")
+    logger.debug(f"  리밸런싱: {[freq_labels[f] for f in freqs]}")
+    logger.debug(f"  거래비용: 편도 {COST_PER_SIDE*100:.1f}%")
+    logger.debug(f"  기간: {START} ~ {END}")
+    logger.debug(f"  총 {len(combos)}개 조합")
+    logger.debug("=" * 66)
 
     # ── 데이터 로드 ──
-    if args.verbose:
-        print("\n[데이터 로드]")
+    logger.debug("\n[데이터 로드]")
     all_data, etf_raw, spy_close = load_local_data()
-    if args.verbose:
-        print(f"  종목 {len(all_data)}개, ETF {len(etf_raw)}개, SPY ✓")
-
-        print(f"  지표 계산 ({len(all_data)}개)...")
+    logger.debug(f"  종목 {len(all_data)}개, ETF {len(etf_raw)}개, SPY ✓")
+    logger.debug(f"  지표 계산 ({len(all_data)}개)...")
     for t in list(all_data.keys()):
         all_data[t] = add_indicators(all_data[t])
     etf_data = {t: add_indicators(df) for t, df in etf_raw.items()}
@@ -466,8 +462,7 @@ if __name__ == "__main__":
     all_results = []
     for idx, (atr_m, freq) in enumerate(combos, 1):
         label = f"ATR={atr_m:.1f} {freq_labels[freq]}({freq})"
-        if args.verbose:
-            print(f"\n[{idx}/{len(combos)}] {label}")
+        logger.debug(f"\n[{idx}/{len(combos)}] {label}")
 
         nav_g, nav_n, trades, cost = run_backtest(
             all_data, etf_data, freq, atr_m, COST_PER_SIDE)
@@ -491,10 +486,9 @@ if __name__ == "__main__":
             "nav_gross": nav_g, "nav_net": nav_n,
         }
 
-        if args.verbose:
-            print(f"    Gross → CAGR {m_gross['CAGR']:>+7.1%}  MDD {m_gross['MDD']:>+6.1%}  샤프 {m_gross['샤프']:.2f}")
-            print(f"    Net   → CAGR {m_net['CAGR']:>+7.1%}  MDD {m_net['MDD']:>+6.1%}  샤프 {m_net['샤프']:.2f}  "
-                  f"연거래 {result['연거래']:.0f}회")
+        logger.debug(f"    Gross → CAGR {m_gross['CAGR']:>+7.1%}  MDD {m_gross['MDD']:>+6.1%}  샤프 {m_gross['샤프']:.2f}")
+        logger.debug(f"    Net   → CAGR {m_net['CAGR']:>+7.1%}  MDD {m_net['MDD']:>+6.1%}  샤프 {m_net['샤프']:.2f}  "
+                     f"연거래 {result['연거래']:.0f}회")
 
         all_results.append(result)
 
@@ -502,44 +496,43 @@ if __name__ == "__main__":
     # 순수익 CAGR 기준 정렬
     sorted_results = sorted(all_results, key=lambda x: x["CAGR(순)"], reverse=True)
 
-    if args.verbose:
-        print(f"\n{'═'*80}")
-        print("  종합 비교 (거래비용 반영 후 순수익 기준)")
-        print("═" * 80)
-        print(f"  {'ATR':>4} {'주기':<5}  {'CAGR총':>7} {'CAGR순':>7} {'비용차':>6}  "
-              f"{'MDD순':>7} {'샤프순':>6} {'승률':>5} {'연거래':>5}")
-        print("  " + "─" * 72)
+    print(f"\n{'═'*80}")
+    print("  종합 비교 (거래비용 반영 후 순수익 기준)")
+    print("═" * 80)
+    print(f"  {'ATR':>4} {'주기':<5}  {'CAGR총':>7} {'CAGR순':>7} {'비용차':>6}  "
+          f"{'MDD순':>7} {'샤프순':>6} {'승률':>5} {'연거래':>5}")
+    print("  " + "─" * 72)
 
-        for r in sorted_results:
-            cost_drag = r["CAGR(총)"] - r["CAGR(순)"]
-            print(f"  {r['ATR']:>4.1f} {freq_labels[r['주기']]:<4}({r['주기']:<2})"
-                  f" {r['CAGR(총)']:>+7.1%} {r['CAGR(순)']:>+7.1%} {cost_drag:>+6.1%}"
-                  f"  {r['MDD(순)']:>+7.1%} {r['샤프(순)']:>6.2f} {r['승률(순)']:>5.1%}"
-                  f" {r['연거래']:>5.0f}")
+    for r in sorted_results:
+        cost_drag = r["CAGR(총)"] - r["CAGR(순)"]
+        print(f"  {r['ATR']:>4.1f} {freq_labels[r['주기']]:<4}({r['주기']:<2})"
+              f" {r['CAGR(총)']:>+7.1%} {r['CAGR(순)']:>+7.1%} {cost_drag:>+6.1%}"
+              f"  {r['MDD(순)']:>+7.1%} {r['샤프(순)']:>6.2f} {r['승률(순)']:>5.1%}"
+              f" {r['연거래']:>5.0f}")
 
-        # SPY 참고
-        spy_total = float(spy_close.iloc[-1] / spy_close.iloc[0]) - 1
-        spy_years = (spy_close.index[-1] - spy_close.index[0]).days / 365.25
-        spy_cagr  = ((1 + spy_total) ** (1/spy_years)) - 1
-        spy_dd    = ((spy_close - spy_close.cummax()) / spy_close.cummax()).min()
-        print("  " + "─" * 72)
-        print(f"  SPY  {'':>10} {spy_cagr:>+7.1%} {'':>6}  {spy_dd:>+7.1%}")
+    # SPY 참고
+    spy_total = float(spy_close.iloc[-1] / spy_close.iloc[0]) - 1
+    spy_years = (spy_close.index[-1] - spy_close.index[0]).days / 365.25
+    spy_cagr  = ((1 + spy_total) ** (1/spy_years)) - 1
+    spy_dd    = ((spy_close - spy_close.cummax()) / spy_close.cummax()).min()
+    print("  " + "─" * 72)
+    print(f"  SPY  {'':>10} {spy_cagr:>+7.1%} {'':>6}  {spy_dd:>+7.1%}")
 
-        # ── 최적 조합 ──
-        best = sorted_results[0]
-        print(f"\n  ★ 최적 조합: ATR={best['ATR']:.1f} × {freq_labels[best['주기']]}({best['주기']})")
-        print(f"    순 CAGR {best['CAGR(순)']:+.1%}  MDD {best['MDD(순)']:+.1%}  "
-              f"샤프 {best['샤프(순)']:.2f}  승률 {best['승률(순)']:.1%}")
+    # ── 최적 조합 ──
+    best = sorted_results[0]
+    print(f"\n  ★ 최적 조합: ATR={best['ATR']:.1f} × {freq_labels[best['주기']]}({best['주기']})")
+    print(f"    순 CAGR {best['CAGR(순)']:+.1%}  MDD {best['MDD(순)']:+.1%}  "
+          f"샤프 {best['샤프(순)']:.2f}  승률 {best['승률(순)']:.1%}")
 
-        # 주기별 최적
-        print(f"\n  [주기별 최적 ATR 승수]")
-        for freq in freqs:
-            freq_results = [r for r in sorted_results if r["주기"] == freq]
-            if freq_results:
-                b = freq_results[0]
-                print(f"    {freq_labels[freq]}({freq}): ATR={b['ATR']:.1f} → "
-                      f"CAGR(순) {b['CAGR(순)']:+.1%}  MDD {b['MDD(순)']:+.1%}  "
-                      f"샤프 {b['샤프(순)']:.2f}")
+    # 주기별 최적
+    print(f"\n  [주기별 최적 ATR 승수]")
+    for freq in freqs:
+        freq_results = [r for r in sorted_results if r["주기"] == freq]
+        if freq_results:
+            b = freq_results[0]
+            print(f"    {freq_labels[freq]}({freq}): ATR={b['ATR']:.1f} → "
+                  f"CAGR(순) {b['CAGR(순)']:+.1%}  MDD {b['MDD(순)']:+.1%}  "
+                  f"샤프 {b['샤프(순)']:.2f}")
 
     # ── CSV 저장 ──
     rows = []
@@ -558,8 +551,7 @@ if __name__ == "__main__":
         })
     pd.DataFrame(rows).to_csv(RESULTS_DIR / "backtest_atr_tuning.csv",
                                index=False, encoding="utf-8-sig")
-    if args.verbose:
-        print(f"\n  결과 저장: backtest_atr_tuning.csv")
+    print(f"\n  결과 저장: backtest_atr_tuning.csv")
 
     # ── 히트맵 ──
     results_df = pd.DataFrame([{
