@@ -70,4 +70,23 @@ class StaticDataSource {
     final res = await _dio.get('$_baseDataUrl/market_cap.json');
     return res.data as Map<String, dynamic>;
   }
+
+  // ── v3.2 KR 분리 스크리닝 ─────────────────────────────────
+
+  /// KR 4전략 전체 결과 (screening_kr_strategies.json)
+  Future<Map<String, dynamic>> getKrStrategies() async {
+    final res = await _dio.get('$_baseDataUrl/screening_kr_strategies.json');
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// 특정 날짜의 KR 스크리닝 결과 — history/{date}.json의 kr_strategies 키 사용
+  Future<Map<String, dynamic>> getKrScreeningByDate(String date) async {
+    final res = await _dio.get('$_baseDataUrl/history/$date.json');
+    final data = res.data as Map<String, dynamic>;
+    // kr_strategies 키를 strategies 키로 리매핑하여 StrategyScreeningData.fromJson 호환
+    return {
+      ...data,
+      'strategies': data['kr_strategies'] ?? {},
+    };
+  }
 }

@@ -61,6 +61,10 @@
   - `fetch_kr_tickers()` — KOSPI 200 + KOSDAQ 150 종목 동적 수집
 - 축소 유니버스(예: 임의로 선별한 수십 종목 목록)를 백테스트에 사용하는 것은 금지한다.
 
+## 브랜치 관리
+- `develop`, `main` 이외의 브랜치는 merge 후 삭제한다.
+- worktree 브랜치(claude/* 등)도 작업 완료 및 merge 후 즉시 삭제한다.
+
 ## 코드 컨벤션
 - Python 3.12, 의존성 버전 고정
 - 프로덕션 스크리너: `scripts/screener/screener_v3.py`

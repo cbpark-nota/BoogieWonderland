@@ -37,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).parent / "screener"))
 sys.path.insert(0, str(Path(__file__).parent / "crypto"))
 
 import screener_v3 as sc
+import screener_v3_kr as sc_kr
 from data_cache import fetch_sp500_tickers, fetch_nasdaq100_tickers
 
 # 4가지 전략 프리셋 — v3 최적 ATR 승수 + 전략별 종목 수
@@ -270,6 +271,42 @@ def build_results(passed, etf_data, top_n=None):
             "market": market,
             "name": name,
             "sector": sector,
+            "score": safe_float(row["score"], 4),
+            "weight_pct": safe_float(row["weight"] * 100, 1),
+            "price": safe_float(row["price"]),
+            "adx": safe_float(row["ADX"], 1),
+            "rsi": safe_float(row["RSI"], 1),
+            "ret_3m": safe_float(row["ret3m"], 4),
+            "stop_price": safe_float(row["stop_price"]),
+            "stop_dist_pct": safe_float(row["stop_dist"], 4),
+            "atr": safe_float(row["atr"], 2),
+        })
+    return results
+
+
+def _build_kr_results(
+    passed: dict,
+    kr_names: dict[str, str],
+    kr_sectors: dict[str, str],
+    top_n: int | None = None,
+) -> list[dict]:
+    """KR passed 딕셔너리를 랭킹하고 결과 리스트 생성."""
+    if not passed:
+        return []
+    ranked = sc.rank_stocks(passed, {})
+    n = top_n if top_n is not None else sc.TOP_N
+    top = ranked.head(n).copy()
+    weights = sc.calc_position_weights(top["score"], sc.SIZING_MODE, sc.MAX_WEIGHT)
+    top["weight"] = weights
+
+    results = []
+    for rank, (ticker, row) in enumerate(top.iterrows(), 1):
+        results.append({
+            "rank": rank,
+            "ticker": ticker,
+            "market": "KR",
+            "name": kr_names.get(ticker),
+            "sector": kr_sectors.get(ticker, "Unknown"),
             "score": safe_float(row["score"], 4),
             "weight_pct": safe_float(row["weight"] * 100, 1),
             "price": safe_float(row["price"]),
@@ -586,42 +623,57 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
     us_tickers = us_tickers + ndx_new
     us_sectors = {**us_sectors, **ndx_new_sectors}
 
-    kr_tickers = fetch_kr_tickers()
+    # screener_v3의 유니버스/섹터 맵을 US 전용으로 교체 (v3.2: US/KR 분리)
+    sc.ALL_UNIVERSE.clear()
+    sc.ALL_UNIVERSE.update(us_sectors)
 
-    # screener_v3의 유니버스/섹터 맵을 동적 수집 결과로 교체
-    sc.US_UNIVERSE = us_sectors                         # ticker → GICS Sector
-    sc.KR_UNIVERSE = {t: "Unknown" for t in kr_tickers}
-    sc.ALL_UNIVERSE = {**sc.US_UNIVERSE, **sc.KR_UNIVERSE}
-
-    # 데이터 다운로드 (1회)
-    # screening_date가 지정된 경우 해당 날짜까지의 데이터를 다운로드
-    logger.info("데이터 다운로드 중...")
-    us_data, kr_data, etf_data = {}, {}, {}
+    # ── US 데이터 다운로드 + 지표 계산 ────────────────────────
+    logger.info("US 데이터 다운로드 중...")
+    us_data, etf_data = {}, {}
     for i in range(0, len(us_tickers), 50):
         us_data.update(download_for_date(us_tickers[i:i + 50], screening_date))
-    for i in range(0, len(kr_tickers), 30):
-        kr_data.update(download_for_date(kr_tickers[i:i + 30], screening_date))
     etf_raw = download_for_date(list(set(sc.SECTOR_ETF.values())), screening_date)
     for t, df in etf_raw.items():
         etf_data[t] = sc.calc_indicators(df)
 
-    all_data = {**us_data, **kr_data}
+    logger.info("US 지표 계산 중 (%d개 종목)...", len(us_data))
+    us_data_ind: dict = {}
+    for t, df in us_data.items():
+        us_data_ind[t] = sc.calc_indicators(df)
 
-    # 지표 계산 (1회)
-    logger.info("지표 계산 중 (%d개 종목)...", len(all_data))
-    all_data_ind = {}
-    for t, df in all_data.items():
-        all_data_ind[t] = sc.calc_indicators(df)
+    # ── KR 데이터 다운로드 (pykrx, v3.2 신규) ────────────────
+    logger.info("KR 유니버스 수집 중 (pykrx)...")
+    kr_tickers_pykrx, kr_sectors_pykrx = sc_kr.fetch_kr_universe()
+    logger.info("KR 데이터 다운로드 중 (%d종목)...", len(kr_tickers_pykrx))
+
+    # screening_date가 지정된 경우 해당 날짜까지의 데이터를 다운로드
+    if screening_date:
+        end_date_kr = screening_date
+        start_date_kr = (
+            pd.Timestamp(screening_date) - pd.Timedelta(days=400)
+        ).strftime("%Y-%m-%d")
+    else:
+        end_date_kr = None
+        start_date_kr = None
+
+    kr_raw = sc_kr.download_kr_pykrx(kr_tickers_pykrx, start=start_date_kr, end=end_date_kr)
+    logger.info("KR 지표 계산 중 (%d개 종목)...", len(kr_raw))
+    kr_data_ind: dict = {}
+    for t, df in kr_raw.items():
+        kr_data_ind[t] = sc.calc_indicators(df)
+
+    # all_data_ind = US 전용 (v3.2: KR은 별도 처리)
+    all_data_ind = us_data_ind
 
     # 적응형 국면 판별
     adaptive_regime, adaptive_atr = detect_adaptive_regime(mkt)
 
-    # 4전략 스크리닝
+    # ── US 4전략 스크리닝 ────────────────────────────────────
     strategies_output = {}
     for key, preset in STRATEGIES.items():
         atr_mult = preset["atr_mult"]
         top_n = preset["top_n"]
-        logger.info("  %s (ATR=%s, TOP=%s) 스크리닝 중...", preset["label"], atr_mult, top_n)
+        logger.info("  US %s (ATR=%s, TOP=%s) 스크리닝 중...", preset["label"], atr_mult, top_n)
         passed = run_screening_with_atr(all_data_ind, etf_data, atr_mult)
         results = build_results(passed, etf_data, top_n)
 
@@ -631,7 +683,7 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
             "atr_mult": atr_mult,
             "rebal_freq": preset["rebal_freq"],
             "top_n": top_n,
-            "total_screened": len(all_data),
+            "total_screened": len(all_data_ind),
             "total_passed": len(passed),
             "results": results,
         }
@@ -642,6 +694,49 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
             strategy_info["regime_label"] = STRATEGIES[adaptive_regime]["label"]
 
         strategies_output[key] = strategy_info
+
+    # ── KR 4전략 스크리닝 (v3.2 신규) ───────────────────────
+    kr_strategies_output = {}
+    kr_names: dict[str, str] = {}
+    if kr_data_ind:
+        logger.info("KR 스크리닝 중 (%d개 종목)...", len(kr_data_ind))
+        # KR 유니버스로 ALL_UNIVERSE 임시 교체
+        sc.ALL_UNIVERSE.clear()
+        sc.ALL_UNIVERSE.update(kr_sectors_pykrx)
+
+        for key, preset in STRATEGIES.items():
+            atr_mult = preset["atr_mult"]
+            top_n = preset["top_n"]
+            logger.info("  KR %s (ATR=%s, TOP=%s) 스크리닝 중...", preset["label"], atr_mult, top_n)
+            kr_passed, _ = sc_kr.run_kr_screening(
+                kr_tickers_pykrx, kr_sectors_pykrx, atr_mult, kr_data=kr_data_ind
+            )
+            # KR 종목명 (처음 한번만 수집)
+            if not kr_names and kr_passed:
+                kr_names = sc_kr.fetch_kr_names(list(kr_passed.keys()))
+            kr_results = _build_kr_results(kr_passed, kr_names, kr_sectors_pykrx, top_n)
+
+            kr_strategy_info = {
+                "key": key,
+                "label": preset["label"],
+                "atr_mult": atr_mult,
+                "rebal_freq": preset["rebal_freq"],
+                "top_n": top_n,
+                "total_screened": len(kr_data_ind),
+                "total_passed": len(kr_passed),
+                "results": kr_results,
+            }
+            if key == "adaptive":
+                kr_strategy_info["current_regime"] = adaptive_regime
+                kr_strategy_info["regime_label"] = STRATEGIES[adaptive_regime]["label"]
+            kr_strategies_output[key] = kr_strategy_info
+
+        # ALL_UNIVERSE를 US로 복원
+        sc.ALL_UNIVERSE.clear()
+        sc.ALL_UNIVERSE.update(us_sectors)
+        logger.info("KR 스크리닝 완료")
+    else:
+        logger.warning("KR 데이터 없음 — KR 스크리닝 건너뜀")
 
     # BTC V10 시그널 계산
     btc_signal = calculate_btc_signal()
@@ -657,11 +752,12 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
         "run_date": run_dt.strftime("%Y-%m-%dT%H:%M:%S"),
         "market_status": market_status,
         "btc_signal": btc_signal,
-        "strategies": strategies_output,
+        "strategies": strategies_output,          # US 전용 (v3.2)
+        "kr_strategies": kr_strategies_output,    # KR 전용 (v3.2 신규)
     }
 
     if not is_history_only:
-        # screening_latest.json (하위 호환: 균형형을 기본으로)
+        # screening_latest.json (하위 호환: 균형형을 기본으로, US 전용)
         balanced = strategies_output["balanced"]
         compat_output = {
             "run_id": output["run_id"],
@@ -676,10 +772,23 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
         with open(compat_path, "w", encoding="utf-8") as f:
             json.dump(compat_output, f, ensure_ascii=False, indent=2)
 
-        # screening_strategies.json (4전략 전체)
+        # screening_strategies.json (US 4전략 전체)
         full_path = output_dir / "screening_strategies.json"
         with open(full_path, "w", encoding="utf-8") as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
+
+        # screening_kr_strategies.json (KR 4전략 전체, v3.2 신규)
+        if kr_strategies_output:
+            kr_output = {
+                "run_id": output["run_id"],
+                "run_date": output["run_date"],
+                "market_status": market_status,
+                "strategies": kr_strategies_output,
+            }
+            kr_full_path = output_dir / "screening_kr_strategies.json"
+            with open(kr_full_path, "w", encoding="utf-8") as f:
+                json.dump(kr_output, f, ensure_ascii=False, indent=2)
+            logger.info("  KR 전략 결과 저장: %s", kr_full_path)
 
     # 시총 Top 20 (트렌드 모니터링)
     try:
@@ -696,12 +805,18 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
 
     date_label = screening_date or run_dt.strftime("%Y-%m-%d")
     logger.info("완료 (%s):", date_label)
+    logger.info("  [US]")
     for k in ("aggressive", "balanced", "conservative"):
         s = strategies_output[k]
-        logger.info("  %s: %d종목 선정 / %d개 통과", s["label"], len(s["results"]), s["total_passed"])
+        logger.info("    %s: %d종목 선정 / %d개 통과", s["label"], len(s["results"]), s["total_passed"])
     s = strategies_output["adaptive"]
-    logger.info("  %s: %d종목 선정 / %d개 통과 (현재 국면: %s)",
+    logger.info("    %s: %d종목 선정 / %d개 통과 (현재 국면: %s)",
                 s["label"], len(s["results"]), s["total_passed"], STRATEGIES[adaptive_regime]["label"])
+    if kr_strategies_output:
+        logger.info("  [KR]")
+        for k in ("aggressive", "balanced", "conservative"):
+            s = kr_strategies_output[k]
+            logger.info("    %s: %d종목 선정 / %d개 통과", s["label"], len(s["results"]), s["total_passed"])
     return output
 
 

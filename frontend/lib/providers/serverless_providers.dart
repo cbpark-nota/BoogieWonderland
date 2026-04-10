@@ -9,7 +9,8 @@ import 'portfolio_upload_provider.dart';
 import 'screening_provider.dart';
 import 'portfolio_provider.dart';
 
-// ── 마켓 필터 enum (screening_screen에서 이동) ──────────────
+// ── 마켓 필터 enum (국가 선택, screening_screen에서 이동) ─────
+// v3.2: all = US(기본값), kr = KR 전용 데이터 로드, us = US 전용 데이터 로드
 
 enum MarketFilter { all, kr, us }
 
@@ -25,9 +26,10 @@ final selectedStrategyProvider =
   _SelectedStrategyNotifier.new,
 );
 
+// v3.2: 기본값을 us로 변경 (US/KR 분리 스크리닝)
 class _SelectedMarketFilterNotifier extends Notifier<MarketFilter> {
   @override
-  MarketFilter build() => MarketFilter.all;
+  MarketFilter build() => MarketFilter.us;
 }
 
 final selectedMarketFilterProvider =
@@ -36,59 +38,29 @@ final selectedMarketFilterProvider =
 );
 
 // ── 필터링된 스크리닝 결과 (메모이제이션) ────────────────────
-// historyScreeningProvider, selectedStrategyProvider,
-// selectedMarketFilterProvider 중 하나라도 변경될 때만 재계산된다.
+// v3.2: marketFilter에 따라 US 또는 KR 데이터를 별도 로드
+// (혼합 필터링 대신 국가별 전용 JSON 파일 사용)
 
 typedef _FilteredResult = ({ScreeningRun run, StrategyResult? sr, StrategyType selected});
 
 final filteredScreeningProvider =
     Provider<AsyncValue<_FilteredResult?>>((ref) {
-  final historyAsync = ref.watch(historyScreeningProvider);
-  final selected = ref.watch(selectedStrategyProvider);
   final marketFilter = ref.watch(selectedMarketFilterProvider);
+  final selected = ref.watch(selectedStrategyProvider);
+
+  // KR이면 KR 히스토리, 그 외(us/all)는 US 히스토리
+  final isKr = marketFilter == MarketFilter.kr;
+  final historyAsync = isKr
+      ? ref.watch(krHistoryScreeningProvider)
+      : ref.watch(historyScreeningProvider);
 
   return historyAsync.whenData((data) {
     if (data == null) return null;
     final run = data.toScreeningRun(selected);
     final sr = data.strategies[selected];
-    return (run: _applyMarketFilter(run, marketFilter), sr: sr, selected: selected);
+    return (run: run, sr: sr, selected: selected);
   });
 });
-
-ScreeningRun _applyMarketFilter(ScreeningRun run, MarketFilter marketFilter) {
-  if (marketFilter == MarketFilter.all) return run;
-  final marketCode = marketFilter == MarketFilter.kr ? 'KR' : 'US';
-  final filtered =
-      run.results.where((r) => r.market == marketCode).toList();
-  final reranked = filtered.asMap().entries.map((e) {
-    final r = e.value;
-    return ScreeningResult(
-      rank: e.key + 1,
-      ticker: r.ticker,
-      market: r.market,
-      name: r.name,
-      sector: r.sector,
-      score: r.score,
-      weightPct: r.weightPct,
-      price: r.price,
-      adx: r.adx,
-      rsi: r.rsi,
-      ret3m: r.ret3m,
-      stopPrice: r.stopPrice,
-      stopDistPct: r.stopDistPct,
-      atr: r.atr,
-    );
-  }).toList();
-  return ScreeningRun(
-    runId: run.runId,
-    runDate: run.runDate,
-    marketStatus: run.marketStatus,
-    btcSignal: run.btcSignal,
-    totalScreened: run.totalScreened,
-    totalPassed: run.totalPassed,
-    results: reranked,
-  );
-}
 
 // ── 리밸런싱 주기 ──────────────────────────────────────────
 
@@ -257,12 +229,24 @@ Future<List<StopCheckResult>> serverlessStopCheck(Ref ref, void _) async {
   return [];
 }
 
-// ── 서버리스 4전략 데이터 ──────────────────────────────────
+// ── 서버리스 4전략 데이터 (US) ────────────────────────────
 
 final strategyDataProvider =
     FutureProvider<StrategyScreeningData?>((ref) async {
   try {
     final data = await StaticDataSource().getStrategies();
+    return StrategyScreeningData.fromJson(data);
+  } catch (_) {
+    return null;
+  }
+});
+
+// ── 서버리스 4전략 데이터 (KR, v3.2 신규) ─────────────────
+
+final krStrategyDataProvider =
+    FutureProvider<StrategyScreeningData?>((ref) async {
+  try {
+    final data = await StaticDataSource().getKrStrategies();
     return StrategyScreeningData.fromJson(data);
   } catch (_) {
     return null;
@@ -330,7 +314,7 @@ final selectedHistoryDateProvider =
   _SelectedHistoryDateNotifier.new,
 );
 
-// ── 선택된 날짜의 스크리닝 데이터 ──────────────────────────
+// ── 선택된 날짜의 스크리닝 데이터 (US) ─────────────────────
 
 final historyScreeningProvider =
     FutureProvider<StrategyScreeningData?>((ref) async {
@@ -340,6 +324,22 @@ final historyScreeningProvider =
   }
   try {
     final data = await StaticDataSource().getScreeningByDate(date);
+    return StrategyScreeningData.fromJson(data);
+  } catch (_) {
+    return null;
+  }
+});
+
+// ── 선택된 날짜의 스크리닝 데이터 (KR, v3.2 신규) ───────────
+
+final krHistoryScreeningProvider =
+    FutureProvider<StrategyScreeningData?>((ref) async {
+  final date = ref.watch(selectedHistoryDateProvider);
+  if (date == null) {
+    return await ref.watch(krStrategyDataProvider.future);
+  }
+  try {
+    final data = await StaticDataSource().getKrScreeningByDate(date);
     return StrategyScreeningData.fromJson(data);
   } catch (_) {
     return null;

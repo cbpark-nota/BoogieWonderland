@@ -204,16 +204,15 @@ class ScreeningScreen extends ConsumerWidget {
 
   Widget _buildMarketFilter(BuildContext context, WidgetRef ref) {
     final marketFilter = ref.watch(selectedMarketFilterProvider);
+    // v3.2: 국가별 전용 데이터 파일 사용 — all 제거, us/kr 탭만 표시
+    const countries = [MarketFilter.us, MarketFilter.kr];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
-        children: MarketFilter.values.map((f) {
-          final isSelected = f == marketFilter;
-          final label = switch (f) {
-            MarketFilter.all => '전체',
-            MarketFilter.kr => '🇰🇷 한국',
-            MarketFilter.us => '🇺🇸 미국',
-          };
+        children: countries.map((f) {
+          final isSelected = f == marketFilter ||
+              (f == MarketFilter.us && marketFilter == MarketFilter.all);
+          final label = f == MarketFilter.kr ? '🇰🇷 한국' : '🇺🇸 미국';
           return Padding(
             padding: const EdgeInsets.only(right: 8),
             child: ChoiceChip(
@@ -223,9 +222,14 @@ class ScreeningScreen extends ConsumerWidget {
                       fontWeight:
                           isSelected ? FontWeight.bold : FontWeight.normal)),
               selected: isSelected,
-              onSelected: (_) =>
-                  ref.read(selectedMarketFilterProvider.notifier).state = f,
-              selectedColor: Colors.teal.shade600,
+              onSelected: (_) {
+                ref.read(selectedMarketFilterProvider.notifier).state = f;
+                // 국가 전환 시 히스토리 날짜 초기화 (최신 데이터 로드)
+                ref.read(selectedHistoryDateProvider.notifier).state = null;
+              },
+              selectedColor: f == MarketFilter.kr
+                  ? Colors.red.shade700
+                  : Colors.blue.shade700,
               labelStyle: TextStyle(color: isSelected ? Colors.white : null),
             ),
           );
