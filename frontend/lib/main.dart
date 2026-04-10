@@ -235,7 +235,7 @@ class _MainNavigationState extends State<MainNavigation> {
                         ),
                         title: const Text('트렌드 분석'),
                       ),
-                      body: const StrategyGuideScreen(),
+                      body: const StrategyGuideTabsScreen(),
                     ),
                   ),
                 );
