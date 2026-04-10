@@ -36,6 +36,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import json
+import logging
 import os
 import sys
 
@@ -46,6 +47,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
@@ -85,7 +88,7 @@ from core.constants import US_UNIVERSE, KR_UNIVERSE, ALL_UNIVERSE, SECTOR_ETF
 
 def load_local_data():
     if not os.path.exists(MANIFEST):
-        print(f"  ✗ {MANIFEST} 없음. 먼저 python download_data.py 를 실행하세요.")
+        logger.warning(f"  ✗ {MANIFEST} 없음. 먼저 python download_data.py 를 실행하세요.")
         sys.exit(1)
     with open(MANIFEST, "r", encoding="utf-8") as f:
         manifest = json.load(f)
@@ -743,46 +746,48 @@ def run_window(all_data, etf_data, spy_close, start, end, window_label):
     global START, END
     START, END = start, end
 
-    print(f"\n{'█'*70}")
-    print(f"  [{window_label}] {start} ~ {end}")
-    print(f"{'█'*70}")
+    logger.debug(f"\n{'█'*70}")
+    logger.debug(f"  [{window_label}] {start} ~ {end}")
+    logger.debug(f"{'█'*70}")
 
     # 적응형 v1 (MA gap only)
-    print(f"\n  [1/6] 적응형 v1 (MA gap)")
+    logger.debug(f"\n  [1/6] 적응형 v1 (MA gap)")
     nav_v1, _, regime_v1 = run_adaptive_backtest(
         all_data, etf_data, spy_close, COST_PER_SIDE,
         detect_fn=detect_regime, use_asymmetric=False)
     m_v1 = calc_metrics(nav_v1, "적응형 v1 (MA gap)")
 
     dist_v1 = regime_v1["regime"].value_counts(normalize=True)
-    print(f"    국면: ", end="")
-    for r in ["aggressive","balanced","conservative"]:
-        print(f"{PRESETS[r]['label']} {dist_v1.get(r,0):.0%}  ", end="")
-    print(f"| 전환 {int(regime_v1['regime_changed'].sum())}회")
+    regime_line_v1 = "    국면: " + "".join(
+        f"{PRESETS[r]['label']} {dist_v1.get(r,0):.0%}  "
+        for r in ["aggressive","balanced","conservative"]
+    ) + f"| 전환 {int(regime_v1['regime_changed'].sum())}회"
+    logger.debug(regime_line_v1)
 
     # 적응형 v2 (3계층 + 비대칭 전환)
-    print(f"  [2/6] 적응형 v2 (3계층+비대칭)")
+    logger.debug(f"  [2/6] 적응형 v2 (3계층+비대칭)")
     nav_v2, _, regime_v2 = run_adaptive_backtest(
         all_data, etf_data, spy_close, COST_PER_SIDE,
         detect_fn=detect_regime_v2, use_asymmetric=True)
     m_v2 = calc_metrics(nav_v2, "적응형 v2 (3계층)")
 
     dist_v2 = regime_v2["regime"].value_counts(normalize=True)
-    print(f"    국면: ", end="")
-    for r in ["aggressive","balanced","conservative"]:
-        print(f"{PRESETS[r]['label']} {dist_v2.get(r,0):.0%}  ", end="")
-    print(f"| 전환 {int(regime_v2['regime_changed'].sum())}회")
+    regime_line_v2 = "    국면: " + "".join(
+        f"{PRESETS[r]['label']} {dist_v2.get(r,0):.0%}  "
+        for r in ["aggressive","balanced","conservative"]
+    ) + f"| 전환 {int(regime_v2['regime_changed'].sum())}회"
+    logger.debug(regime_line_v2)
 
     # 고정 전략들
-    print(f"  [3/6] 공격적 (ATR=2.0, 주간)")
+    logger.debug(f"  [3/6] 공격적 (ATR=2.0, 주간)")
     nav_agg, _ = run_fixed_backtest(all_data, etf_data, "W", 2.0, COST_PER_SIDE)
     m_agg = calc_metrics(nav_agg, "공격적 (ATR=2.0 주간)")
 
-    print(f"  [4/6] 균형형 (ATR=2.5, 격주)")
+    logger.debug(f"  [4/6] 균형형 (ATR=2.5, 격주)")
     nav_bal, _ = run_fixed_backtest(all_data, etf_data, "2W", 2.5, COST_PER_SIDE)
     m_bal = calc_metrics(nav_bal, "균형형 (ATR=2.5 격주)")
 
-    print(f"  [5/6] 보수적 (ATR=3.5, 월간)")
+    logger.debug(f"  [5/6] 보수적 (ATR=3.5, 월간)")
     nav_con, _ = run_fixed_backtest(all_data, etf_data, "M", 3.5, COST_PER_SIDE)
     m_con = calc_metrics(nav_con, "보수적 (ATR=3.5 월간)")
 
@@ -829,6 +834,15 @@ def run_window(all_data, etf_data, spy_close, start, end, window_label):
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
+    args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+
     # ── 멀티 윈도우 정의 ──
     WINDOWS = [
         ("A_풀사이클",   "2007-01-01", "2024-12-31"),  # GFC 포함 전체
@@ -836,21 +850,20 @@ if __name__ == "__main__":
         ("C_최근변동성", "2020-01-01", "2024-12-31"),  # 코로나→금리→AI
     ]
 
-    print("=" * 70)
-    print("  멀티 윈도우 적응형 전략 백테스트")
-    print("  시장 국면별 공격/균형/보수 동적 전환")
-    print(f"  거래비용: 편도 {COST_PER_SIDE*100:.1f}%")
-    print(f"  윈도우: {len(WINDOWS)}개")
+    logger.debug("=" * 70)
+    logger.debug("  멀티 윈도우 적응형 전략 백테스트")
+    logger.debug("  시장 국면별 공격/균형/보수 동적 전환")
+    logger.debug(f"  거래비용: 편도 {COST_PER_SIDE*100:.1f}%")
+    logger.debug(f"  윈도우: {len(WINDOWS)}개")
     for label, s, e in WINDOWS:
-        print(f"    {label}: {s} ~ {e}")
-    print("=" * 70)
+        logger.debug(f"    {label}: {s} ~ {e}")
+    logger.debug("=" * 70)
 
     # ── 데이터 로드 ──
-    print("\n[데이터 로드]")
+    logger.debug("\n[데이터 로드]")
     all_data, etf_raw, spy_close = load_local_data()
-    print(f"  종목 {len(all_data)}개, ETF {len(etf_raw)}개, SPY ✓")
-
-    print(f"  지표 계산 ({len(all_data)}개)...")
+    logger.debug(f"  종목 {len(all_data)}개, ETF {len(etf_raw)}개, SPY ✓")
+    logger.debug(f"  지표 계산 ({len(all_data)}개)...")
     for t in list(all_data.keys()):
         all_data[t] = add_indicators(all_data[t])
     etf_data = {t: add_indicators(df) for t, df in etf_raw.items()}

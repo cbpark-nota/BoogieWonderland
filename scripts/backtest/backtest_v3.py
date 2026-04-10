@@ -14,6 +14,8 @@ import sys
 import warnings
 warnings.filterwarnings("ignore")
 
+logger = logging.getLogger(__name__)
+
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -358,25 +360,34 @@ def plot(results, spy_nav):
 # MAIN
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    print("=" * 60)
-    print("  v3 개선 백테스트: ATR 스톱 + 점수 비례 포지션")
-    print(f"  기간: {START} ~ {END}")
-    print("=" * 60)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
+    args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.WARNING,
+        format="%(levelname)s: %(message)s",
+    )
+
+    logger.debug("=" * 60)
+    logger.debug("  v3 개선 백테스트: ATR 스톱 + 점수 비례 포지션")
+    logger.debug(f"  기간: {START} ~ {END}")
+    logger.debug("=" * 60)
 
     # 데이터
-    print("\n[데이터 다운로드]")
+    logger.debug("\n[데이터 다운로드]")
     all_tickers = list(ALL_UNIVERSE.keys())
-    print(f"  종목 {len(all_tickers)}개...")
+    logger.debug(f"  종목 {len(all_tickers)}개...")
     all_data = download_all(all_tickers, START, END)
-    print(f"  → {len(all_data)}개 완료")
+    logger.debug(f"  → {len(all_data)}개 완료")
 
     etf_tickers = list(set(SECTOR_ETF.values()))
-    print(f"  섹터 ETF {len(etf_tickers)}개...")
+    logger.debug(f"  섹터 ETF {len(etf_tickers)}개...")
     etf_raw = download_all(etf_tickers, START, END)
     etf_data = {t: add_indicators(df) for t, df in etf_raw.items()}
-    print(f"  → {len(etf_data)}개 완료")
+    logger.debug(f"  → {len(etf_data)}개 완료")
 
-    print("  SPY 벤치마크...")
+    logger.debug("  SPY 벤치마크...")
     spy_raw     = yf.download("SPY", start=START, end=END,
                                auto_adjust=True, progress=False)
     spy_close   = spy_raw["Close"].squeeze()
@@ -384,15 +395,15 @@ if __name__ == "__main__":
     spy_nav     = [1.0] + list((1+spy_monthly).cumprod().values.flatten())
 
     # 지표 계산
-    print(f"\n  지표 계산 ({len(all_data)}개)...")
+    logger.debug(f"\n  지표 계산 ({len(all_data)}개)...")
     for t in list(all_data.keys()):
         all_data[t] = add_indicators(all_data[t])
 
     results = []
 
     # A) v2 베이스: 고정 스톱 + 동일비중
-    print("\n" + "═"*60)
-    print("  [A] v2 베이스: 고정 스톱(-10%) + 동일비중")
+    logger.debug("\n" + "═"*60)
+    logger.debug("  [A] v2 베이스: 고정 스톱(-10%) + 동일비중")
     nav_a = run_backtest(all_data, etf_data,
                          "A", use_atr_stop=False, equal_weight=True)
     m_a = metrics(nav_a, "A: 고정스톱 + 동일비중")
@@ -400,8 +411,8 @@ if __name__ == "__main__":
     results.append(("A: 고정스톱+동일비중", nav_a))
 
     # B) ATR 스톱 + 동일비중
-    print("\n" + "═"*60)
-    print("  [B] ATR 스톱(×2.5) + 동일비중")
+    logger.debug("\n" + "═"*60)
+    logger.debug("  [B] ATR 스톱(×2.5) + 동일비중")
     nav_b = run_backtest(all_data, etf_data,
                          "B", use_atr_stop=True, equal_weight=True)
     m_b = metrics(nav_b, "B: ATR스톱 + 동일비중")
@@ -412,8 +423,8 @@ if __name__ == "__main__":
     results.append(("B: ATR스톱+동일비중", nav_b))
 
     # C) 고정 스톱 + 점수비례
-    print("\n" + "═"*60)
-    print("  [C] 고정 스톱(-10%) + 점수비례 배분(상한 20%)")
+    logger.debug("\n" + "═"*60)
+    logger.debug("  [C] 고정 스톱(-10%) + 점수비례 배분(상한 20%)")
     nav_c = run_backtest(all_data, etf_data,
                          "C", use_atr_stop=False, equal_weight=False)
     m_c = metrics(nav_c, "C: 고정스톱 + 점수비례")
@@ -424,8 +435,8 @@ if __name__ == "__main__":
     results.append(("C: 고정스톱+점수비례", nav_c))
 
     # D) v3 최종: ATR 스톱 + 점수비례
-    print("\n" + "═"*60)
-    print("  [D] v3 최종: ATR 스톱(×2.5) + 점수비례(상한 20%)")
+    logger.debug("\n" + "═"*60)
+    logger.debug("  [D] v3 최종: ATR 스톱(×2.5) + 점수비례(상한 20%)")
     nav_d = run_backtest(all_data, etf_data,
                          "D", use_atr_stop=True, equal_weight=False)
     m_d = metrics(nav_d, "D: v3 최종")

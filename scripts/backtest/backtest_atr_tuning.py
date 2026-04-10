@@ -11,6 +11,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import json
+import logging
 import os
 import sys
 import itertools
@@ -22,6 +23,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
@@ -48,7 +51,7 @@ from core.constants import US_UNIVERSE, KR_UNIVERSE, ALL_UNIVERSE, SECTOR_ETF
 # ── 로컬 데이터 로드 ──────────────────────────────────────────
 def load_local_data():
     if not os.path.exists(MANIFEST):
-        print(f"  ✗ {MANIFEST} 없음. 먼저 python download_data.py 를 실행하세요.")
+        logger.warning(f"  ✗ {MANIFEST} 없음. 먼저 python download_data.py 를 실행하세요.")
         sys.exit(1)
     with open(MANIFEST, "r", encoding="utf-8") as f:
         manifest = json.load(f)
@@ -264,7 +267,7 @@ def run_backtest(all_data, etf_data, freq, atr_mult, cost_per_side):
     total = len(rebal_dates)
     for i, rd in enumerate(rebal_dates):
         if (i+1) % 100 == 0 or i == total - 1:
-            print(f"\r    진행: {i+1}/{total} ({(i+1)/total:.0%})", end="", flush=True)
+            logger.debug(f"    진행: {i+1}/{total} ({(i+1)/total:.0%})")
 
         # 스톱 체크
         if prev_dt and holdings:
@@ -328,7 +331,7 @@ def run_backtest(all_data, etf_data, freq, atr_mult, cost_per_side):
         nav_gross_series[rd] = nav_gross
         nav_net_series[rd]   = nav_net
 
-    print()
+    logger.debug("")
     return nav_gross_series, nav_net_series, trade_count, total_cost
 
 
@@ -392,7 +395,7 @@ def plot_heatmaps(results_df):
 
     plt.tight_layout()
     plt.savefig(RESULTS_DIR / "backtest_atr_tuning.png", dpi=150, bbox_inches="tight")
-    print("  차트 저장: backtest_atr_tuning.png")
+    logger.debug("  차트 저장: backtest_atr_tuning.png")
     plt.close()
 
 
@@ -416,7 +419,7 @@ def plot_nav_curves(best_results, spy_close):
     ax.grid(alpha=0.25)
     plt.tight_layout()
     plt.savefig(RESULTS_DIR / "backtest_atr_tuning_nav.png", dpi=150, bbox_inches="tight")
-    print("  차트 저장: backtest_atr_tuning_nav.png")
+    logger.debug("  차트 저장: backtest_atr_tuning_nav.png")
     plt.close()
 
 
@@ -424,25 +427,33 @@ def plot_nav_curves(best_results, spy_close):
 # MAIN
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
+    args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+
     freqs = ["W", "2W", "M"]
     freq_labels = {"W": "주간", "2W": "격주", "M": "월간"}
     combos = list(itertools.product(ATR_MULTS, freqs))
 
-    print("=" * 66)
-    print("  ATR 승수 튜닝 + 거래비용 반영 백테스트")
-    print(f"  ATR 승수: {ATR_MULTS}")
-    print(f"  리밸런싱: {[freq_labels[f] for f in freqs]}")
-    print(f"  거래비용: 편도 {COST_PER_SIDE*100:.1f}%")
-    print(f"  기간: {START} ~ {END}")
-    print(f"  총 {len(combos)}개 조합")
-    print("=" * 66)
+    logger.debug("=" * 66)
+    logger.debug("  ATR 승수 튜닝 + 거래비용 반영 백테스트")
+    logger.debug(f"  ATR 승수: {ATR_MULTS}")
+    logger.debug(f"  리밸런싱: {[freq_labels[f] for f in freqs]}")
+    logger.debug(f"  거래비용: 편도 {COST_PER_SIDE*100:.1f}%")
+    logger.debug(f"  기간: {START} ~ {END}")
+    logger.debug(f"  총 {len(combos)}개 조합")
+    logger.debug("=" * 66)
 
     # ── 데이터 로드 ──
-    print("\n[데이터 로드]")
+    logger.debug("\n[데이터 로드]")
     all_data, etf_raw, spy_close = load_local_data()
-    print(f"  종목 {len(all_data)}개, ETF {len(etf_raw)}개, SPY ✓")
-
-    print(f"  지표 계산 ({len(all_data)}개)...")
+    logger.debug(f"  종목 {len(all_data)}개, ETF {len(etf_raw)}개, SPY ✓")
+    logger.debug(f"  지표 계산 ({len(all_data)}개)...")
     for t in list(all_data.keys()):
         all_data[t] = add_indicators(all_data[t])
     etf_data = {t: add_indicators(df) for t, df in etf_raw.items()}
@@ -451,7 +462,7 @@ if __name__ == "__main__":
     all_results = []
     for idx, (atr_m, freq) in enumerate(combos, 1):
         label = f"ATR={atr_m:.1f} {freq_labels[freq]}({freq})"
-        print(f"\n[{idx}/{len(combos)}] {label}")
+        logger.debug(f"\n[{idx}/{len(combos)}] {label}")
 
         nav_g, nav_n, trades, cost = run_backtest(
             all_data, etf_data, freq, atr_m, COST_PER_SIDE)
@@ -475,13 +486,16 @@ if __name__ == "__main__":
             "nav_gross": nav_g, "nav_net": nav_n,
         }
 
-        print(f"    Gross → CAGR {m_gross['CAGR']:>+7.1%}  MDD {m_gross['MDD']:>+6.1%}  샤프 {m_gross['샤프']:.2f}")
-        print(f"    Net   → CAGR {m_net['CAGR']:>+7.1%}  MDD {m_net['MDD']:>+6.1%}  샤프 {m_net['샤프']:.2f}  "
-              f"연거래 {result['연거래']:.0f}회")
+        logger.debug(f"    Gross → CAGR {m_gross['CAGR']:>+7.1%}  MDD {m_gross['MDD']:>+6.1%}  샤프 {m_gross['샤프']:.2f}")
+        logger.debug(f"    Net   → CAGR {m_net['CAGR']:>+7.1%}  MDD {m_net['MDD']:>+6.1%}  샤프 {m_net['샤프']:.2f}  "
+                     f"연거래 {result['연거래']:.0f}회")
 
         all_results.append(result)
 
     # ── 종합 비교 테이블 ──
+    # 순수익 CAGR 기준 정렬
+    sorted_results = sorted(all_results, key=lambda x: x["CAGR(순)"], reverse=True)
+
     print(f"\n{'═'*80}")
     print("  종합 비교 (거래비용 반영 후 순수익 기준)")
     print("═" * 80)
@@ -489,12 +503,8 @@ if __name__ == "__main__":
           f"{'MDD순':>7} {'샤프순':>6} {'승률':>5} {'연거래':>5}")
     print("  " + "─" * 72)
 
-    # 순수익 CAGR 기준 정렬
-    sorted_results = sorted(all_results, key=lambda x: x["CAGR(순)"], reverse=True)
-
     for r in sorted_results:
         cost_drag = r["CAGR(총)"] - r["CAGR(순)"]
-        best_marker = ""
         print(f"  {r['ATR']:>4.1f} {freq_labels[r['주기']]:<4}({r['주기']:<2})"
               f" {r['CAGR(총)']:>+7.1%} {r['CAGR(순)']:>+7.1%} {cost_drag:>+6.1%}"
               f"  {r['MDD(순)']:>+7.1%} {r['샤프(순)']:>6.2f} {r['승률(순)']:>5.1%}"

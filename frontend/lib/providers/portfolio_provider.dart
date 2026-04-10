@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/holding.dart';
 import '../services/api_client.dart';
+import '../services/static_data_source.dart';
 
 final holdingsProvider = AsyncNotifierProvider<HoldingsNotifier, List<Holding>>(
   HoldingsNotifier.new,
@@ -36,4 +37,13 @@ final stopCheckProvider = FutureProvider.family<List<StopCheckResult>, void>((re
   final data = await ApiClient().checkStops();
   final results = data['results'] as List;
   return results.map((r) => StopCheckResult.fromJson(r)).toList();
+});
+
+final portfolioDataProvider = FutureProvider<PortfolioData?>((ref) async {
+  try {
+    final data = await StaticDataSource().getPortfolio();
+    return PortfolioData.fromJson(data);
+  } catch (_) {
+    return null;
+  }
 });

@@ -16,6 +16,7 @@ v3 파라미터 유지: ADX≥20, RSI 50~77, HH-HL≥2, 52주고점≥75%, 최�
 import warnings
 warnings.filterwarnings("ignore")
 
+import logging
 import sys
 import numpy as np
 import pandas as pd
@@ -27,6 +28,8 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from pathlib import Path
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
@@ -714,26 +717,34 @@ def plot_results(results: list, spy_nav: list):
 # MAIN
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    print("=" * 64)
-    print("  바닥 확인 진입 타이밍 전략 백테스트")
-    print(f"  기간: {START} ~ {END}")
-    print(f"  수수료: 편도 {COMMISSION*100:.1f}% (왕복 {COMMISSION*2*100:.1f}%)")
-    print(f"  유니버스: US {len(US_UNIVERSE)}종목 + KR {len(KR_UNIVERSE)}종목")
-    print("=" * 64)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
+    args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+
+    logger.debug("=" * 64)
+    logger.debug("  바닥 확인 진입 타이밍 전략 백테스트")
+    logger.debug(f"  기간: {START} ~ {END}")
+    logger.debug(f"  수수료: 편도 {COMMISSION*100:.1f}% (왕복 {COMMISSION*2*100:.1f}%)")
+    logger.debug(f"  유니버스: US {len(US_UNIVERSE)}종목 + KR {len(KR_UNIVERSE)}종목")
+    logger.debug("=" * 64)
 
     # ── 데이터 다운로드
-    print("\n[1] 데이터 다운로드")
+    logger.debug("\n[1] 데이터 다운로드")
     all_tickers = list(ALL_UNIVERSE.keys())
-    print(f"  전체 {len(all_tickers)}종목 다운로드 중...")
+    logger.debug(f"  전체 {len(all_tickers)}종목 다운로드 중...")
     all_data_raw = download_all(all_tickers, START, END)
-    print(f"  → {len(all_data_raw)}개 완료")
+    logger.debug(f"  → {len(all_data_raw)}개 완료")
 
     etf_tickers = list(set(SECTOR_ETF.values()))
     etf_raw  = download_all(etf_tickers, START, END)
     etf_data = {t: add_indicators(df) for t, df in etf_raw.items()}
-    print(f"  섹터 ETF {len(etf_data)}개 완료")
-
-    print("  SPY 다운로드...")
+    logger.debug(f"  섹터 ETF {len(etf_data)}개 완료")
+    logger.debug("  SPY 다운로드...")
     spy_raw     = yf.download("SPY", start=START, end=END,
                                auto_adjust=True, progress=False)
     spy_close   = spy_raw["Close"].squeeze()
@@ -741,16 +752,16 @@ if __name__ == "__main__":
     spy_nav     = [1.0] + list((1 + spy_monthly).cumprod().values.flatten())
 
     # ── 지표 계산
-    print(f"\n[2] 지표 계산 ({len(all_data_raw)}종목)...")
+    logger.debug(f"\n[2] 지표 계산 ({len(all_data_raw)}종목)...")
     all_data = {t: add_indicators(df) for t, df in all_data_raw.items()}
-    print("  완료")
+    logger.debug("  완료")
 
     results = []
     all_metrics = []
 
     # ── 전략 A: 기존 방식
-    print("\n" + "═" * 64)
-    print("  [전략 A] 기존 방식 — MA20 > MA50 > MA200 정배열")
+    logger.debug("\n" + "═" * 64)
+    logger.debug("  [전략 A] 기존 방식 — MA20 > MA50 > MA200 정배열")
     nav_a = run_backtest(all_data, etf_data, strategy="A")
     m_a = calc_metrics(nav_a, "A: 기존(MA정배열)")
     print_metrics(m_a)
@@ -758,8 +769,8 @@ if __name__ == "__main__":
     all_metrics.append(m_a)
 
     # ── 전략 B: 바닥 확인
-    print("\n" + "═" * 64)
-    print("  [전략 B] 신규 — MA20/MA60 데드크로스 → 30일 바닥 확인")
+    logger.debug("\n" + "═" * 64)
+    logger.debug("  [전략 B] 신규 — MA20/MA60 데드크로스 → 30일 바닥 확인")
     nav_b = run_backtest(all_data, etf_data, strategy="B")
     m_b = calc_metrics(nav_b, "B: 바닥확인")
     print_metrics(m_b)
@@ -770,8 +781,8 @@ if __name__ == "__main__":
     all_metrics.append(m_b)
 
     # ── 전략 C: 3단계 진입
-    print("\n" + "═" * 64)
-    print("  [전략 C] 3단계 진입 — 바닥50% → MA50기울기80% → 골든크로스100%")
+    logger.debug("\n" + "═" * 64)
+    logger.debug("  [전략 C] 3단계 진입 — 바닥50% → MA50기울기80% → 골든크로스100%")
     nav_c = run_backtest(all_data, etf_data, strategy="C")
     m_c = calc_metrics(nav_c, "C: 3단계진입")
     print_metrics(m_c)
@@ -799,8 +810,8 @@ if __name__ == "__main__":
               f"{m['MDD']:>+8.1%} {m['샤프']:>7.2f} {m['월승률']:>7.1%}{mark}")
 
     # ── 위양성 분석
-    print("\n" + "═" * 64)
-    print("  [위양성 분석] 바닥 확인 후 60일 내 신저점 발생률")
+    logger.debug("\n" + "═" * 64)
+    logger.debug("  [위양성 분석] 바닥 확인 후 60일 내 신저점 발생률")
     fp_df = analyze_false_positives(all_data, lookforward=60)
     if len(fp_df) > 0:
         total   = len(fp_df)

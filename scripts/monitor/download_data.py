@@ -34,6 +34,11 @@ SPY_PATH   = os.path.join(DATA_DIR, "spy.parquet")
 MANIFEST   = os.path.join(DATA_DIR, "manifest.json")
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 def download_and_save_single(ticker, out_dir, start, end):
     """개별 종목 다운로드 후 parquet로 저장. 성공 시 행 수 반환, 실패 시 0."""
     try:
@@ -75,7 +80,7 @@ def download_and_save_single(ticker, out_dir, start, end):
         df.to_parquet(path, engine="pyarrow")
         return len(df)
     except Exception as e:
-        print(f"    ⚠ {ticker} 실패: {e}")
+        logger.warning("    ⚠ %s 실패: %s", ticker, e)
         return 0
 
 
@@ -118,11 +123,24 @@ def verify_parquet(path):
 
 
 if __name__ == "__main__":
-    print("=" * 62)
-    print("  백테스트용 데이터 다운로드")
-    print(f"  기간: {START} ~ {END}")
-    print(f"  종목: {len(ALL_UNIVERSE)}개 + ETF {len(set(SECTOR_ETF.values()))}개 + SPY")
-    print("=" * 62)
+    import argparse as _argparse
+    _parser = _argparse.ArgumentParser(description="백테스트용 데이터 다운로드")
+    _parser.add_argument("--verbose", action="store_true", help="진행 상황 출력")
+    _args = _parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO if _args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+
+    _v = _args.verbose
+
+    if _v:
+        print("=" * 62)
+        print("  백테스트용 데이터 다운로드")
+        print(f"  기간: {START} ~ {END}")
+        print(f"  종목: {len(ALL_UNIVERSE)}개 + ETF {len(set(SECTOR_ETF.values()))}개 + SPY")
+        print("=" * 62)
 
     os.makedirs(STOCK_DIR, exist_ok=True)
     os.makedirs(ETF_DIR, exist_ok=True)
@@ -134,13 +152,15 @@ if __name__ == "__main__":
     }
 
     # ── 종목 다운로드 ──
-    print(f"\n[1/3] 종목 다운로드 ({len(ALL_UNIVERSE)}개)")
+    if _v:
+        print(f"\n[1/3] 종목 다운로드 ({len(ALL_UNIVERSE)}개)")
     ok_count, fail_count = 0, 0
     for i, (ticker, sector) in enumerate(ALL_UNIVERSE.items(), 1):
         rows = download_and_save_single(ticker, STOCK_DIR, START, END)
         status = "✓" if rows > 0 else "✗"
-        print(f"  {status} {i:2d}/{len(ALL_UNIVERSE)} {ticker:<12} "
-              f"{sector:<16} {rows:>5}행")
+        if _v:
+            print(f"  {status} {i:2d}/{len(ALL_UNIVERSE)} {ticker:<12} "
+                  f"{sector:<16} {rows:>5}행")
         if rows > 0:
             manifest["stocks"][ticker] = {
                 "sector": sector, "rows": rows,
@@ -149,15 +169,18 @@ if __name__ == "__main__":
             ok_count += 1
         else:
             fail_count += 1
-    print(f"  → 성공 {ok_count}개, 실패 {fail_count}개")
+    if _v:
+        print(f"  → 성공 {ok_count}개, 실패 {fail_count}개")
 
     # ── ETF 다운로드 ──
     etf_list = sorted(set(SECTOR_ETF.values()))
-    print(f"\n[2/3] 섹터 ETF 다운로드 ({len(etf_list)}개)")
+    if _v:
+        print(f"\n[2/3] 섹터 ETF 다운로드 ({len(etf_list)}개)")
     for i, ticker in enumerate(etf_list, 1):
         rows = download_and_save_single(ticker, ETF_DIR, START, END)
         status = "✓" if rows > 0 else "✗"
-        print(f"  {status} {i}/{len(etf_list)} {ticker:<6} {rows:>5}행")
+        if _v:
+            print(f"  {status} {i}/{len(etf_list)} {ticker:<6} {rows:>5}행")
         if rows > 0:
             manifest["etfs"][ticker] = {
                 "rows": rows,
@@ -165,9 +188,11 @@ if __name__ == "__main__":
             }
 
     # ── SPY 다운로드 ──
-    print(f"\n[3/3] SPY 벤치마크 다운로드")
+    if _v:
+        print(f"\n[3/3] SPY 벤치마크 다운로드")
     spy_rows = download_and_save_single("SPY", DATA_DIR, START, END)
-    print(f"  {'✓' if spy_rows > 0 else '✗'} SPY {spy_rows}행")
+    if _v:
+        print(f"  {'✓' if spy_rows > 0 else '✗'} SPY {spy_rows}행")
     if spy_rows > 0:
         # SPY는 DATA_DIR에 저장되므로 파일명 수정
         os.rename(os.path.join(DATA_DIR, "SPY.parquet"), SPY_PATH)
@@ -176,12 +201,14 @@ if __name__ == "__main__":
     # ── manifest 저장 ──
     with open(MANIFEST, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
-    print(f"\n  매니페스트 저장: {MANIFEST}")
+    if _v:
+        print(f"\n  매니페스트 저장: {MANIFEST}")
 
     # ── 저장 파일 검증 ──
-    print(f"\n{'═'*62}")
-    print("  저장 파일 검증")
-    print("═" * 62)
+    if _v:
+        print(f"\n{'═'*62}")
+        print("  저장 파일 검증")
+        print("═" * 62)
 
     errors = []
     # 종목 검증
@@ -190,10 +217,10 @@ if __name__ == "__main__":
         ok, rows, msg = verify_parquet(path)
         if not ok:
             errors.append((ticker, msg))
-            print(f"  ✗ {ticker:<12} {msg}")
+            print(f"  ✗ {ticker:<12} {msg}", file=sys.stderr)
         elif rows != info["rows"]:
             errors.append((ticker, f"행 수 불일치: manifest={info['rows']}, 파일={rows}"))
-            print(f"  ✗ {ticker:<12} 행 수 불일치")
+            print(f"  ✗ {ticker:<12} 행 수 불일치", file=sys.stderr)
 
     # ETF 검증
     for ticker, info in manifest["etfs"].items():
@@ -201,20 +228,21 @@ if __name__ == "__main__":
         ok, rows, msg = verify_parquet(path)
         if not ok:
             errors.append((ticker, msg))
-            print(f"  ✗ {ticker:<6} {msg}")
+            print(f"  ✗ {ticker:<6} {msg}", file=sys.stderr)
 
     # SPY 검증
     ok, rows, msg = verify_parquet(SPY_PATH)
     if not ok:
         errors.append(("SPY", msg))
-        print(f"  ✗ SPY {msg}")
+        print(f"  ✗ SPY {msg}", file=sys.stderr)
 
     if errors:
-        print(f"\n  ⚠ 검증 실패: {len(errors)}건")
+        print(f"\n  ⚠ 검증 실패: {len(errors)}건", file=sys.stderr)
         for t, m in errors:
-            print(f"    - {t}: {m}")
-    else:
+            print(f"    - {t}: {m}", file=sys.stderr)
+    elif _v:
         total_files = len(manifest["stocks"]) + len(manifest["etfs"]) + 1
         print(f"  ✓ 전체 {total_files}개 파일 검증 통과")
 
-    print(f"\n  완료!")
+    if _v:
+        print(f"\n  완료!")

@@ -57,11 +57,31 @@ SECTOR_ETF = {
     "Materials":"XLB","Communication":"XLC",
 }
 
+# ── 기본 파라미터 ─────────────────────────────────────────────
 ATR_PERIOD = 14
-ATR_MULT = 2.5
-SCORE_WEIGHTS = dict(adx=0.4, ret3m=0.3, sector=0.2, vol_stab=0.1)
-TOP_N = 10
+ATR_MULT   = 2.5
+TOP_N      = 10
 MAX_WEIGHT = 0.20
+
+# ── v3.1 신규 파라미터 ────────────────────────────────────────
+INCLUDE_KR_MARKET = False   # 변경 1: 한국 시장 제외
+# 변경 2: 레짐 필터 모드
+#   "off"   — 레짐 필터 적용 안 함
+#   "info"  — 레짐 상태를 결과에 포함하되 필터링하지 않음 (배포 기본값)
+#   "block" — 데드크로스 시 빈 결과 반환 (백테스트용)
+REGIME_FILTER_MODE = "info"
+VOL_TARGET        = 0.15    # 변경 3: 변동성 스케일링 목표 연환산 변동성
+HOLD_SPREAD       = 2.5     # 변경 5: 보유 종목 Top N×HOLD_SPREAD까지 유지
+USE_MKTCAP_WEIGHT = True    # 변경 6: 시가총액 가중 활성화
+
+# ── 복합점수 가중치 (변경 4: ret12m_skip1 추가) ───────────────
+SCORE_WEIGHTS = dict(
+    adx      = 0.30,   # v3: 0.40 → 0.30
+    ret3m    = 0.20,   # v3: 0.30 → 0.20
+    ret12m   = 0.20,   # 신규: 12개월(최근 1개월 제외) 수익률
+    sector   = 0.20,   # 유지
+    vol_stab = 0.10,   # 유지
+)
 
 
 def download_tickers(tickers: list[str], period: str = "1y") -> dict[str, pd.DataFrame]:
@@ -122,6 +142,17 @@ def calc_atr_stop(df: pd.DataFrame) -> float:
     return round(peak_20 - atr_val * ATR_MULT, 2)
 
 
+def calc_spy_vol_scale(spy_close: pd.Series) -> float:
+    """SPY 20일 실현변동성(연환산) 기반 전체 포지션 스케일 팩터 (변경 3)."""
+    ret = spy_close.pct_change().dropna()
+    if len(ret) < 20:
+        return 1.0
+    vol = float(ret.tail(20).std() * np.sqrt(252))
+    if vol <= 0:
+        return 1.0
+    return min(VOL_TARGET / vol, 1.0)
+
+
 def screen_stock(df: pd.DataFrame) -> tuple[bool, dict]:
     if len(df) < 200:
         return False, {}
@@ -158,12 +189,22 @@ def screen_stock(df: pd.DataFrame) -> tuple[bool, dict]:
     vol_cv = r20["Volume"].std() / (vol60 + 1e-9)
     vol_stab = float(1 / (vol_cv + 1e-6))
 
+    # ── 변경 4: ret12m_skip1 (252일 수익률, 최근 21일 제외) ──
+    n = len(df)
+    if n >= 273:
+        ret12m_skip1 = float(df["Close"].iloc[-22] / df["Close"].iloc[-273]) - 1
+    elif n >= 252:
+        ret12m_skip1 = float(df["Close"].iloc[-22] / df["Close"].iloc[-252]) - 1
+    else:
+        ret12m_skip1 = np.nan
+
     stop_price = calc_atr_stop(df)
     cur_price = float(df["Close"].iloc[-1])
     stop_dist = (stop_price - cur_price) / cur_price if not pd.isna(stop_price) else np.nan
 
     return True, {
         "ADX": float(adx), "RSI": float(rsi), "ret3m": ret3m,
+        "ret12m_skip1": ret12m_skip1,
         "vol_stab": vol_stab, "price": cur_price,
         "stop_price": stop_price, "stop_dist": stop_dist,
         "atr": float(df["ATR"].dropna().iloc[-1]) if "ATR" in df.columns and len(df["ATR"].dropna()) > 0 else np.nan,
@@ -196,7 +237,11 @@ def calc_position_weights(scores: pd.Series, max_w: float = MAX_WEIGHT) -> pd.Se
     return w / w.sum()
 
 
-def rank_stocks(passed: dict, etf_data: dict) -> pd.DataFrame:
+def rank_stocks(passed: dict, etf_data: dict, market_caps: dict | None = None) -> pd.DataFrame:
+    """
+    복합점수 계산 및 정렬.
+    market_caps: {ticker: float} — 변경 6 시가총액 가중에 사용
+    """
     if not passed:
         return pd.DataFrame()
     df = pd.DataFrame(passed).T
@@ -211,59 +256,115 @@ def rank_stocks(passed: dict, etf_data: dict) -> pd.DataFrame:
                 etf_ret = float(etf_close.iloc[-1] / etf_close.iloc[-63]) - 1
                 df.loc[idx, "sec_str"] = (row["ret3m"] - etf_ret) if not pd.isna(row["ret3m"]) else 0.0
     df["sec_str_norm"] = minmax(df["sec_str"])
+
+    # ── 변경 4: ret12m_skip1 포함 복합점수 ─────────────────────
+    ret12m_col = df["ret12m_skip1"].fillna(0) if "ret12m_skip1" in df.columns else pd.Series(0.0, index=df.index)
     df["score"] = (
-        minmax(df["ADX"]) * SCORE_WEIGHTS["adx"] +
-        minmax(df["ret3m"].fillna(0)) * SCORE_WEIGHTS["ret3m"] +
-        minmax(df["sec_str_norm"]) * SCORE_WEIGHTS["sector"] +
-        minmax(df["vol_stab"]) * SCORE_WEIGHTS["vol_stab"]
+        minmax(df["ADX"])                  * SCORE_WEIGHTS["adx"]     +
+        minmax(df["ret3m"].fillna(0))      * SCORE_WEIGHTS["ret3m"]   +
+        minmax(ret12m_col)                 * SCORE_WEIGHTS["ret12m"]  +
+        minmax(df["sec_str_norm"])         * SCORE_WEIGHTS["sector"]  +
+        minmax(df["vol_stab"])             * SCORE_WEIGHTS["vol_stab"]
     )
+
+    # ── 변경 6: 시가총액 가중 (score × sqrt(market_cap)) ───────
+    if USE_MKTCAP_WEIGHT and market_caps:
+        df["mktcap"] = [market_caps.get(t, 1.0) for t in df.index]
+        df["mktcap"] = df["mktcap"].clip(lower=1.0)
+        df["score"]  = df["score"] * np.sqrt(df["mktcap"])
+
     return df.sort_values("score", ascending=False)
 
 
 def check_market() -> dict | None:
+    """SPY MA20 vs MA60 골든/데드크로스 확인 (변경 2)."""
     try:
         spy = yf.download("SPY", period="1y", auto_adjust=True, progress=False)
         close = spy["Close"].squeeze()
-        ma50 = float(close.rolling(50).mean().iloc[-1])
-        ma200 = float(close.rolling(200).mean().iloc[-1])
+        ma20 = float(close.rolling(20).mean().iloc[-1])
+        ma60 = float(close.rolling(60).mean().iloc[-1])
         price = float(close.iloc[-1])
-        gap = (ma50 - ma200) / ma200 * 100
-        return {"price": price, "ma50": ma50, "ma200": ma200,
-                "gap_pct": gap, "is_golden": ma50 > ma200}
+        gap = (ma20 - ma60) / ma60 * 100
+        return {"price": price, "ma20": ma20, "ma60": ma60,
+                "gap_pct": gap, "is_golden": ma20 > ma60,
+                "close": close}
     except Exception:
         return None
 
 
-def run_screening() -> dict:
+def run_screening(held_tickers: list[str] | None = None) -> dict:
     """전체 스크리닝 파이프라인 실행. 결과 dict 반환."""
+    if held_tickers is None:
+        held_tickers = []
+
+    # ── 변경 2: 시장 레짐 필터 ───────────────────────────────
     market = check_market()
+    spy_close_series = market["close"] if market else None
+
+    if REGIME_FILTER_MODE == "block" and market and not market["is_golden"]:
+        return {
+            "market": {k: v for k, v in market.items() if k != "close"},
+            "regime_blocked": True,
+            "total_screened": 0,
+            "total_passed": 0,
+            "results": [],
+        }
+
+    # ── 변경 3: 변동성 스케일 팩터 ───────────────────────────
+    vol_scale = calc_spy_vol_scale(spy_close_series) if spy_close_series is not None else 1.0
+
+    # ── 변경 1: KR 시장 제외 ─────────────────────────────────
+    universe = US_UNIVERSE if not INCLUDE_KR_MARKET else ALL_UNIVERSE
 
     # 데이터 다운로드
-    all_data = {}
-    for i in range(0, len(ALL_UNIVERSE), 30):
-        chunk = list(ALL_UNIVERSE.keys())[i:i + 30]
+    all_data: dict = {}
+    for i in range(0, len(universe), 30):
+        chunk = list(universe.keys())[i:i + 30]
         all_data.update(download_tickers(chunk))
 
-    etf_data = {}
+    etf_data: dict = {}
     etf_raw = download_tickers(list(set(SECTOR_ETF.values())))
     for t, df in etf_raw.items():
         etf_data[t] = calc_indicators(df)
 
     # 스크리닝
-    passed = {}
+    passed: dict = {}
     for t, df in all_data.items():
         df_ind = calc_indicators(df)
         ok, metrics = screen_stock(df_ind)
         if ok:
             passed[t] = metrics
 
+    # ── 변경 6: 시가총액 수집 ─────────────────────────────────
+    market_caps: dict = {}
+    if USE_MKTCAP_WEIGHT and passed:
+        for t in passed:
+            try:
+                mc = yf.Ticker(t).fast_info.market_cap
+                market_caps[t] = float(mc) if mc and mc > 0 else 1.0
+            except Exception:
+                market_caps[t] = 1.0
+
     # 랭킹
-    ranked = rank_stocks(passed, etf_data)
-    top = ranked.head(TOP_N).copy()
+    ranked = rank_stocks(passed, etf_data, market_caps)
+
+    # ── 변경 5: Buy/Hold Spread ───────────────────────────────
+    hold_n  = int(TOP_N * HOLD_SPREAD)
+    top_new = ranked.head(TOP_N) if len(ranked) > 0 else ranked
+
+    if held_tickers and len(ranked) > 0:
+        hold_extended = ranked.head(hold_n)
+        held_valid    = [t for t in held_tickers if t in hold_extended.index]
+        held_extra    = [t for t in held_valid if t not in top_new.index]
+        top = pd.concat([top_new, ranked.loc[held_extra]]) if held_extra else top_new
+    else:
+        top = top_new
 
     results = []
     if len(top) > 0:
-        weights = calc_position_weights(top["score"])
+        raw_weights = calc_position_weights(top["score"])
+        weights = raw_weights * vol_scale   # 변경 3: vol_scale 적용
+
         for rank_idx, (ticker, row) in enumerate(top.iterrows(), 1):
             results.append({
                 "rank": rank_idx,
@@ -273,17 +374,35 @@ def run_screening() -> dict:
                 "sector": ALL_UNIVERSE.get(ticker, "Unknown"),
                 "score": float(row["score"]),
                 "weight_pct": float(weights[ticker]) * 100,
+                "weight_raw_pct": float(raw_weights[ticker]) * 100,
                 "price": float(row["price"]),
                 "adx": float(row["ADX"]) if not pd.isna(row["ADX"]) else None,
                 "rsi": float(row["RSI"]) if not pd.isna(row["RSI"]) else None,
                 "ret_3m": float(row["ret3m"]) if not pd.isna(row["ret3m"]) else None,
+                "ret_12m_skip1": float(row["ret12m_skip1"]) if "ret12m_skip1" in row and not pd.isna(row["ret12m_skip1"]) else None,
                 "stop_price": float(row["stop_price"]) if not pd.isna(row["stop_price"]) else None,
                 "stop_dist_pct": float(row["stop_dist"]) * 100 if not pd.isna(row.get("stop_dist")) else None,
                 "atr": float(row["atr"]) if not pd.isna(row["atr"]) else None,
+                "is_held": ticker in held_tickers,
             })
 
+    market_out = {k: v for k, v in market.items() if k != "close"} if market else None
+
+    # info 모드: market_regime 필드 구성
+    market_regime = None
+    if REGIME_FILTER_MODE == "info" and market:
+        market_regime = {
+            "golden_cross": market["is_golden"],
+            "spy_ma20"    : round(market["ma20"], 2),
+            "spy_ma60"    : round(market["ma60"], 2),
+            "gap_pct"     : round(market["gap_pct"], 2),
+        }
+
     return {
-        "market": market,
+        "market": market_out,
+        "market_regime": market_regime,
+        "vol_scale": vol_scale,
+        "regime_blocked": False,
         "total_screened": len(all_data),
         "total_passed": len(passed),
         "results": results,

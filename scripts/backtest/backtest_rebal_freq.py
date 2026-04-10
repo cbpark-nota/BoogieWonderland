@@ -13,8 +13,11 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import json
+import logging
 import os
 import sys
+
+logger = logging.getLogger(__name__)
 
 import numpy as np
 import pandas as pd
@@ -52,7 +55,7 @@ MANIFEST  = os.path.join(DATA_DIR, "manifest.json")
 def load_local_data():
     """data/ 디렉토리에서 parquet 파일 로드. (all_data, etf_data, spy_close) 반환."""
     if not os.path.exists(MANIFEST):
-        print(f"  ✗ {MANIFEST} 없음. 먼저 python download_data.py 를 실행하세요.")
+        logger.warning(f"  ✗ {MANIFEST} 없음. 먼저 python download_data.py 를 실행하세요.")
         sys.exit(1)
 
     with open(MANIFEST, "r", encoding="utf-8") as f:
@@ -247,7 +250,7 @@ def run_backtest(all_data, etf_data, freq):
     total = len(rebal_dates)
     for i, rd in enumerate(rebal_dates):
         if (i+1) % 50 == 0 or i == total - 1:
-            print(f"\r    진행: {i+1}/{total} ({(i+1)/total:.0%})", end="", flush=True)
+            logger.debug(f"    진행: {i+1}/{total} ({(i+1)/total:.0%})")
 
         if prev_dt and holdings:
             holdings = check_stops(holdings, all_data, prev_dt, rd)
@@ -298,7 +301,7 @@ def run_backtest(all_data, etf_data, freq):
         holdings = new_holdings
         prev_dt  = rd
 
-    print()  # 줄바꿈
+    logger.debug("")
     return nav_series, trade_count
 
 
@@ -414,23 +417,32 @@ def plot(all_metrics, spy_close):
 # MAIN
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    print("=" * 62)
-    print("  리밸런싱 주기별 백테스트 비교 (로컬 데이터)")
-    print(f"  전략: v3 최종 (ATR×{ATR_MULT} 스톱 + 점수비례 상한{MAX_WEIGHT:.0%})")
-    print(f"  기간: {START} ~ {END}")
-    print("=" * 62)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
+    args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+
+    logger.debug("=" * 62)
+    logger.debug("  리밸런싱 주기별 백테스트 비교 (로컬 데이터)")
+    logger.debug(f"  전략: v3 최종 (ATR×{ATR_MULT} 스톱 + 점수비례 상한{MAX_WEIGHT:.0%})")
+    logger.debug(f"  기간: {START} ~ {END}")
+    logger.debug("=" * 62)
 
     # ── 로컬 데이터 로드 ──
-    print("\n[데이터 로드]")
+    logger.debug("\n[데이터 로드]")
     all_data, etf_raw, spy_close = load_local_data()
-    print(f"  종목 {len(all_data)}개, ETF {len(etf_raw)}개, SPY {'✓' if spy_close is not None else '✗'}")
+    logger.debug(f"  종목 {len(all_data)}개, ETF {len(etf_raw)}개, SPY {'✓' if spy_close is not None else '✗'}")
 
     if spy_close is None:
-        print("  ✗ SPY 데이터 없음. download_data.py를 실행하세요.")
+        logger.warning("  ✗ SPY 데이터 없음. download_data.py를 실행하세요.")
         sys.exit(1)
 
     # ── 지표 계산 ──
-    print(f"  지표 계산 ({len(all_data)}개)...")
+    logger.debug(f"  지표 계산 ({len(all_data)}개)...")
     for t in list(all_data.keys()):
         all_data[t] = add_indicators(all_data[t])
     etf_data = {t: add_indicators(df) for t, df in etf_raw.items()}
@@ -444,8 +456,8 @@ if __name__ == "__main__":
 
     all_metrics = []
     for freq, label in configs:
-        print(f"\n{'═'*62}")
-        print(f"  [{label}] 리밸런싱 주기: {label}")
+        logger.debug(f"\n{'═'*62}")
+        logger.debug(f"  [{label}] 리밸런싱 주기: {label}")
         nav_s, trades = run_backtest(all_data, etf_data, freq)
         m = calc_metrics(nav_s, label, freq, trades)
         print_m(m)

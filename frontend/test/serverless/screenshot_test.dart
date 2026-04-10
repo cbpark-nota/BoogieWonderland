@@ -8,8 +8,10 @@ import 'package:momentum_app/screens/dashboard_screen.dart';
 import 'package:momentum_app/providers/screening_provider.dart';
 import 'package:momentum_app/providers/market_provider.dart';
 import 'package:momentum_app/providers/portfolio_provider.dart';
+import 'package:momentum_app/providers/serverless_providers.dart';
 import 'package:momentum_app/models/screening_result.dart';
 import 'package:momentum_app/models/holding.dart';
+import 'package:momentum_app/models/portfolio_data.dart';
 
 // 목 데이터
 final _mockMarketStatus = MarketStatus(
@@ -61,6 +63,12 @@ Widget _wrapPhone(Widget child) {
       marketStatusProvider.overrideWith((ref) async => _mockMarketStatus),
       screeningProvider.overrideWith(() => _MockScreeningNotifier()),
       holdingsProvider.overrideWith(() => _MockHoldingsNotifier()),
+      // DEPLOY_ENV 기본값이 serverless이므로 네트워크 호출 차단
+      portfolioDataProvider.overrideWith((ref) async => PortfolioData.fromJson({})),
+      historyDatesProvider.overrideWith((ref) async => []),
+      strategyDataProvider.overrideWith((ref) async => null),
+      rebalanceSignalProvider.overrideWith(
+          (ref) async => const RebalanceSignal(screeningTickers: {})),
     ],
     child: MaterialApp(
       debugShowCheckedModeBanner: false,

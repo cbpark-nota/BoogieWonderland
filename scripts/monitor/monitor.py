@@ -55,7 +55,6 @@ def load_holdings() -> dict:
 def save_holdings(holdings: dict):
     with open(HOLDINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(holdings, f, ensure_ascii=False, indent=2)
-    print(f"  저장 완료: {HOLDINGS_FILE}")
 
 def add_holding(ticker: str, entry_price: float):
     holdings = load_holdings()
@@ -75,7 +74,7 @@ def remove_holding(ticker: str):
         save_holdings(holdings)
         print(f"  🗑  {t} 제거 완료")
     else:
-        print(f"  ⚠️  {t}은 보유 목록에 없습니다")
+        print(f"  ⚠️  {t}은 보유 목록에 없습니다", file=sys.stderr)
 
 def list_holdings():
     holdings = load_holdings()
@@ -159,7 +158,7 @@ def run_monitor():
             raw = yf.download(ticker, period="3mo",
                               auto_adjust=True, progress=False)
             if raw.empty or len(raw) < ATR_PERIOD + 2:
-                print(f"  ⚠️  {ticker} — 데이터 수신 실패")
+                print(f"  ⚠️  {ticker} — 데이터 수신 실패", file=sys.stderr)
                 updated_holdings[ticker] = info
                 continue
 
@@ -198,7 +197,7 @@ def run_monitor():
                 safe_list.append(row)
 
         except Exception as e:
-            print(f"  ⚠️  {ticker} 처리 오류: {e}")
+            print(f"  ⚠️  {ticker} 처리 오류: {e}", file=sys.stderr)
 
         updated_holdings[ticker] = info
 

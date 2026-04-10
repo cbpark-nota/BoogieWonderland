@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'config/app_config.dart';
+import 'config/deploy_env.dart';
+import 'models/screening_result.dart';
 import 'providers/screening_provider.dart';
 import 'providers/portfolio_provider.dart';
 import 'providers/market_provider.dart';
 import 'providers/serverless_providers.dart';
+import 'services/api_client.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/portfolio_screen.dart';
 import 'screens/settings_screen.dart';
@@ -13,7 +15,7 @@ import 'screens/strategy_guide_tabs_screen.dart';
 import 'screens/market_cap_screen.dart';
 
 void main() {
-  if (AppConfig.isServerless) {
+  if (DeployConfig.useStaticData) {
     runApp(ProviderScope(
       overrides: [
         screeningProvider.overrideWith(() => ServerlessScreeningNotifier()),
@@ -24,7 +26,41 @@ void main() {
       child: const MomentumApp(),
     ));
   } else {
-    runApp(const ProviderScope(child: MomentumApp()));
+    runApp(ProviderScope(
+      overrides: [
+        // fullstack 모드: 백엔드 API에서 전략 데이터 로드
+        strategyDataProvider.overrideWith((ref) async {
+          try {
+            final data = await ApiClient().getLatestScreening();
+            return StrategyScreeningData.fromJson(data);
+          } catch (_) {
+            return null;
+          }
+        }),
+        historyScreeningProvider.overrideWith((ref) async {
+          final date = ref.watch(selectedHistoryDateProvider);
+          try {
+            final Map<String, dynamic> data;
+            if (date == null) {
+              data = await ApiClient().getLatestScreening();
+            } else {
+              data = await ApiClient().getScreeningByDate(date);
+            }
+            return StrategyScreeningData.fromJson(data);
+          } catch (_) {
+            return null;
+          }
+        }),
+        historyDatesProvider.overrideWith((ref) async {
+          try {
+            return await ApiClient().getScreeningHistoryDates(days: 30);
+          } catch (_) {
+            return [];
+          }
+        }),
+      ],
+      child: const MomentumApp(),
+    ));
   }
 }
 
@@ -177,6 +213,29 @@ class _MainNavigationState extends State<MainNavigation> {
                         title: const Text('트렌드 분석'),
                       ),
                       body: const MarketCapScreen(),
+                    ),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.show_chart),
+              title: const Text('트렌드 분석'),
+              subtitle: const Text('시총 Top 20 모니터링', style: TextStyle(fontSize: 11)),
+              onTap: () {
+                _scaffoldKey.currentState?.closeDrawer();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (ctx) => Scaffold(
+                      appBar: AppBar(
+                        leading: IconButton(
+                          icon: const Icon(Icons.arrow_back_ios),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                        title: const Text('트렌드 분석'),
+                      ),
+                      body: const StrategyGuideScreen(),
                     ),
                   ),
                 );

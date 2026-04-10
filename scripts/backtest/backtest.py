@@ -23,6 +23,7 @@
 import warnings
 warnings.filterwarnings("ignore")
 
+import logging
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -31,6 +32,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
@@ -68,7 +71,7 @@ def get_us_tickers() -> list[str]:
             "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
         )[0]
         tickers = table["Symbol"].str.replace(".", "-", regex=False).tolist()
-        print(f"  [US] S&P500 {len(tickers)}개 파싱 성공")
+        logger.debug(f"  [US] S&P500 {len(tickers)}개 파싱 성공")
         return tickers
     except Exception as e:
         # 네트워크 오류 시 주요 종목 폴백
@@ -80,7 +83,7 @@ def get_us_tickers() -> list[str]:
             "ISRG","REGN","VRTX","GILD","AMGN","BMY","PFE","MU","AMAT","LRCX",
             "KLAC","MRVL","ON","PANW","CRWD","SNOW","PLTR","COIN","SQ",
         ]
-        print(f"  [US] 위키 파싱 실패 → 주요 {len(fallback)}개 사용")
+        logger.warning(f"  [US] 위키 파싱 실패 → 주요 {len(fallback)}개 사용")
         return fallback
 
 
@@ -317,7 +320,7 @@ def run_backtest(all_data: dict, sector_map: dict) -> tuple[list, list]:
         n = len(selected_df)
         holdings = {t: 1.0 / n for t in selected_df.index} if n > 0 else {}
 
-        print(
+        logger.debug(
             f"  {rd.date()}  통과 {len(passed):3d}개 → "
             f"선택 {n}개: {list(selected_df.index[:4])}{'...' if n > 4 else ''}"
         )
@@ -434,16 +437,24 @@ def plot_results(nav_strat: list, nav_bench: np.ndarray, log: list):
 # MAIN
 # ═══════════════════════════════════════════════════════
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="상세 출력 활성화")
+    args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
 
-    print("=" * 56)
-    print("  모멘텀 주식 투자 백테스트")
-    print(f"  기간: {CONFIG['start_date']} ~ {CONFIG['end_date']}")
-    print(f"  리밸런싱: 매월 말 | 보유 종목: {CONFIG['top_n']}개")
-    print(f"  복합점수: ADX×0.4 + 3M수익률×0.3 + 섹터강도×0.2 + 거래량안정성×0.1")
-    print("=" * 56)
+    logger.debug("=" * 56)
+    logger.debug("  모멘텀 주식 투자 백테스트")
+    logger.debug(f"  기간: {CONFIG['start_date']} ~ {CONFIG['end_date']}")
+    logger.debug(f"  리밸런싱: 매월 말 | 보유 종목: {CONFIG['top_n']}개")
+    logger.debug(f"  복합점수: ADX×0.4 + 3M수익률×0.3 + 섹터강도×0.2 + 거래량안정성×0.1")
+    logger.debug("=" * 56)
 
     # ── 1. 유니버스 ──
-    print("\n[1/5] 유니버스 구성")
+    logger.debug("\n[1/5] 유니버스 구성")
     us_tickers = get_us_tickers()
     kr_tickers = list(KOSPI_UNIVERSE.keys())
     all_tickers = us_tickers + kr_tickers
@@ -462,36 +473,35 @@ if __name__ == "__main__":
     sector_map.update(KOSPI_UNIVERSE)
 
     # ── 2. 데이터 다운로드 ──
-    print(f"\n[2/5] 데이터 다운로드 ({len(all_tickers)}개 종목)")
-    print("  미국 종목 다운로드 중...")
+    logger.debug(f"\n[2/5] 데이터 다운로드 ({len(all_tickers)}개 종목)")
+    logger.debug("  미국 종목 다운로드 중...")
     us_data = download_ohlcv(us_tickers, CONFIG["start_date"], CONFIG["end_date"])
-    print(f"  → {len(us_data)}개 완료")
-
-    print("  국내 종목 다운로드 중...")
+    logger.debug(f"  → {len(us_data)}개 완료")
+    logger.debug("  국내 종목 다운로드 중...")
     kr_data = download_ohlcv(kr_tickers, CONFIG["start_date"], CONFIG["end_date"])
-    print(f"  → {len(kr_data)}개 완료")
+    logger.debug(f"  → {len(kr_data)}개 완료")
 
     all_data = {**us_data, **kr_data}
-    print(f"  총 {len(all_data)}개 종목 사용")
+    logger.debug(f"  총 {len(all_data)}개 종목 사용")
 
     # ── 3. 지표 계산 ──
-    print(f"\n[3/5] 기술적 지표 계산 ({len(all_data)}개)")
+    logger.debug(f"\n[3/5] 기술적 지표 계산 ({len(all_data)}개)")
     for i, (t, df) in enumerate(all_data.items()):
         all_data[t] = add_indicators(df)
         if (i + 1) % 100 == 0:
-            print(f"  {i+1}/{len(all_data)} 완료")
-    print("  지표 계산 완료")
+            logger.debug(f"  {i+1}/{len(all_data)} 완료")
+    logger.debug("  지표 계산 완료")
 
     # ── 4. 백테스트 ──
-    print("\n[4/5] 백테스트 실행 (매월 리밸런싱)")
+    logger.debug("\n[4/5] 백테스트 실행 (매월 리밸런싱)")
     nav_strat, log = run_backtest(all_data, sector_map)
 
     # 벤치마크
-    print("\n  벤치마크(SPY) 데이터 로딩...")
+    logger.debug("\n  벤치마크(SPY) 데이터 로딩...")
     nav_bench = get_benchmark_nav(len(nav_strat) - 1)
 
     # ── 5. 결과 출력 ──
-    print("\n[5/5] 성과 분석")
+    logger.debug("\n[5/5] 성과 분석")
     m_strat = calc_metrics(nav_strat, "전략 (상위 10 모멘텀)")
     m_bench = calc_metrics(nav_bench.tolist(), "벤치마크 S&P500 (SPY)")
 
@@ -515,11 +525,11 @@ if __name__ == "__main__":
     print("\n  리밸런싱 로그 저장: rebalance_log.csv")
 
     # ── 최근 6회 리밸런싱 ──
-    print("\n  [최근 6회 리밸런싱]")
+    logger.debug("\n  [최근 6회 리밸런싱]")
     for e in log[-6:]:
         names = e["selected"][:4]
         tail  = "..." if len(e["selected"]) > 4 else ""
-        print(f"  {e['date']}  통과 {e['n_pass']:3d}개 │ {', '.join(names)}{tail}")
+        logger.debug(f"  {e['date']}  통과 {e['n_pass']:3d}개 │ {', '.join(names)}{tail}")
 
     # ── 차트 ──
     plot_results(nav_strat, nav_bench, log)

@@ -50,6 +50,10 @@ jobs:
         working-directory: frontend
         run: flutter pub get
 
+      - name: Golden 파일 갱신 (CI 환경 렌더링 기준)
+        working-directory: frontend
+        run: flutter test test/serverless/screenshot_test.dart --update-goldens
+
       - name: 프론트엔드 테스트
         working-directory: frontend
-        run: flutter test
+        run: flutter test test/serverless test/shared

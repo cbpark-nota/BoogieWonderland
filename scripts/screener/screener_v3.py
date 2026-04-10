@@ -4,9 +4,18 @@
 v2 대비 추가 개선:
   ① ATR 기반 동적 스톱로스   (고정 -10% → ATR×2.5)
   ② 복합점수 비례 포지션 사이징 (동일비중 → 점수 가중 배분)
+
+v3.1 추가 개선:
+  ③ 한국 시장 제외 플래그     (INCLUDE_KR_MARKET = False)
+  ④ 시장 레짐 필터            (SPY MA20 < MA60 → 빈 결과)
+  ⑤ 변동성 스케일링           (SPY 20일 실현변동성 → VOL_TARGET 기준 포지션 조절)
+  ⑥ 형성 기간 확장            (ret12m_skip1: 252일, 최근 21일 제외)
+  ⑦ Buy/Hold Spread           (보유 종목 Top N×2.5까지 유지)
+  ⑧ 시가총액 가중             (score × sqrt(market_cap))
 ══════════════════════════════════════════════════════════
 """
 import logging
+import os
 import sys
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -23,20 +32,55 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.constants import US_UNIVERSE, KR_UNIVERSE, ALL_UNIVERSE, SECTOR_ETF
 
+# ── 배포 환경 설정 ────────────────────────────────────────────
+# DEPLOY_ENV: "serverless" | "local" | "cloud"  (기본값: "local")
+DEPLOY_ENV = os.environ.get("DEPLOY_ENV", "local")
+
+# 환경별 CSV 출력 경로 결정
+_SCRIPT_DIR = Path(__file__).parent
+_PROJECT_ROOT = _SCRIPT_DIR.parent.parent
+_OUTPUT_DIR: Path
+if DEPLOY_ENV == "serverless":
+    _OUTPUT_DIR = _PROJECT_ROOT / "frontend" / "web" / "data"
+elif DEPLOY_ENV == "cloud":
+    _OUTPUT_DIR = _SCRIPT_DIR / "results"
+else:  # local
+    _OUTPUT_DIR = _SCRIPT_DIR / "results"
+
+# ── 기본 스크리닝 파라미터 ────────────────────────────────────
 ATR_PERIOD   = 14
 ATR_MULT     = 2.5
-WEIGHTS      = dict(adx=0.4, ret3m=0.3, sector=0.2, vol_stab=0.1)
 TOP_N        = 10
 # 포지션 사이징 방식: "equal"(동일비중) | "score"(점수 비례) | "score_capped"(점수 비례+상한)
 SIZING_MODE  = "score_capped"
-MAX_WEIGHT   = 0.10   # 단일 종목 최대 비중 (score_capped 모드) — v3 최적: 20% → 10%
+MAX_WEIGHT   = 0.10   # 단일 종목 최대 비중 (score_capped 모드)
 
-# ── 스크리닝 임계값 (v3 최적 파라미터) ────────────────────────
+# ── 스크리닝 임계값 ───────────────────────────────────────────
 ADX_THRESH   = 20     # v3 최적: 25 → 20
 RSI_LO       = 50
 RSI_HI       = 77     # v3 최적: 75 → 77
 HH_HL_MIN    = 2      # v3 최적: 3 → 2
 PRICE_52W    = 0.75   # v3 최적: 80% → 75%
+
+# ── v3.1 신규 파라미터 ────────────────────────────────────────
+INCLUDE_KR_MARKET  = False   # 변경 1: 한국 시장 제외 (True = 포함)
+# 변경 2: 레짐 필터 모드
+#   "off"   — 레짐 필터 적용 안 함
+#   "info"  — 레짐 상태를 결과에 포함하되 필터링하지 않음 (배포 기본값)
+#   "block" — 데드크로스 시 빈 결과 반환 (백테스트용)
+REGIME_FILTER_MODE = "info"
+VOL_TARGET         = 0.15    # 변경 3: 변동성 스케일링 목표 연환산 변동성
+HOLD_SPREAD        = 2.5     # 변경 5: 보유 종목 Top N×HOLD_SPREAD까지 유지
+USE_MKTCAP_WEIGHT  = True    # 변경 6: 시가총액 가중 활성화
+
+# ── 복합점수 가중치 (변경 4: ret12m_skip1 추가, 가중치 재배분) ─
+WEIGHTS = dict(
+    adx      = 0.30,   # v3: 0.40 → 0.30
+    ret3m    = 0.20,   # v3: 0.30 → 0.20
+    ret12m   = 0.20,   # 신규: 12개월(최근 1개월 제외) 수익률
+    sector   = 0.20,   # 유지
+    vol_stab = 0.10,   # 유지
+)
 
 
 # ── 다운로드 ──────────────────────────────────────────────────
@@ -108,6 +152,35 @@ def calc_atr_stop(df) -> float:
     return round(peak_20 - atr_val * ATR_MULT, 2)
 
 
+# ── SPY 실현변동성 기반 포지션 스케일 팩터 (변경 3) ──────────
+def calc_spy_vol_scale(spy_close: pd.Series) -> float:
+    """
+    SPY 20일 실현변동성(연환산)을 VOL_TARGET과 비교해
+    전체 포지션 크기를 0~1 사이로 조절한다.
+    변동성이 낮을수록 포지션 확대, 높을수록 축소.
+    """
+    ret = spy_close.pct_change().dropna()
+    if len(ret) < 20:
+        return 1.0
+    vol = float(ret.tail(20).std() * np.sqrt(252))
+    if vol <= 0:
+        return 1.0
+    return min(VOL_TARGET / vol, 1.0)
+
+
+# ── 시가총액 수집 (변경 6) ────────────────────────────────────
+def fetch_market_caps(tickers: list) -> dict:
+    """passed 종목들의 시가총액을 yfinance fast_info로 수집한다."""
+    caps = {}
+    for t in tickers:
+        try:
+            mc = yf.Ticker(t).fast_info.market_cap
+            caps[t] = float(mc) if mc and mc > 0 else 1.0
+        except Exception:
+            caps[t] = 1.0
+    return caps
+
+
 # ── 스크리닝 ──────────────────────────────────────────────────
 def screen(df):
     if len(df) < 200:
@@ -150,16 +223,23 @@ def screen(df):
         if row["Close"] < high52 * PRICE_52W:
             return False, {}
 
-    ret3m    = float(df["Close"].iloc[-1] / r63["Close"].iloc[0]) - 1 \
-               if len(r63) >= 60 else np.nan
+    ret3m = float(df["Close"].iloc[-1] / r63["Close"].iloc[0]) - 1 \
+            if len(r63) >= 60 else np.nan
     vol_cv   = r20["Volume"].std() / (vol60 + 1e-9)
     vol_stab = float(1 / (vol_cv + 1e-6))
 
+    # ── 변경 4: ret12m_skip1 (252일 수익률, 최근 21일 제외) ──
+    n = len(df)
+    if n >= 273:   # 252 + 21
+        ret12m_skip1 = float(df["Close"].iloc[-22] / df["Close"].iloc[-273]) - 1
+    elif n >= 252:
+        ret12m_skip1 = float(df["Close"].iloc[-22] / df["Close"].iloc[-252]) - 1
+    else:
+        ret12m_skip1 = np.nan
+
     # ATR 기반 동적 스톱가
     stop_price = calc_atr_stop(df)
-
-    # 현재가 대비 스톱 거리 (%)
-    cur_price = float(df["Close"].iloc[-1])
+    cur_price  = float(df["Close"].iloc[-1])
 
     # 현재가가 이미 ATR 스톱 이하인 종목은 제외 (스톱 트리거 상태)
     if not pd.isna(stop_price) and cur_price <= stop_price:
@@ -168,16 +248,17 @@ def screen(df):
     stop_dist = (stop_price - cur_price) / cur_price if not pd.isna(stop_price) else np.nan
 
     return True, {
-        "ADX"       : float(adx),
-        "RSI"       : float(rsi),
-        "ret3m"     : ret3m,
-        "vol_stab"  : vol_stab,
-        "price"     : cur_price,
-        "stop_price": stop_price,
-        "stop_dist" : stop_dist,       # 음수: 현재가에서 스톱까지의 거리
-        "high52w"   : float(high52) if not pd.isna(high52) else np.nan,
-        "atr"       : float(df["ATR"].dropna().iloc[-1])
-                      if "ATR" in df.columns else np.nan,
+        "ADX"         : float(adx),
+        "RSI"         : float(rsi),
+        "ret3m"       : ret3m,
+        "ret12m_skip1": ret12m_skip1,
+        "vol_stab"    : vol_stab,
+        "price"       : cur_price,
+        "stop_price"  : stop_price,
+        "stop_dist"   : stop_dist,
+        "high52w"     : float(high52) if not pd.isna(high52) else np.nan,
+        "atr"         : float(df["ATR"].dropna().iloc[-1])
+                        if "ATR" in df.columns else np.nan,
     }
 
 
@@ -216,7 +297,15 @@ def calc_position_weights(scores: pd.Series, mode: str, max_w: float) -> pd.Seri
 
     return w / w.sum()   # 합산 = 1.0 정규화
 
-def rank_stocks(passed, etf_data):
+
+def rank_stocks(passed, etf_data, market_caps=None):
+    """
+    복합점수 계산 및 정렬.
+    market_caps: {ticker: float} — 변경 6 시가총액 가중에 사용
+    """
+    if not passed:
+        return pd.DataFrame()
+
     df = pd.DataFrame(passed).T
     df["sector"] = [ALL_UNIVERSE.get(t, "Unknown") for t in df.index]
 
@@ -233,12 +322,21 @@ def rank_stocks(passed, etf_data):
                     if not pd.isna(row["ret3m"]) else 0.0
     df["sec_str_norm"] = minmax(df["sec_str"])
 
+    # ── 변경 4: ret12m_skip1 포함 복합점수 ─────────────────────
     df["score"] = (
-        minmax(df["ADX"])               * WEIGHTS["adx"]     +
-        minmax(df["ret3m"].fillna(0))   * WEIGHTS["ret3m"]   +
-        minmax(df["sec_str_norm"])      * WEIGHTS["sector"]  +
-        minmax(df["vol_stab"])          * WEIGHTS["vol_stab"]
+        minmax(df["ADX"])                            * WEIGHTS["adx"]     +
+        minmax(df["ret3m"].fillna(0))                * WEIGHTS["ret3m"]   +
+        minmax(df["ret12m_skip1"].fillna(0))         * WEIGHTS["ret12m"]  +
+        minmax(df["sec_str_norm"])                   * WEIGHTS["sector"]  +
+        minmax(df["vol_stab"])                       * WEIGHTS["vol_stab"]
     )
+
+    # ── 변경 6: 시가총액 가중 (score × sqrt(market_cap)) ───────
+    if USE_MKTCAP_WEIGHT and market_caps:
+        df["mktcap"] = [market_caps.get(t, 1.0) for t in df.index]
+        df["mktcap"] = df["mktcap"].clip(lower=1.0)
+        df["score"]  = df["score"] * np.sqrt(df["mktcap"])
+
     return df.sort_values("score", ascending=False)
 
 
@@ -252,7 +350,8 @@ def check_market():
         price = float(close.iloc[-1])
         gap   = (ma20 - ma60) / ma60 * 100
         return {"price": price, "ma20": ma20, "ma60": ma60,
-                "gap_pct": gap, "is_golden": ma20 > ma60}
+                "gap_pct": gap, "is_golden": ma20 > ma60,
+                "close": close}
     except Exception as e:
         logging.debug("screener_v3 check_market: SPY 다운로드 실패 — %s", e)
         return None
@@ -260,133 +359,221 @@ def check_market():
 
 # ── 메인 ──────────────────────────────────────────────────────
 if __name__ == "__main__":
+    import argparse as _argparse
+    _parser = _argparse.ArgumentParser(description="모멘텀 종목 스크리너 v3")
+    _parser.add_argument("--verbose", action="store_true", help="진행 상황 출력")
+    _parser.add_argument("--held", nargs="*", default=[],
+                         help="현재 보유 중인 종목 코드 목록 (Buy/Hold Spread 적용)")
+    _parser.add_argument("--regime-block", action="store_true",
+                         help="백테스트용: 데드크로스 시 빈 결과 반환 (block 모드 강제)")
+    _args = _parser.parse_args()
+
+    # --regime-block 플래그로 block 모드 강제 활성화
+    if _args.regime_block:
+        REGIME_FILTER_MODE = "block"
+
+    logging.basicConfig(
+        level=logging.INFO if _args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
+    _v = _args.verbose
+    _held_tickers = list(_args.held)   # 변경 5: 보유 종목
+
     from data_cache import fetch_sp500_tickers, fetch_nasdaq100_tickers, fetch_kr_tickers
 
     today = datetime.now().strftime("%Y-%m-%d")
 
-    # ── 동적 유니버스 수집 (CLAUDE.md 규칙 8: 풀 유니버스 사용) ──
-    print("유니버스 수집 중...")
+    # ── 동적 유니버스 수집 ────────────────────────────────────
+    if _v:
+        print("유니버스 수집 중...")
     _us_tickers, _us_sectors = fetch_sp500_tickers()
     _ndx_tickers, _ndx_sectors = fetch_nasdaq100_tickers()
     _sp500_set = set(_us_tickers)
     _ndx_new = [t for t in _ndx_tickers if t not in _sp500_set]
     _ndx_new_sec = {t: s for t, s in _ndx_sectors.items() if t not in _sp500_set}
-    print(f"  NASDAQ-100 신규 추가: {len(_ndx_new)}개 (S&P500 중복 {len(_ndx_tickers) - len(_ndx_new)}개 제거)")
     _us_tickers = _us_tickers + _ndx_new
     _us_sectors = {**_us_sectors, **_ndx_new_sec}
-    _kr_tickers = fetch_kr_tickers()
-    _kr_sectors = {t: "Unknown" for t in _kr_tickers}
 
-    # 모듈 레벨 유니버스를 동적 수집 결과로 교체 (rank_stocks가 참조)
+    # ── 변경 1: 한국 시장 제외 플래그 ────────────────────────
+    if INCLUDE_KR_MARKET:
+        _kr_tickers = fetch_kr_tickers()
+        _kr_sectors = {t: "Unknown" for t in _kr_tickers}
+    else:
+        _kr_tickers = []
+        _kr_sectors = {}
+        if _v:
+            print("  KR 시장 제외 (INCLUDE_KR_MARKET = False)")
+
     ALL_UNIVERSE.clear()
     ALL_UNIVERSE.update({**_us_sectors, **_kr_sectors})
-
     _all_tickers = list(ALL_UNIVERSE.keys())
-    print(f"  유니버스 합계: US {len(_us_tickers)}종목 + KR {len(_kr_tickers)}종목 = {len(_all_tickers)}종목")
 
-    print("=" * 64)
-    print(f"  모멘텀 종목 스크리너 v3   기준일: {today}")
-    print(f"  유니버스: 미국 {len(_us_tickers)}개 + 국내 {len(_kr_tickers)}개 (동적 수집)")
-    print(f"  스톱로스: ATR({ATR_PERIOD}) × {ATR_MULT}  │  "
-          f"포지션: {SIZING_MODE} (상한 {MAX_WEIGHT:.0%})")
-    print("=" * 64)
+    if _v:
+        kr_label = f"KR {len(_kr_tickers)}종목" if INCLUDE_KR_MARKET else "KR 제외"
+        print(f"  유니버스: US {len(_us_tickers)}종목 + {kr_label} = {len(_all_tickers)}종목")
+        print("=" * 64)
+        print(f"  모멘텀 종목 스크리너 v3.1   기준일: {today}")
+        print(f"  스톱로스: ATR({ATR_PERIOD}) × {ATR_MULT}  │  "
+              f"포지션: {SIZING_MODE} (상한 {MAX_WEIGHT:.0%})")
+        print(f"  레짐 필터: {REGIME_FILTER_MODE}  │  "
+              f"변동성 목표: {VOL_TARGET:.0%}  │  "
+              f"시가총액 가중: {'ON' if USE_MKTCAP_WEIGHT else 'OFF'}")
+        print("=" * 64)
 
-    # 시장 상태
-    print("\n[0/3] 시장 상태 확인...")
+    # ── 시장 상태 (변경 2: 레짐 필터) ────────────────────────
+    if _v:
+        print("\n[0/3] 시장 상태 확인...")
     mkt = check_market()
-    if mkt:
+    spy_close_series = mkt["close"] if mkt else None
+
+    if mkt and _v:
         status = "골든크로스 ✅" if mkt["is_golden"] else "데드크로스 ⚠️"
         arrow  = "▲" if mkt["gap_pct"] >= 0 else "▼"
         print(f"  SPY ${mkt['price']:.2f}  │  20MA ${mkt['ma20']:.2f}  │  "
               f"60MA ${mkt['ma60']:.2f}  │  {arrow}{abs(mkt['gap_pct']):.2f}%  {status}")
-        if not mkt["is_golden"]:
+
+    # 변경 2: 레짐 필터 — block 모드에서 데드크로스면 빈 결과 반환
+    if REGIME_FILTER_MODE == "block" and mkt and not mkt["is_golden"]:
+        if _v:
             print()
             print("  ┌──────────────────────────────────────────────────┐")
-            print("  │  ⚠️  관망 권장: 20MA < 60MA 데드크로스 상태          │")
-            print("  │  신규 진입보다 현금 보유를 권장합니다.              │")
+            print("  │  ⚠️  레짐 필터(block): SPY MA20 < MA60 데드크로스    │")
+            print("  │  신규 진입 차단 — 빈 결과를 반환합니다.             │")
             print("  └──────────────────────────────────────────────────┘")
+        exit()
 
-    # 다운로드
-    print("\n[1/3] 데이터 다운로드 중...")
+    # ── 변경 3: SPY 변동성 스케일 팩터 계산 ──────────────────
+    vol_scale = 1.0
+    if spy_close_series is not None:
+        vol_scale = calc_spy_vol_scale(spy_close_series)
+        if _v:
+            print(f"  변동성 스케일: {vol_scale:.2%}  (VOL_TARGET={VOL_TARGET:.0%})")
+
+    # ── 다운로드 ─────────────────────────────────────────────
+    if _v:
+        print("\n[1/3] 데이터 다운로드 중...")
     us_data, kr_data, etf_data = {}, {}, {}
     for i in range(0, len(_us_tickers), 50):
         us_data.update(download(_us_tickers[i:i+50]))
-    for i in range(0, len(_kr_tickers), 30):
-        kr_data.update(download(_kr_tickers[i:i+30]))
+    if INCLUDE_KR_MARKET:
+        for i in range(0, len(_kr_tickers), 30):
+            kr_data.update(download(_kr_tickers[i:i+30]))
     etf_raw = download(list(set(SECTOR_ETF.values())))
     for t, df in etf_raw.items():
         etf_data[t] = calc_indicators(df)
 
     all_data = {**us_data, **kr_data}
-    print(f"  종목 {len(all_data)}개, ETF {len(etf_data)}개 수신 완료")
+    if _v:
+        print(f"  종목 {len(all_data)}개, ETF {len(etf_data)}개 수신 완료")
+        print("\n[2/3] 지표 계산 및 스크리닝 중...")
 
-    # 지표 계산 + 스크리닝
-    print("\n[2/3] 지표 계산 및 스크리닝 중...")
     passed = {}
     for t, df in all_data.items():
         df_ind = calc_indicators(df)
         ok, metrics = screen(df_ind)
         if ok:
             passed[t] = metrics
-    print(f"  스크리닝 통과: {len(passed)}개 / {len(all_data)}개")
+
+    if _v:
+        print(f"  스크리닝 통과: {len(passed)}개 / {len(all_data)}개")
 
     if not passed:
-        print("\n  ※ 현재 조건을 통과한 종목이 없습니다.")
+        if _v:
+            print("\n  ※ 현재 조건을 통과한 종목이 없습니다.")
         exit()
 
-    # 랭킹 + 포지션 사이징
-    print("\n[3/3] 복합점수 계산 및 포지션 배분 중...")
-    ranked = rank_stocks(passed, etf_data)
-    top10  = ranked.head(TOP_N).copy()
+    # ── 변경 6: 시가총액 수집 ────────────────────────────────
+    market_caps = {}
+    if USE_MKTCAP_WEIGHT:
+        if _v:
+            print("  시가총액 수집 중...")
+        market_caps = fetch_market_caps(list(passed.keys()))
 
-    # 포지션 비중 계산
-    weights = calc_position_weights(top10["score"], SIZING_MODE, MAX_WEIGHT)
-    top10["weight"] = weights
+    # ── 랭킹 ─────────────────────────────────────────────────
+    if _v:
+        print("\n[3/3] 복합점수 계산 및 포지션 배분 중...")
+    ranked = rank_stocks(passed, etf_data, market_caps)
 
-    # 결과 출력
-    print("\n" + "=" * 64)
-    print(f"  ★ 복합점수 상위 {TOP_N}개  (v3 — ATR스톱 + 점수비례배분)")
-    print("=" * 64)
-    print(f"  {'순위'} {'종목':<13} {'비중':>6} {'점수':>6} "
-          f"{'ADX':>5} {'RSI':>5} {'3M수익':>7} "
-          f"{'스톱가':>9} {'스톱거리':>8}")
-    print("  " + "─" * 66)
+    # ── 변경 5: Buy/Hold Spread ───────────────────────────────
+    hold_n    = int(TOP_N * HOLD_SPREAD)  # 예: 10 × 2.5 = 25
+    top_new   = ranked.head(TOP_N)
 
-    for rank, (ticker, row) in enumerate(top10.iterrows(), 1):
-        flag    = "🇺🇸" if not ticker.endswith(".KS") else "🇰🇷"
-        ret_str = f"{row['ret3m']:+.1%}" if not pd.isna(row["ret3m"]) else " N/A"
-        stop_s  = f"{row['stop_price']:>9,.2f}" \
-                  if not pd.isna(row["stop_price"]) else "      N/A"
-        dist_s  = f"{row['stop_dist']:>+.1%}" \
-                  if not pd.isna(row["stop_dist"]) else "   N/A"
-        print(
-            f"  {rank:2d}위 {flag} {ticker:<11}"
-            f" {row['weight']:>5.1%}"
-            f" {row['score']:>6.3f}"
-            f" {row['ADX']:>5.1f}"
-            f" {row['RSI']:>5.1f}"
-            f" {ret_str:>7}"
-            f" {stop_s}"
-            f" {dist_s}"
-        )
+    if _held_tickers:
+        hold_extended = ranked.head(hold_n)
+        held_valid    = [t for t in _held_tickers if t in hold_extended.index]
+        held_extra    = [t for t in held_valid if t not in top_new.index]
+        if held_extra:
+            top_final = pd.concat([top_new, ranked.loc[held_extra]])
+            if _v:
+                print(f"  Buy/Hold Spread: 신규 {len(top_new)}개 + 유지 {len(held_extra)}개 = {len(top_final)}개")
+        else:
+            top_final = top_new
+    else:
+        top_final = top_new
 
-    # 포지션 사이징 방식 비교 출력
-    print(f"\n  [포지션 사이징 비교]")
-    eq_w  = pd.Series([1/len(top10)] * len(top10), index=top10.index)
-    sc_w  = calc_position_weights(top10["score"], "score", MAX_WEIGHT)
-    cap_w = calc_position_weights(top10["score"], "score_capped", MAX_WEIGHT)
+    # ── 포지션 비중 계산 (변경 3: vol_scale 적용) ────────────
+    raw_weights = calc_position_weights(top_final["score"], SIZING_MODE, MAX_WEIGHT)
+    top_final   = top_final.copy()
+    top_final["weight"]    = raw_weights * vol_scale   # 실제 투자 비중 (합산 ≤ 1)
+    top_final["weight_raw"]= raw_weights               # vol_scale 미반영 원본 비중
 
-    print(f"  {'종목':<13} {'동일비중':>8} {'점수비례':>8} {'점수비례+상한':>12}")
-    print("  " + "─" * 44)
-    for t in top10.index:
-        print(f"  {t:<13} {eq_w[t]:>8.1%} {sc_w[t]:>8.1%} {cap_w[t]:>12.1%}")
-    print(f"  {'합계':<13} {eq_w.sum():>8.1%} {sc_w.sum():>8.1%} {cap_w.sum():>12.1%}")
+    # ── 결과 출력 ─────────────────────────────────────────────
+    if _v:
+        cash_pct = 1.0 - vol_scale
+        print("\n" + "=" * 64)
+        print(f"  ★ 복합점수 상위 {len(top_final)}개  "
+              f"(v3.1 — ATR스톱 + 점수비례 + 변동성스케일링)")
+        print(f"  현금 비중: {cash_pct:.1%}  (vol_scale={vol_scale:.2%})")
+        print("=" * 64)
+        print(f"  {'순위'} {'종목':<13} {'비중':>6} {'원비중':>7} {'점수':>6} "
+              f"{'ADX':>5} {'RSI':>5} {'3M수익':>7} {'12M수익':>8} "
+              f"{'스톱가':>9} {'스톱거리':>8}")
+        print("  " + "─" * 80)
 
-    # CSV 저장
-    save_cols = ["weight","score","ADX","RSI","ret3m",
-                 "stop_price","stop_dist","atr","sector","price"]
-    save_cols = [c for c in save_cols if c in top10.columns]
-    out = top10[save_cols].copy()
+        for rank, (ticker, row) in enumerate(top_final.iterrows(), 1):
+            flag     = "🇺🇸" if not ticker.endswith(".KS") else "🇰🇷"
+            ret3_str = f"{row['ret3m']:+.1%}" if not pd.isna(row["ret3m"]) else " N/A"
+            ret12_str= f"{row['ret12m_skip1']:+.1%}" \
+                       if "ret12m_skip1" in row and not pd.isna(row["ret12m_skip1"]) else " N/A"
+            stop_s   = f"{row['stop_price']:>9,.2f}" \
+                       if not pd.isna(row["stop_price"]) else "      N/A"
+            dist_s   = f"{row['stop_dist']:>+.1%}" \
+                       if not pd.isna(row["stop_dist"]) else "   N/A"
+            hold_mark= " [H]" if ticker in _held_tickers else ""
+            print(
+                f"  {rank:2d}위 {flag} {ticker:<11}{hold_mark}"
+                f" {row['weight']:>5.1%}"
+                f" {row['weight_raw']:>6.1%}"
+                f" {row['score']:>6.3f}"
+                f" {row['ADX']:>5.1f}"
+                f" {row['RSI']:>5.1f}"
+                f" {ret3_str:>7}"
+                f" {ret12_str:>8}"
+                f" {stop_s}"
+                f" {dist_s}"
+            )
+
+    # ── info 모드: market_regime 필드 출력 ───────────────────────
+    if REGIME_FILTER_MODE == "info" and mkt:
+        regime_info = {
+            "golden_cross": mkt["is_golden"],
+            "spy_ma20"    : round(mkt["ma20"], 2),
+            "spy_ma60"    : round(mkt["ma60"], 2),
+            "gap_pct"     : round(mkt["gap_pct"], 2),
+        }
+        if _v:
+            status = "골든크로스" if regime_info["golden_cross"] else "데드크로스"
+            print(f"\n  market_regime: {regime_info}  ({status})")
+
+    # ── CSV 저장 ──────────────────────────────────────────────
+    save_cols = ["weight", "weight_raw", "score", "ADX", "RSI",
+                 "ret3m", "ret12m_skip1", "stop_price", "stop_dist",
+                 "atr", "sector", "price"]
+    save_cols = [c for c in save_cols if c in top_final.columns]
+    out = top_final[save_cols].copy()
     out.index.name = "종목코드"
-    out.to_csv("screener_v3_result.csv", encoding="utf-8-sig")
-    print(f"\n  결과 저장: screener_v3_result.csv")
+    _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    csv_path = _OUTPUT_DIR / "screener_v3_result.csv"
+    out.to_csv(csv_path, encoding="utf-8-sig")
+    if _v:
+        print(f"\n  결과 저장: {csv_path}  [DEPLOY_ENV={DEPLOY_ENV}]")

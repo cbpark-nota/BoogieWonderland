@@ -18,12 +18,10 @@ class StrategyGuideScreen extends StatelessWidget {
           color: Color(0xFFEF5350),
           icon: Icons.trending_up,
           params: [
-            ('ATR 승수', '1.5'),
             ('리밸런싱', '격주'),
-            ('TOP N', '15'),
           ],
           entryConditions: _commonEntryConditions,
-          stopLoss: 'ATR 기반 동적 (20d High − ATR × 1.5)',
+          stopLoss: 'ATR 기반 동적 스톱로스',
           positionSizing: '복합점수 비례 배분, 최대 10%/종목',
           backtestResult: 'CAGR +48.1% | MDD -1.3% | 샤프 3.94 | 승률 79.8%',
         ),
@@ -33,12 +31,10 @@ class StrategyGuideScreen extends StatelessWidget {
           color: Color(0xFF42A5F5),
           icon: Icons.balance,
           params: [
-            ('ATR 승수', '2.0'),
             ('리밸런싱', '격주'),
-            ('TOP N', '10'),
           ],
           entryConditions: _commonEntryConditions,
-          stopLoss: 'ATR 기반 동적 (20d High − ATR × 2.0)',
+          stopLoss: 'ATR 기반 동적 스톱로스',
           positionSizing: '복합점수 비례 배분, 최대 10%/종목',
           backtestResult: 'CAGR +56.8% | MDD -1.5% | 샤프 3.96 | 승률 76.7%',
         ),
@@ -48,12 +44,10 @@ class StrategyGuideScreen extends StatelessWidget {
           color: Color(0xFF66BB6A),
           icon: Icons.security,
           params: [
-            ('ATR 승수', '2.5'),
             ('리밸런싱', '격주'),
-            ('TOP N', '7'),
           ],
           entryConditions: _commonEntryConditions,
-          stopLoss: 'ATR 기반 동적 (20d High − ATR × 2.5)',
+          stopLoss: 'ATR 기반 동적 스톱로스',
           positionSizing: '복합점수 비례 배분, 최대 10%/종목',
           backtestResult: 'CAGR +63.5% | MDD -3.2% | 샤프 3.52 | 승률 71.6%',
         ),
@@ -83,9 +77,21 @@ class StrategyGuideScreen extends StatelessWidget {
         const SizedBox(height: 12),
         const _BacktestResultTable(),
         const SizedBox(height: 24),
+        _SectionHeader(title: '시총 Top 20 신규 진입 전략', colorScheme: colorScheme),
+        const SizedBox(height: 12),
+        const _MarketCapStrategyCard(),
+        const SizedBox(height: 24),
         _SectionHeader(title: '비트코인 V10 전략', colorScheme: colorScheme),
         const SizedBox(height: 12),
         const _BtcStrategyCard(),
+        const SizedBox(height: 24),
+        _SectionHeader(title: '스코어 산식', colorScheme: colorScheme),
+        const SizedBox(height: 12),
+        const _ScoreFormulaCard(),
+        const SizedBox(height: 24),
+        _SectionHeader(title: '용어 설명', colorScheme: colorScheme),
+        const SizedBox(height: 12),
+        const _GlossaryCard(),
         const SizedBox(height: 32),
       ],
     );
@@ -93,13 +99,13 @@ class StrategyGuideScreen extends StatelessWidget {
 }
 
 const _commonEntryConditions = [
-  'ADX ≥ 20',
-  'RSI 50 ~ 77',
-  '20MA > 50MA > 200MA (정배열)',
-  'HH-HL ≥ 2 (60일 내)',
-  '현재가 ≥ 52주 고점 × 75%',
-  '거래량 스파이크 < 3× (20일 평균)',
-  '5일 급등락 < ±10%',
+  '추세 강도 조건 (ADX)',
+  'RSI 모멘텀 범위 조건',
+  '이동평균 정배열 조건',
+  '상승 추세 구조 확인 (HH-HL)',
+  '52주 고점 대비 근접성 조건',
+  '거래량 급변 배제',
+  '단기 급등락 배제',
   '현재가 > ATR 기반 스톱로스',
 ];
 
@@ -225,11 +231,51 @@ class _StrategyOverviewCard extends StatelessWidget {
             ..._filterSteps.asMap().entries.map((e) {
               return _FilterStep(
                 step: e.key + 1,
-                title: e.value,
+                title: e.value.$1,
+                desc: e.value.$2,
                 colorScheme: colorScheme,
                 theme: theme,
               );
             }),
+            const Divider(height: 24),
+
+            // ATR 스톱로스
+            Row(
+              children: [
+                Icon(Icons.shield_outlined, color: colorScheme.secondary, size: 16),
+                const SizedBox(width: 6),
+                Text(
+                  'ATR 기반 동적 스톱로스',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'ATR(변동성 지표) 기반으로 개별 종목의 최적 스톱로스를 동적 산출',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.secondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'ATR은 14일 평균 변동폭으로, 종목마다 변동성에 맞는 스톱 거리를 자동 조정합니다. '
+              '승수가 클수록 스톱이 넓어져 노이즈에 강하지만 손실도 커집니다.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                height: 1.5,
+              ),
+            ),
             const Divider(height: 24),
 
             // 리밸런싱 & 수수료
@@ -261,24 +307,26 @@ class _StrategyOverviewCard extends StatelessWidget {
 }
 
 const _filterSteps = [
-  'ADX ≥ 20 (추세 강도)',
-  'MA 정배열 (추세 방향)',
-  'RSI 50 ~ 77 (과매수 배제)',
-  'HH-HL ≥ 2회 (상승 구조)',
-  '52주 고점 대비 ≥ 75%',
-  '거래량 급변/급등락 배제',
-  '현재가 > 스톱로스',
+  ('추세 강도 필터 (ADX)', 'Average Directional Index로 추세가 충분히 강한 종목만 선택'),
+  ('이동평균 정배열 확인', '단·중·장기 이동평균이 모두 상향 정렬된 종목 선택'),
+  ('RSI 모멘텀 필터', '모멘텀이 살아있되 과열 구간 진입 금지'),
+  ('상승 구조 확인 (HH-HL)', '고점 갱신과 저점 상승 패턴의 반복 확인'),
+  ('52주 고점 대비 근접성 조건', '고점 대비 과도하게 하락한 종목 제외'),
+  ('거래량 급변/급등락 배제', '비정상적인 거래량 및 급격한 가격 변동 종목 제외'),
+  ('현재가 > 스톱로스', 'ATR 기반 동적 스톱 아래로 이미 하락한 종목 진입 불가'),
 ];
 
 class _FilterStep extends StatelessWidget {
   final int step;
   final String title;
+  final String desc;
   final ColorScheme colorScheme;
   final ThemeData theme;
 
   const _FilterStep({
     required this.step,
     required this.title,
+    required this.desc,
     required this.colorScheme,
     required this.theme,
   });
@@ -308,11 +356,23 @@ class _FilterStep extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              title,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  desc,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -490,11 +550,11 @@ class _EntryConditionsCard extends StatelessWidget {
 
 // 백테스트 결과 데이터
 const _backtestRows = [
-  ('공격적', '1.5', '15', '+48.1%', '-1.3%', '3.94', '79.8%', Color(0xFFEF5350)),
-  ('균형형', '2.0', '10', '+56.8%', '-1.5%', '3.96', '76.7%', Color(0xFF42A5F5)),
-  ('보수적', '2.5', '7', '+63.5%', '-3.2%', '3.52', '71.6%', Color(0xFF66BB6A)),
-  ('적응형', '2.0', '10', '+49.0%', '-3.2%', '3.76', '78.4%', Color(0xFFAB47BC)),
-  ('SPY', '-', '-', '+12.6%', '-31.0%', '0.82', '64.3%', Color(0xFF9E9E9E)),
+  ('공격적', '+48.1%', '-1.3%', '3.94', '79.8%', Color(0xFFEF5350)),
+  ('균형형', '+56.8%', '-1.5%', '3.96', '76.7%', Color(0xFF42A5F5)),
+  ('보수적', '+63.5%', '-3.2%', '3.52', '71.6%', Color(0xFF66BB6A)),
+  ('적응형', '+49.0%', '-3.2%', '3.76', '78.4%', Color(0xFFAB47BC)),
+  ('SPY', '+12.6%', '-31.0%', '0.82', '64.3%', Color(0xFF9E9E9E)),
 ];
 
 class _BacktestResultTable extends StatelessWidget {
@@ -546,7 +606,7 @@ class _BacktestResultTable extends StatelessWidget {
 
             // 테이블 헤더
             _TableRow(
-              cells: const ['전략', 'ATR', 'Top N', 'CAGR', 'MDD', '샤프', '승률'],
+              cells: const ['전략', 'CAGR', 'MDD', '샤프', '승률'],
               isHeader: true,
               rowColor: colorScheme.surfaceContainerHighest,
               textColor: colorScheme.onSurfaceVariant,
@@ -560,14 +620,14 @@ class _BacktestResultTable extends StatelessWidget {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 2),
                 child: _TableRow(
-                  cells: [row.$1, row.$2, row.$3, row.$4, row.$5, row.$6, row.$7],
+                  cells: [row.$1, row.$2, row.$3, row.$4, row.$5],
                   isHeader: false,
                   rowColor: isSpy
                       ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
-                      : row.$8.withValues(alpha: 0.08),
-                  textColor: isSpy ? colorScheme.onSurfaceVariant : row.$8,
+                      : row.$6.withValues(alpha: 0.08),
+                  textColor: isSpy ? colorScheme.onSurfaceVariant : row.$6,
                   theme: theme,
-                  accentColor: row.$8,
+                  accentColor: row.$6,
                   isBenchmark: isSpy,
                 ),
               );
@@ -625,8 +685,8 @@ class _TableRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 컬럼 너비 비율: [전략, ATR, TopN, CAGR, MDD, 샤프, 승률]
-    const flexes = [2, 1, 1, 2, 2, 1, 2];
+    // 컬럼 너비 비율: [전략, CAGR, MDD, 샤프, 승률]
+    const flexes = [2, 2, 2, 1, 2];
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -638,8 +698,8 @@ class _TableRow extends StatelessWidget {
         children: cells.asMap().entries.map((e) {
           final idx = e.key;
           final text = e.value;
-          final isCAGR = idx == 3;
-          final isMDD = idx == 4;
+          final isCAGR = idx == 1;
+          final isMDD = idx == 2;
 
           Color cellColor = textColor;
           if (!isHeader && !isBenchmark) {
@@ -786,6 +846,49 @@ class _BtcStrategyCard extends StatelessWidget {
   }
 }
 
+class _ScoreFormulaCard extends StatelessWidget {
+  const _ScoreFormulaCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '복수의 기술적 지표를 종합한 복합 점수로 종목을 순위화합니다.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurface,
+                height: 1.5,
+              ),
+            ),
+            const Divider(height: 20),
+            _InfoRow(label: '추세 강도', value: '추세의 방향성과 강도를 측정'),
+            const SizedBox(height: 4),
+            _InfoRow(label: '수익 모멘텀', value: '최근 가격 모멘텀 측정'),
+            const SizedBox(height: 4),
+            _InfoRow(label: '섹터 강도', value: '섹터 ETF 기반 상대강도'),
+            const SizedBox(height: 4),
+            _InfoRow(label: '변동성 안정성', value: '변동성 기반 안정성 측정'),
+            const SizedBox(height: 12),
+            Text(
+              '스코어 상위 종목을 점수 비례로 배분하며,\n종목당 최대 비중을 상한으로 cap 처리합니다.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _Chip extends StatelessWidget {
   final String label;
@@ -867,6 +970,269 @@ class _BulletRow extends StatelessWidget {
           const Text('• ', style: TextStyle(fontSize: 14)),
           Expanded(
             child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+const _glossaryTerms = [
+  (
+    'ATR',
+    'Average True Range',
+    '일정 기간의 평균 변동폭. 스톱로스 거리를 동적으로 설정하는 데 사용',
+  ),
+  (
+    'CAGR',
+    'Compound Annual Growth Rate',
+    '연평균 복합 성장률. 투자 수익률을 연간 기준으로 환산한 지표',
+  ),
+  (
+    'MDD',
+    'Maximum Drawdown',
+    '최대 낙폭. 고점 대비 최대 하락 비율로 위험도를 나타냄',
+  ),
+  (
+    '샤프지수',
+    'Sharpe Ratio',
+    '위험 대비 수익률. 높을수록 위험 대비 수익이 좋음',
+  ),
+  (
+    'ADX',
+    'Average Directional Index',
+    '추세 강도 지표. 추세의 강도를 수치로 나타내며, 높을수록 강한 추세를 의미',
+  ),
+  (
+    'RSI',
+    'Relative Strength Index',
+    '상대강도지수. 가격 모멘텀을 측정하는 오실레이터 지표',
+  ),
+  (
+    '정배열',
+    'MA Alignment',
+    '단·중·장기 이동평균이 순서대로 정렬된 상태 (상승 추세의 신호)',
+  ),
+  (
+    'HH-HL',
+    'Higher High - Higher Low',
+    '고점이 높아지고 저점도 높아지는 상승 구조. 추세 지속성의 핵심 패턴',
+  ),
+  (
+    '골든크로스',
+    'Golden Cross',
+    '단기 이동평균이 장기 이동평균을 상향 돌파하는 것',
+  ),
+  (
+    '볼린저 밴드',
+    'Bollinger Bands',
+    '이동평균 ± 표준편차로 구성된 밴드. 가격 변동성을 시각화',
+  ),
+  (
+    '스퀴즈',
+    'Squeeze',
+    '볼린저 밴드가 켈트너 채널 안으로 수축한 상태. 변동성 확장 직전 신호',
+  ),
+  (
+    'EMA',
+    'Exponential Moving Average',
+    '지수이동평균. 최근 데이터에 더 높은 가중치 부여',
+  ),
+  (
+    '레짐',
+    'Regime',
+    '시장 국면. Bull(상승) / Bear(하락) / Neutral(중립)으로 분류',
+  ),
+];
+
+class _GlossaryCard extends StatelessWidget {
+  const _GlossaryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _glossaryTerms.asMap().entries.map((entry) {
+            final i = entry.key;
+            final term = entry.value;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (i != 0) const Divider(height: 16, thickness: 0.5),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: colorScheme.primary.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Text(
+                        term.$1,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            term.$2,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            term.$3,
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+// ── 시총 Top 20 신규 진입 전략 카드 ───────────────────────
+
+class _MarketCapStrategyCard extends StatelessWidget {
+  const _MarketCapStrategyCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = const Color(0xFFFF7043);
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.leaderboard, color: color, size: 22),
+                const SizedBox(width: 8),
+                Text(
+                  '시총 Top 20 신규 진입',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: color),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              '시장 메타 트렌드 변경 신호 포착 전략',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '시가총액 상위 20위 안에 새롭게 진입한 종목은 시장 참여자들의 자금이 집중되는 '
+              '"메타 트렌드 변경"을 나타냅니다. 기존 Top 20에서 밀려난 자리를 꿰찬 종목은 '
+              '강력한 구조적 모멘텀을 보유했을 가능성이 높습니다.',
+              style: TextStyle(fontSize: 12, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 8),
+            const Text(
+              '전략 파라미터',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 6),
+            _paramRow('대상 시장', 'US (S&P500 + NASDAQ-100) + KR (KOSPI200 + KOSDAQ150)'),
+            _paramRow('진입 조건', '시총 Top 20 신규 진입 → 다음 영업일 시가 매수'),
+            _paramRow('청산 조건', 'ATR 기반 스톱로스 (20d High − ATR × 2.0)'),
+            _paramRow('리밸런싱', '매월 보유 종목 시총 가중 비중 재조정'),
+            _paramRow('포지션', '시총 가중 배분 (시총 클수록 높은 비중)'),
+            _paramRow('수수료', '편도 0.2% (왕복 0.4%)'),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 14, color: Colors.orange.shade700),
+                      const SizedBox(width: 4),
+                      Text('데이터 한계',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: Colors.orange.shade700)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    '과거 시총은 "일봉 Close × 현재 발행주식수"로 근사합니다.\n'
+                    '실제 과거 발행주식수가 아니므로 순위 시뮬레이션에 오차가 있을 수 있습니다.',
+                    style: TextStyle(fontSize: 11, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _paramRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 70,
+            child: Text(label,
+                style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w500)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(value,
+                style: const TextStyle(fontSize: 12)),
           ),
         ],
       ),

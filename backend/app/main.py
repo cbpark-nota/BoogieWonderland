@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base, async_session
 from app.routers import screening, portfolio, market
+from app.routers.portfolio import portfolio_router
 from app.scheduler import scheduler, setup_scheduler, seed_rebalance_dates
 from app.services.screener import ALL_UNIVERSE, US_UNIVERSE, KR_UNIVERSE
 
@@ -69,6 +70,7 @@ app.add_middleware(
 
 app.include_router(screening.router)
 app.include_router(portfolio.router)
+app.include_router(portfolio_router)
 app.include_router(market.router)
 
 
