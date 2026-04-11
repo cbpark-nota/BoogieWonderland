@@ -33,11 +33,15 @@ class MarketCapScreen extends ConsumerWidget {
             children: [
               Icon(Icons.bar_chart, size: 64, color: Colors.grey),
               SizedBox(height: 16),
-              Text('시총 Top 20 데이터 없음',
-                  style: TextStyle(fontSize: 16, color: Colors.grey)),
+              Text(
+                '시총 Top 20 데이터 없음',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
               SizedBox(height: 8),
-              Text('GitHub Actions 실행 후 데이터가 생성됩니다.',
-                  style: TextStyle(fontSize: 13, color: Colors.grey)),
+              Text(
+                'GitHub Actions 실행 후 데이터가 생성됩니다.',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
             ],
           ),
         ),
@@ -46,14 +50,17 @@ class MarketCapScreen extends ConsumerWidget {
   }
 
   Widget _buildContent(BuildContext context, Map<String, dynamic> data) {
-    final top20 = (data['top20'] as List? ?? [])
-        .cast<Map<String, dynamic>>();
+    final rawTop20 = data['top20'] ?? data['results'] ?? [];
+    final top20 = (rawTop20 as List).cast<Map<String, dynamic>>();
     final sectorDist = (data['sector_distribution'] as List? ?? [])
         .cast<Map<String, dynamic>>();
-    final updatedAt = data['updated_at'] as String? ?? '';
+    final updatedAt =
+        data['updated_at'] as String? ?? data['generated_at'] as String? ?? '';
     final note = data['note'] as String? ?? '';
 
-    final newEntrants = top20.where((r) => r['is_new_entrant'] == true).toList();
+    final newEntrants = top20
+        .where((r) => r['is_new_entrant'] == true)
+        .toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -77,10 +84,14 @@ class MarketCapScreen extends ConsumerWidget {
         // Top 20 종목 목록
         const Padding(
           padding: EdgeInsets.only(bottom: 8),
-          child: Text('시총 Top 20',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          child: Text(
+            '시총 Top 20',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
         ),
-        ...top20.map((r) => _MarketCapTile(item: r)),
+        ...top20.map(
+          (r) => _MarketCapTile(item: r, fallbackEnteredAt: updatedAt),
+        ),
         const SizedBox(height: 80),
       ],
     );
@@ -107,29 +118,33 @@ class _HeaderCard extends StatelessWidget {
               children: [
                 Icon(Icons.trending_up, color: colorScheme.primary, size: 20),
                 const SizedBox(width: 8),
-                Text('시장 트렌드 모니터링',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.primary)),
+                Text(
+                  '시장 트렌드 모니터링',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 6),
             Text(
-              note.isNotEmpty
-                  ? note
-                  : '매매 전략이 아닌 시장 트렌드 모니터링 참고 도구입니다.',
+              note.isNotEmpty ? note : '매매 전략이 아닌 시장 트렌드 모니터링 참고 도구입니다.',
               style: TextStyle(
-                  fontSize: 12,
-                  color: colorScheme.onSurfaceVariant,
-                  height: 1.4),
+                fontSize: 12,
+                color: colorScheme.onSurfaceVariant,
+                height: 1.4,
+              ),
             ),
             if (updatedAt.isNotEmpty) ...[
               const SizedBox(height: 6),
               Text(
                 '업데이트: ${updatedAt.length >= 10 ? updatedAt.substring(0, 10) : updatedAt}',
-                style:
-                    TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ],
@@ -155,15 +170,19 @@ class _NewEntrantsCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.new_releases_outlined,
-                    color: Colors.amber, size: 18),
+                const Icon(
+                  Icons.new_releases_outlined,
+                  color: Colors.amber,
+                  size: 18,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   '신규 Top 20 진입 (${newEntrants.length}개)',
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: Colors.amber),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Colors.amber,
+                  ),
                 ),
               ],
             ),
@@ -176,8 +195,10 @@ class _NewEntrantsCard extends StatelessWidget {
                 final sector = r['sector'] as String? ?? '';
                 return Chip(
                   backgroundColor: Colors.amber.shade100,
-                  label: Text('$ticker ($sector)',
-                      style: const TextStyle(fontSize: 12)),
+                  label: Text(
+                    '$ticker ($sector)',
+                    style: const TextStyle(fontSize: 12),
+                  ),
                   padding: EdgeInsets.zero,
                 );
               }).toList(),
@@ -193,8 +214,7 @@ class _SectorDistCard extends StatelessWidget {
   final List<Map<String, dynamic>> sectorDist;
   final int total;
 
-  const _SectorDistCard(
-      {required this.sectorDist, required this.total});
+  const _SectorDistCard({required this.sectorDist, required this.total});
 
   @override
   Widget build(BuildContext context) {
@@ -207,12 +227,16 @@ class _SectorDistCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.pie_chart_outline,
-                    color: colorScheme.secondary, size: 18),
+                Icon(
+                  Icons.pie_chart_outline,
+                  color: colorScheme.secondary,
+                  size: 18,
+                ),
                 const SizedBox(width: 6),
-                const Text('섹터 분포',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const Text(
+                  '섹터 분포',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -229,13 +253,19 @@ class _SectorDistCard extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
-                          child: Text(sector,
-                              style: const TextStyle(fontSize: 12),
-                              overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            sector,
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        Text('$count개  ${(pct * 100).toStringAsFixed(0)}%',
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.grey)),
+                        Text(
+                          '$count개  ${(pct * 100).toStringAsFixed(0)}%',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 3),
@@ -246,7 +276,8 @@ class _SectorDistCard extends StatelessWidget {
                         minHeight: 6,
                         backgroundColor: colorScheme.surfaceContainerHighest,
                         valueColor: AlwaysStoppedAnimation<Color>(
-                            colorScheme.secondary),
+                          colorScheme.secondary,
+                        ),
                       ),
                     ),
                   ],
@@ -262,23 +293,27 @@ class _SectorDistCard extends StatelessWidget {
 
 class _MarketCapTile extends StatelessWidget {
   final Map<String, dynamic> item;
+  final String fallbackEnteredAt;
 
-  const _MarketCapTile({required this.item});
+  const _MarketCapTile({required this.item, required this.fallbackEnteredAt});
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final rank = (item['rank'] as num?)?.toInt() ?? 0;
     final ticker = item['ticker'] as String? ?? '';
-    final mcB = (item['market_cap_b'] as num?)?.toDouble() ?? 0;
+    final mcB =
+        ((item['market_cap_b'] ?? item['market_cap']) as num?)?.toDouble() ?? 0;
     final sector = item['sector'] as String? ?? '';
     final isNew = item['is_new_entrant'] == true;
+    final enteredAt = (item['entered_at'] as String?)?.trim();
+    final displayEnteredAt = enteredAt?.isNotEmpty == true
+        ? enteredAt!
+        : _dateOnly(fallbackEnteredAt);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 6),
-      color: isNew
-          ? Colors.amber.shade50
-          : colorScheme.surfaceContainerLowest,
+      color: isNew ? Colors.amber.shade50 : colorScheme.surfaceContainerLowest,
       child: ListTile(
         dense: true,
         leading: SizedBox(
@@ -295,39 +330,59 @@ class _MarketCapTile extends StatelessWidget {
         ),
         title: Row(
           children: [
-            Text(ticker,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(
+              ticker,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
             if (isNew) ...[
               const SizedBox(width: 6),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
                   color: Colors.amber,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text('NEW',
-                    style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white)),
+                child: const Text(
+                  'NEW',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
               ),
             ],
           ],
         ),
-        subtitle: Text(sector,
-            style: const TextStyle(fontSize: 11, color: Colors.grey)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              sector,
+              style: const TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              displayEnteredAt.isEmpty
+                  ? 'Top 20 진입일 기록 없음'
+                  : 'Top 20 진입: $displayEnteredAt',
+              style: const TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+          ],
+        ),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
               '\$${_formatBillion(mcB)}',
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, fontSize: 13),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
-            const Text('시총(B)', style: TextStyle(fontSize: 10, color: Colors.grey)),
+            const Text(
+              '시총(B)',
+              style: TextStyle(fontSize: 10, color: Colors.grey),
+            ),
           ],
         ),
       ),
@@ -339,5 +394,12 @@ class _MarketCapTile extends StatelessWidget {
       return '${(b / 1000).toStringAsFixed(1)}T';
     }
     return '${b.toStringAsFixed(0)}B';
+  }
+
+  String _dateOnly(String value) {
+    if (value.length >= 10) {
+      return value.substring(0, 10);
+    }
+    return value;
   }
 }

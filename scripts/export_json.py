@@ -522,29 +522,44 @@ def fetch_market_cap_top20(
 
     # 이전 Top 20 읽기 (신규 진입 하이라이트용)
     prev_tickers: list[str] = []
+    prev_entered_at: dict[str, str] = {}
     if output_dir:
         prev_path = output_dir / "market_cap.json"
         if prev_path.exists():
             try:
                 with open(prev_path, encoding="utf-8") as f:
                     prev_data = json.load(f)
-                prev_tickers = [r["ticker"] for r in prev_data.get("top20", [])]
+                prev_results = prev_data.get("top20", [])
+                prev_tickers = [r["ticker"] for r in prev_results]
+                prev_updated_at = str(prev_data.get("updated_at", ""))[:10]
+                for row in prev_results:
+                    ticker = row.get("ticker")
+                    if not ticker:
+                        continue
+                    entered_at = str(row.get("entered_at", "")).strip()
+                    if entered_at:
+                        prev_entered_at[ticker] = entered_at
+                    elif prev_updated_at:
+                        prev_entered_at[ticker] = prev_updated_at
             except Exception:
                 pass
     prev_set = set(prev_tickers)
 
     now = datetime.now().isoformat(timespec="seconds")
+    current_date = now[:10]
     results = []
     for rank, ticker in enumerate(sorted_tickers, 1):
         sector = us_sectors.get(ticker, "Unknown")
         mc = market_caps[ticker]
         is_new = bool(prev_tickers) and (ticker not in prev_set)
+        entered_at = prev_entered_at.get(ticker, current_date)
         results.append({
             "rank": rank,
             "ticker": ticker,
             "market_cap_b": round(mc / 1e9, 1),  # 십억 달러(Billion) 단위
             "sector": sector,
             "is_new_entrant": is_new,
+            "entered_at": entered_at,
         })
 
     # 섹터 분포

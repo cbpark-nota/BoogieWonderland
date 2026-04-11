@@ -9,10 +9,12 @@ class StaticDataSource {
 
   StaticDataSource._internal();
 
-  final Dio _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 10),
-  ));
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+    ),
+  );
 
   String get _baseDataUrl => 'data';
 
@@ -67,8 +69,13 @@ class StaticDataSource {
 
   /// 시총 Top 20 트렌드 데이터 (market_cap.json)
   Future<Map<String, dynamic>> getMarketCapTop20() async {
-    final res = await _dio.get('$_baseDataUrl/market_cap.json');
-    return res.data as Map<String, dynamic>;
+    try {
+      final res = await _dio.get('$_baseDataUrl/market_cap.json');
+      return res.data as Map<String, dynamic>;
+    } catch (_) {
+      final fallback = await _dio.get('$_baseDataUrl/market_cap_latest.json');
+      return fallback.data as Map<String, dynamic>;
+    }
   }
 
   /// VIX/SVXY/SVIX 현재가 (vix_etf_prices.json)
@@ -91,9 +98,6 @@ class StaticDataSource {
     final res = await _dio.get('$_baseDataUrl/history/$date.json');
     final data = res.data as Map<String, dynamic>;
     // kr_strategies 키를 strategies 키로 리매핑하여 StrategyScreeningData.fromJson 호환
-    return {
-      ...data,
-      'strategies': data['kr_strategies'] ?? {},
-    };
+    return {...data, 'strategies': data['kr_strategies'] ?? {}};
   }
 }

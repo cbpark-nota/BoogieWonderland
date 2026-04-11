@@ -14,53 +14,68 @@ import 'screens/screening_tabs_screen.dart';
 import 'screens/strategy_guide_tabs_screen.dart';
 import 'screens/market_cap_screen.dart';
 
+enum _DrawerDestination {
+  dashboard,
+  screening,
+  screeningMomentum,
+  screeningShortSqueeze,
+  screeningVix,
+  portfolio,
+  strategy,
+  marketCap,
+}
+
 void main() {
   if (DeployConfig.useStaticData) {
-    runApp(ProviderScope(
-      overrides: [
-        screeningProvider.overrideWith(() => ServerlessScreeningNotifier()),
-        holdingsProvider.overrideWith(() => ServerlessHoldingsNotifier()),
-        marketStatusProvider.overrideWith(serverlessMarketStatus),
-        stopCheckProvider.overrideWith(serverlessStopCheck),
-      ],
-      child: const MomentumApp(),
-    ));
+    runApp(
+      ProviderScope(
+        overrides: [
+          screeningProvider.overrideWith(() => ServerlessScreeningNotifier()),
+          holdingsProvider.overrideWith(() => ServerlessHoldingsNotifier()),
+          marketStatusProvider.overrideWith(serverlessMarketStatus),
+          stopCheckProvider.overrideWith(serverlessStopCheck),
+        ],
+        child: const MomentumApp(),
+      ),
+    );
   } else {
-    runApp(ProviderScope(
-      overrides: [
-        // fullstack 모드: 백엔드 API에서 전략 데이터 로드
-        strategyDataProvider.overrideWith((ref) async {
-          try {
-            final data = await ApiClient().getLatestScreening();
-            return StrategyScreeningData.fromJson(data);
-          } catch (_) {
-            return null;
-          }
-        }),
-        historyScreeningProvider.overrideWith((ref) async {
-          final date = ref.watch(selectedHistoryDateProvider);
-          try {
-            final Map<String, dynamic> data;
-            if (date == null) {
-              data = await ApiClient().getLatestScreening();
-            } else {
-              data = await ApiClient().getScreeningByDate(date);
+    runApp(
+      ProviderScope(
+        overrides: [
+          // fullstack 모드: 백엔드 API에서 전략 데이터 로드
+          strategyDataProvider.overrideWith((ref) async {
+            try {
+              final data = await ApiClient().getLatestScreening();
+              return StrategyScreeningData.fromJson(data);
+            } catch (_) {
+              return null;
             }
-            return StrategyScreeningData.fromJson(data);
-          } catch (_) {
-            return null;
-          }
-        }),
-        historyDatesProvider.overrideWith((ref) async {
-          try {
-            return await ApiClient().getScreeningHistoryDates(days: 30);
-          } catch (_) {
-            return [];
-          }
-        }),
-      ],
-      child: const MomentumApp(),
-    ));
+          }),
+          historyScreeningProvider.overrideWith((ref) async {
+            final date = ref.watch(selectedHistoryDateProvider);
+            try {
+              final Map<String, dynamic> data;
+              if (date == null) {
+                data = await ApiClient().getLatestScreening();
+              } else {
+                data = await ApiClient().getScreeningByDate(date);
+              }
+              return StrategyScreeningData.fromJson(data);
+            } catch (_) {
+              return null;
+            }
+          }),
+          historyDatesProvider.overrideWith((ref) async {
+            try {
+              return await ApiClient().getScreeningHistoryDates(days: 30);
+            } catch (_) {
+              return [];
+            }
+          }),
+        ],
+        child: const MomentumApp(),
+      ),
+    );
   }
 }
 
@@ -96,26 +111,92 @@ class MainNavigation extends StatefulWidget {
 }
 
 class _MainNavigationState extends State<MainNavigation> {
-  int _currentIndex = 0;
+  _DrawerDestination _currentDestination = _DrawerDestination.dashboard;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  final _screens = const [
-    DashboardScreen(),
-    ScreeningTabsScreen(),
-    PortfolioScreen(),
-    StrategyGuideTabsScreen(),
-  ];
-
-  static const _menuItems = [
-    (label: 'Dashboard', icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard),
-    (label: 'Screening', icon: Icons.search_outlined, selectedIcon: Icons.search),
-    (label: 'Portfolio', icon: Icons.account_balance_wallet_outlined, selectedIcon: Icons.account_balance_wallet),
-    (label: 'Strategy', icon: Icons.auto_stories_outlined, selectedIcon: Icons.auto_stories),
-  ];
-
-  void _selectMenu(int index) {
-    setState(() => _currentIndex = index);
+  void _selectMenu(_DrawerDestination destination) {
+    setState(() => _currentDestination = destination);
     _scaffoldKey.currentState?.closeDrawer();
+  }
+
+  String get _title {
+    switch (_currentDestination) {
+      case _DrawerDestination.dashboard:
+        return 'Dashboard';
+      case _DrawerDestination.screening:
+      case _DrawerDestination.screeningMomentum:
+        return '모멘텀';
+      case _DrawerDestination.screeningShortSqueeze:
+        return '숏 스퀴즈';
+      case _DrawerDestination.screeningVix:
+        return 'VIX 매매';
+      case _DrawerDestination.portfolio:
+        return 'Portfolio';
+      case _DrawerDestination.strategy:
+        return 'Strategy';
+      case _DrawerDestination.marketCap:
+        return '트렌드 분석';
+    }
+  }
+
+  Widget get _currentScreen {
+    switch (_currentDestination) {
+      case _DrawerDestination.dashboard:
+        return const DashboardScreen();
+      case _DrawerDestination.screening:
+      case _DrawerDestination.screeningMomentum:
+        return const ScreeningTabsScreen.withIndex(
+          key: ValueKey('screening-momentum'),
+          initialIndex: 0,
+        );
+      case _DrawerDestination.screeningShortSqueeze:
+        return const ScreeningTabsScreen.withIndex(
+          key: ValueKey('screening-short-squeeze'),
+          initialIndex: 1,
+        );
+      case _DrawerDestination.screeningVix:
+        return const ScreeningTabsScreen.withIndex(
+          key: ValueKey('screening-vix'),
+          initialIndex: 2,
+        );
+      case _DrawerDestination.portfolio:
+        return const PortfolioScreen();
+      case _DrawerDestination.strategy:
+        return const StrategyGuideTabsScreen();
+      case _DrawerDestination.marketCap:
+        return const MarketCapScreen();
+    }
+  }
+
+  Widget _menuTile({
+    required _DrawerDestination destination,
+    required String label,
+    required IconData icon,
+    IconData? selectedIcon,
+    String? subtitle,
+    bool isIndented = false,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isSelected = _currentDestination == destination;
+    return ListTile(
+      contentPadding: EdgeInsets.only(left: isIndented ? 36 : 16, right: 16),
+      leading: Icon(
+        isSelected ? (selectedIcon ?? icon) : icon,
+        color: isSelected ? colorScheme.primary : null,
+      ),
+      title: Text(
+        label,
+        style: TextStyle(
+          color: isSelected ? colorScheme.primary : null,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+      subtitle: subtitle == null
+          ? null
+          : Text(subtitle, style: const TextStyle(fontSize: 11)),
+      selected: isSelected,
+      onTap: () => _selectMenu(destination),
+    );
   }
 
   @override
@@ -129,7 +210,7 @@ class _MainNavigationState extends State<MainNavigation> {
           tooltip: '메뉴 열기',
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
-        title: Text(_menuItems[_currentIndex].label),
+        title: Text(_title),
         actions: [
           IgnorePointer(
             child: Opacity(
@@ -173,81 +254,63 @@ class _MainNavigationState extends State<MainNavigation> {
                 ),
               ),
             ),
-            ..._menuItems.asMap().entries.map((entry) {
-              final i = entry.key;
-              final item = entry.value;
-              final isSelected = _currentIndex == i;
-              return ListTile(
-                leading: Icon(
-                  isSelected ? item.selectedIcon : item.icon,
-                  color: isSelected ? colorScheme.primary : null,
-                ),
-                title: Text(
-                  item.label,
-                  style: TextStyle(
-                    color: isSelected ? colorScheme.primary : null,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  ),
-                ),
-                selected: isSelected,
-                onTap: () => _selectMenu(i),
-              );
-            }),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.bar_chart_outlined),
-              title: const Text('트렌드 분석'),
-              subtitle: const Text('시총 Top 20 모니터링',
-                  style: TextStyle(fontSize: 11)),
-              onTap: () {
-                _scaffoldKey.currentState?.closeDrawer();
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (ctx) => Scaffold(
-                      appBar: AppBar(
-                        leading: IconButton(
-                          icon: const Icon(Icons.arrow_back_ios),
-                          onPressed: () => Navigator.pop(ctx),
-                        ),
-                        title: const Text('트렌드 분석'),
-                      ),
-                      body: const MarketCapScreen(),
-                    ),
-                  ),
-                );
-              },
+            _menuTile(
+              destination: _DrawerDestination.dashboard,
+              label: 'Dashboard',
+              icon: Icons.dashboard_outlined,
+              selectedIcon: Icons.dashboard,
             ),
-            ListTile(
-              leading: const Icon(Icons.show_chart),
-              title: const Text('트렌드 분석'),
-              subtitle: const Text('시총 Top 20 모니터링', style: TextStyle(fontSize: 11)),
-              onTap: () {
-                _scaffoldKey.currentState?.closeDrawer();
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (ctx) => Scaffold(
-                      appBar: AppBar(
-                        leading: IconButton(
-                          icon: const Icon(Icons.arrow_back_ios),
-                          onPressed: () => Navigator.pop(ctx),
-                        ),
-                        title: const Text('트렌드 분석'),
-                      ),
-                      body: const StrategyGuideTabsScreen(),
-                    ),
-                  ),
-                );
-              },
+            _menuTile(
+              destination: _DrawerDestination.screening,
+              label: 'Screening',
+              icon: Icons.search_outlined,
+              selectedIcon: Icons.search,
+            ),
+            _menuTile(
+              destination: _DrawerDestination.screeningMomentum,
+              label: '모멘텀',
+              icon: Icons.trending_up_outlined,
+              selectedIcon: Icons.trending_up,
+              isIndented: true,
+            ),
+            _menuTile(
+              destination: _DrawerDestination.screeningShortSqueeze,
+              label: '숏 스퀴즈',
+              icon: Icons.compress_outlined,
+              selectedIcon: Icons.compress,
+              isIndented: true,
+            ),
+            _menuTile(
+              destination: _DrawerDestination.screeningVix,
+              label: 'VIX 매매',
+              icon: Icons.show_chart_outlined,
+              selectedIcon: Icons.show_chart,
+              isIndented: true,
+            ),
+            _menuTile(
+              destination: _DrawerDestination.portfolio,
+              label: 'Portfolio',
+              icon: Icons.account_balance_wallet_outlined,
+              selectedIcon: Icons.account_balance_wallet,
+            ),
+            _menuTile(
+              destination: _DrawerDestination.strategy,
+              label: 'Strategy',
+              icon: Icons.auto_stories_outlined,
+              selectedIcon: Icons.auto_stories,
+            ),
+            const Divider(),
+            _menuTile(
+              destination: _DrawerDestination.marketCap,
+              label: '트렌드 분석',
+              icon: Icons.bar_chart_outlined,
+              selectedIcon: Icons.bar_chart,
+              subtitle: '시총 Top 20 모니터링',
             ),
           ],
         ),
       ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
-      ),
+      body: _currentScreen,
     );
   }
 }
