@@ -71,6 +71,13 @@ class StaticDataSource {
     return res.data as Map<String, dynamic>;
   }
 
+  /// VIX/SVXY/SVIX 현재가 (vix_etf_prices.json)
+  Future<Map<String, dynamic>> getVixEtfPrices() async {
+    final bust = DateTime.now().millisecondsSinceEpoch ~/ 60000;
+    final res = await _dio.get('$_baseDataUrl/vix_etf_prices.json?v=$bust');
+    return res.data as Map<String, dynamic>;
+  }
+
   // ── v3.2 KR 분리 스크리닝 ─────────────────────────────────
 
   /// KR 4전략 전체 결과 (screening_kr_strategies.json)

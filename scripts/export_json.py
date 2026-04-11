@@ -567,6 +567,27 @@ def fetch_market_cap_top20(
     }
 
 
+def fetch_vix_etf_prices() -> dict:
+    """VIX, SVXY, SVIX 현재가를 yfinance로 조회하여 반환.
+
+    실패 시 빈 딕셔너리 반환.
+    """
+    import yfinance as yf
+
+    result = {"run_date": datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}
+    for symbol in ("^VIX", "SVXY", "SVIX"):
+        try:
+            ticker = yf.Ticker(symbol)
+            price = ticker.fast_info.last_price
+            if price is None or price != price:  # None or NaN
+                raise ValueError("가격 없음")
+            key = symbol.lstrip("^").lower()
+            result[key] = round(float(price), 2)
+        except Exception as e:
+            logger.warning("  %s 가격 조회 실패: %s", symbol, e)
+    return result
+
+
 def export_all_strategies(output_dir: Path, screening_date: str | None = None):
     """4전략 스크리닝 실행 후 단일 JSON으로 저장.
 
@@ -802,6 +823,18 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
         logger.info("  시총 Top 20 저장: %s", mc_path)
     except Exception as e:
         logger.warning("  시총 Top 20 수집 실패 (%s), 건너뜀", e)
+
+    # VIX ETF 현재가 (서버리스 모드 계산기용)
+    if not is_history_only:
+        try:
+            vix_data = fetch_vix_etf_prices()
+            if "vix" in vix_data:
+                vix_path = output_dir / "vix_etf_prices.json"
+                with open(vix_path, "w", encoding="utf-8") as f:
+                    json.dump(vix_data, f, ensure_ascii=False, indent=2)
+                logger.info("  VIX ETF 가격 저장: %s", vix_path)
+        except Exception as e:
+            logger.warning("  VIX ETF 가격 수집 실패 (%s), 건너뜀", e)
 
     # history/{date}.json 저장 및 index.json 업데이트
     save_history(output_dir, output, run_dt)
