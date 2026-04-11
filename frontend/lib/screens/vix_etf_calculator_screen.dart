@@ -284,10 +284,10 @@ class _ResultRow extends StatelessWidget {
             children: [
               TextSpan(
                 text: value,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
-                  color: Colors.black,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               TextSpan(
@@ -339,8 +339,8 @@ class _ScenarioTable extends StatelessWidget {
                 3: FlexColumnWidth(1.3),
               },
               children: [
-                _headerRow(),
-                ..._kVixScenarios.map((vixTarget) => _dataRow(context, vixTarget)),
+                _headerRow(colorScheme),
+                ..._kVixScenarios.map((vixTarget) => _dataRow(colorScheme, vixTarget)),
               ],
             ),
           ],
@@ -349,9 +349,9 @@ class _ScenarioTable extends StatelessWidget {
     );
   }
 
-  TableRow _headerRow() {
+  TableRow _headerRow(ColorScheme colorScheme) {
     return TableRow(
-      decoration: BoxDecoration(color: Colors.grey.shade200),
+      decoration: BoxDecoration(color: colorScheme.surfaceContainerHighest),
       children: const [
         _Cell(text: 'VIX', isHeader: true),
         _Cell(text: 'R', isHeader: true),
@@ -361,7 +361,7 @@ class _ScenarioTable extends StatelessWidget {
     );
   }
 
-  TableRow _dataRow(BuildContext context, double vixTarget) {
+  TableRow _dataRow(ColorScheme colorScheme, double vixTarget) {
     final r = (vixTarget - data.vix) / data.vix;
     final svxyFair = data.svxyFair(vixTarget);
     final svixFair = data.svixFair(vixTarget);
@@ -369,21 +369,21 @@ class _ScenarioTable extends StatelessWidget {
 
     return TableRow(
       decoration: isHighStress
-          ? BoxDecoration(color: Colors.red.shade50)
+          ? BoxDecoration(color: Colors.red.shade900.withAlpha(80))
           : null,
       children: [
         _Cell(text: vixTarget.toStringAsFixed(0), bold: isHighStress),
         _Cell(
           text: '${r >= 0 ? '+' : ''}${(r * 100).toStringAsFixed(0)}%',
-          color: r >= 0 ? Colors.red.shade700 : Colors.green.shade700,
+          color: r >= 0 ? Colors.red.shade300 : Colors.green.shade400,
         ),
         _Cell(
           text: '\$${svxyFair.toStringAsFixed(2)}',
-          color: r >= 0 ? Colors.red.shade700 : Colors.green.shade700,
+          color: r >= 0 ? Colors.red.shade300 : Colors.green.shade400,
         ),
         _Cell(
           text: '\$${svixFair.toStringAsFixed(2)}',
-          color: r >= 0 ? Colors.red.shade700 : Colors.green.shade700,
+          color: r >= 0 ? Colors.red.shade300 : Colors.green.shade400,
         ),
       ],
     );
