@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'strategy_guide_screen.dart';
 import 'short_squeeze_strategy_guide_screen.dart';
+import 'vix_strategy_guide_screen.dart';
 
 class StrategyGuideTabsScreen extends StatelessWidget {
   const StrategyGuideTabsScreen({super.key});
@@ -8,13 +9,14 @@ class StrategyGuideTabsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         children: [
           TabBar(
             tabs: const [
               Tab(text: '모멘텀'),
               Tab(text: '숏 스퀴즈'),
+              Tab(text: 'VIX 매매'),
             ],
             labelStyle: const TextStyle(fontWeight: FontWeight.bold),
             unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal),
@@ -24,6 +26,7 @@ class StrategyGuideTabsScreen extends StatelessWidget {
               children: [
                 StrategyGuideScreen(),
                 ShortSqueezeStrategyGuideScreen(),
+                VixStrategyGuideScreen(),
               ],
             ),
           ),
