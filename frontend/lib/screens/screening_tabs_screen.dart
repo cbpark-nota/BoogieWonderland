@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'screening_screen.dart';
 import 'short_squeeze_screen.dart';
+import 'vix_etf_calculator_screen.dart';
 
 class ScreeningTabsScreen extends StatelessWidget {
   const ScreeningTabsScreen({super.key});
@@ -8,13 +9,14 @@ class ScreeningTabsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         children: [
           TabBar(
             tabs: const [
               Tab(text: '모멘텀'),
               Tab(text: '숏 스퀴즈'),
+              Tab(text: 'VIX 매매'),
             ],
             labelStyle: const TextStyle(fontWeight: FontWeight.bold),
             unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal),
@@ -24,6 +26,7 @@ class ScreeningTabsScreen extends StatelessWidget {
               children: [
                 ScreeningScreen(),
                 ShortSqueezeScreen(),
+                VixEtfCalculatorScreen(),
               ],
             ),
           ),
