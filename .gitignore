@@ -23,6 +23,8 @@ Thumbs.db
 holdings.json
 scripts/backtest/results/
 *.csv
+backtest_result.txt
+frontend/test/serverless/failures/
 
 # Data cache (로컬 주가 캐시)
 data/
