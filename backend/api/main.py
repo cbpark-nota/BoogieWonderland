@@ -9,14 +9,15 @@ PostgreSQL 없이 SQLite만으로 스크리닝 결과 API를 제공한다.
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 
 from backend.api.portfolio import router as portfolio_router
 from backend.api.screening import router as screening_router
-from backend.db.database import SessionLocal, init_db
+from backend.db.database import get_db, init_db
 
 
 @asynccontextmanager
@@ -49,13 +50,11 @@ def health():
 
 
 @app.get("/api/health")
-def api_health():
+def api_health(db: Session = Depends(get_db)):
     """DB 연결 상태 포함 헬스체크."""
     db_status = "disconnected"
     try:
-        db = SessionLocal()
         db.execute(text("SELECT 1"))
-        db.close()
         db_status = "connected"
     except OperationalError:
         pass
