@@ -32,8 +32,8 @@ def test_screen_stock_insufficient_rows():
 
 
 def test_screen_stock_low_adx():
-    """ADX < 25일 때 False를 반환해야 한다."""
-    df = _make_screened_df(ADX=20.0)
+    """ADX < 20일 때 False를 반환해야 한다 (v3.2: ADX_THRESH=20)."""
+    df = _make_screened_df(ADX=15.0)
     passed, _ = screen_stock(df)
     assert passed is False
 
@@ -101,6 +101,6 @@ def test_calc_atr_stop_nan_atr():
 
 def test_rank_stocks_empty_dict():
     """빈 passed dict를 넣으면 빈 DataFrame을 반환해야 한다."""
-    result = rank_stocks({}, {})
+    result = rank_stocks({}, {}, {})
     assert isinstance(result, pd.DataFrame)
     assert len(result) == 0
