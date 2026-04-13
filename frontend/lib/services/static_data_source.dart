@@ -100,4 +100,11 @@ class StaticDataSource {
     // kr_strategies 키를 strategies 키로 리매핑하여 StrategyScreeningData.fromJson 호환
     return {...data, 'strategies': data['kr_strategies'] ?? {}};
   }
+
+  /// VIX ETF 이론가 계산기용 가격 데이터 (vix_etf_prices.json)
+  Future<Map<String, dynamic>> getVixEtfPrices() async {
+    final bust = DateTime.now().millisecondsSinceEpoch ~/ 60000;
+    final res = await _dio.get('$_baseDataUrl/vix_etf_prices.json?v=$bust');
+    return res.data as Map<String, dynamic>;
+  }
 }

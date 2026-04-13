@@ -20,7 +20,7 @@ class ScreeningTabsScreen extends StatelessWidget {
             tabs: const [
               Tab(text: '모멘텀'),
               Tab(text: '숏 스퀴즈'),
-              Tab(text: 'VIX 매매'),
+              Tab(text: 'VIX ETF'),
             ],
             labelStyle: const TextStyle(fontWeight: FontWeight.bold),
             unselectedLabelStyle: const TextStyle(

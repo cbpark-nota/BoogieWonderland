@@ -488,6 +488,50 @@ def check_kospi_market() -> dict | None:
         return None
 
 
+def fetch_vix_etf_prices() -> dict:
+    """VIX, SVXY, SVIX 현재가·전일 종가 조회 → vix_etf_prices.json 형식 반환.
+
+    yfinance로 각 티커의 최근 2일 종가를 가져와서
+    current_price (최신), prev_close (전날) 를 추출한다.
+    """
+    import yfinance as yf
+
+    now_str = datetime.now().isoformat(timespec="seconds")
+    result: dict = {"updated_at": now_str, "vix": {}, "svxy": {}, "svix": {}}
+
+    tickers = {"^VIX": "vix", "SVXY": "svxy", "SVIX": "svix"}
+    try:
+        raw = yf.download(
+            list(tickers.keys()),
+            period="5d",
+            auto_adjust=True,
+            progress=False,
+        )
+        close = raw["Close"] if "Close" in raw.columns else raw
+        for yf_ticker, key in tickers.items():
+            try:
+                series = close[yf_ticker].dropna() if yf_ticker in close.columns else None
+                if series is None or series.empty:
+                    result[key] = {"current_price": None, "prev_close": None}
+                    continue
+                current = round(float(series.iloc[-1]), 4)
+                prev = round(float(series.iloc[-2]), 4) if len(series) >= 2 else current
+                if key == "vix":
+                    result[key] = {"current": current, "prev_close": prev}
+                else:
+                    result[key] = {"current_price": current, "prev_close": prev}
+            except Exception as e:
+                logger.warning("  %s 조회 실패: %s", yf_ticker, e)
+                if key == "vix":
+                    result[key] = {"current": None, "prev_close": None}
+                else:
+                    result[key] = {"current_price": None, "prev_close": None}
+    except Exception as e:
+        logger.warning("  VIX ETF 가격 일괄 조회 실패 (%s)", e)
+
+    return result
+
+
 def fetch_market_cap_top20(
     us_tickers: list[str],
     us_sectors: dict[str, str],
@@ -839,15 +883,14 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
     except Exception as e:
         logger.warning("  시총 Top 20 수집 실패 (%s), 건너뜀", e)
 
-    # VIX ETF 현재가 (서버리스 모드 계산기용)
+    # VIX ETF 이론가 계산기용 가격 데이터 (서버리스 모드)
     if not is_history_only:
         try:
             vix_data = fetch_vix_etf_prices()
-            if "vix" in vix_data:
-                vix_path = output_dir / "vix_etf_prices.json"
-                with open(vix_path, "w", encoding="utf-8") as f:
-                    json.dump(vix_data, f, ensure_ascii=False, indent=2)
-                logger.info("  VIX ETF 가격 저장: %s", vix_path)
+            vix_path = output_dir / "vix_etf_prices.json"
+            with open(vix_path, "w", encoding="utf-8") as f:
+                json.dump(vix_data, f, ensure_ascii=False, indent=2)
+            logger.info("  VIX ETF 가격 저장: %s", vix_path)
         except Exception as e:
             logger.warning("  VIX ETF 가격 수집 실패 (%s), 건너뜀", e)
 
