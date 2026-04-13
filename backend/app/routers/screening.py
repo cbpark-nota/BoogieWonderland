@@ -1,7 +1,8 @@
 """스크리닝 API"""
 from datetime import datetime
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -15,9 +16,12 @@ router = APIRouter(prefix="/api/v1/screening", tags=["screening"])
 
 
 @router.post("/run", response_model=ScreeningRunOut)
-async def trigger_screening(db: AsyncSession = Depends(get_db)):
-    """스크리닝 실행 후 결과 저장."""
-    data = run_screening()
+async def trigger_screening(
+    market: Literal["US", "KR"] = Query(default="US", description="스크리닝 대상 시장 (US 또는 KR)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """스크리닝 실행 후 결과 저장. market=US(기본) 또는 market=KR."""
+    data = run_screening(market=market)
     mkt = data["market"]
 
     run = ScreeningRun(

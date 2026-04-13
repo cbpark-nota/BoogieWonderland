@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_config.dart';
 import '../models/screening_result.dart';
 import '../providers/screening_provider.dart';
+import '../providers/market_filter_provider.dart';
 import '../providers/serverless_providers.dart';
 import '../widgets/stock_card.dart';
 
@@ -210,8 +211,7 @@ class ScreeningScreen extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: countries.map((f) {
-          final isSelected = f == marketFilter ||
-              (f == MarketFilter.us && marketFilter == MarketFilter.all);
+          final isSelected = f == marketFilter;
           final label = f == MarketFilter.kr ? '🇰🇷 한국' : '🇺🇸 미국';
           return Padding(
             padding: const EdgeInsets.only(right: 8),

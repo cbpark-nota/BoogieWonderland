@@ -1,17 +1,35 @@
 """
-모멘텀 종목 스크리너 v3
+모멘텀 종목 스크리너 v3.2 — US 전용
 ══════════════════════════════════════════════════════════
-v2 대비 추가 개선:
-  ① ATR 기반 동적 스톱로스   (고정 -10% → ATR×2.5)
-  ② 복합점수 비례 포지션 사이징 (동일비중 → 점수 가중 배분)
+버전 히스토리:
+  v3.0  ATR 기반 동적 스톱로스 / 복합점수 비례 포지션 사이징
+  v3.1  ③ 한국 시장 제외 플래그  (INCLUDE_KR_MARKET = False)
+        ④ 시장 레짐 필터         (SPY MA20 < MA60 → 빈 결과)
+        ⑤ 변동성 스케일링        (SPY 20일 실현변동성 → VOL_TARGET 기준 포지션 조절)
+        ⑥ 형성 기간 확장         (ret12m_skip1: 252일, 최근 21일 제외)
+        ⑦ Buy/Hold Spread        (보유 종목 Top N×2.5까지 유지)
+        ⑧ 시가총액 가중          (score × sqrt(market_cap))
+  v3.2  ⑨ US/KR 분리 스크리닝   (이 파일 = US 전용)
+        - 유니버스: S&P 500 + NASDAQ 100 동적 수집 (data_cache.py)
+        - KR 스크리닝은 screener_v3_kr.py 참조
+        - 스크리닝 임계값 조정:
+            ADX_THRESH  25 → 20
+            RSI_HI      75 → 77
+            HH_HL_MIN    3 →  2
+            PRICE_52W   0.80 → 0.75
+            MAX_WEIGHT  0.20 → 0.10
 
-v3.1 추가 개선:
-  ③ 한국 시장 제외 플래그     (INCLUDE_KR_MARKET = False)
-  ④ 시장 레짐 필터            (SPY MA20 < MA60 → 빈 결과)
-  ⑤ 변동성 스케일링           (SPY 20일 실현변동성 → VOL_TARGET 기준 포지션 조절)
-  ⑥ 형성 기간 확장            (ret12m_skip1: 252일, 최근 21일 제외)
-  ⑦ Buy/Hold Spread           (보유 종목 Top N×2.5까지 유지)
-  ⑧ 시가총액 가중             (score × sqrt(market_cap))
+주요 상수:
+  ATR_PERIOD   = 14   ATR 계산 기간
+  ATR_MULT     = 2.5  스톱로스 = 20일 고점 - ATR×2.5
+  TOP_N        = 10   최종 선정 종목 수
+  MAX_WEIGHT   = 0.10 단일 종목 최대 비중 (10%)
+  ADX_THRESH   = 20   최소 추세 강도
+  RSI_LO/HI    = 50/77  RSI 필터 범위
+  HH_HL_MIN    = 2    60일 HH-HL 스윙 최소 횟수
+  PRICE_52W    = 0.75 52주 고점의 75% 이상 위치
+  VOL_TARGET   = 0.15 변동성 스케일링 목표 (연환산 15%)
+  HOLD_SPREAD  = 2.5  Buy/Hold Spread 배수 (Top N×2.5까지 보유 유지)
 ══════════════════════════════════════════════════════════
 """
 import logging
@@ -85,6 +103,7 @@ WEIGHTS = dict(
 
 # ── 다운로드 ──────────────────────────────────────────────────
 def download(tickers, period="1y"):
+    """yfinance로 티커 목록 OHLCV 배치 다운로드. 60일 미만 종목은 제외."""
     try:
         raw = yf.download(tickers, period=period, auto_adjust=True,
                           progress=False, threads=True)
@@ -108,6 +127,7 @@ def download(tickers, period="1y"):
 
 # ── 지표 계산 ─────────────────────────────────────────────────
 def calc_indicators(df):
+    """MA20/50/200, RSI, ADX, VolMA20/60, 52주 고점, ATR(14) 계산."""
     d = df.copy()
     c, h, l, v = d["Close"], d["High"], d["Low"], d["Volume"]
     d["MA20"]    = ta.sma(c, 20)
@@ -127,6 +147,9 @@ def calc_indicators(df):
 
 # ── 스윙 HH-HL ───────────────────────────────────────────────
 def count_hh_hl_swing(df_window, n=3):
+    """60일 윈도우에서 HH(Higher High)-HL(Higher Low) 스윙 횟수 반환.
+    min(hh_count, hl_count) ≥ HH_HL_MIN 이면 상승 추세로 판단.
+    """
     highs = df_window["High"].values
     lows  = df_window["Low"].values
     sh = [highs[i] for i in range(n, len(highs)-n)
@@ -183,6 +206,21 @@ def fetch_market_caps(tickers: list) -> dict:
 
 # ── 스크리닝 ──────────────────────────────────────────────────
 def screen(df):
+    """단일 종목 스크리닝. v3.2 임계값 적용.
+
+    통과 조건:
+      - ADX ≥ ADX_THRESH (추세 강도)
+      - MA20 > MA50 > MA200 (상승 정배열)
+      - RSI_LO ≤ RSI ≤ RSI_HI (과매수 제외)
+      - 최근 20일 거래량이 60일 평균×3 이하 (급등 제외)
+      - 최근 5일 일간 변동 10% 이하 (급등락 제외)
+      - HH-HL 스윙 ≥ HH_HL_MIN (상승 추세 구조)
+      - 현재가 ≥ 52주 고점×PRICE_52W (고점 근접)
+      - 현재가 > ATR 스톱가 (스톱 트리거 상태 제외)
+
+    Returns:
+        (True, metrics_dict) 또는 (False, {})
+    """
     if len(df) < 200:
         return False, {}
 
@@ -299,9 +337,15 @@ def calc_position_weights(scores: pd.Series, mode: str, max_w: float) -> pd.Seri
 
 
 def rank_stocks(passed, etf_data, market_caps=None):
-    """
-    복합점수 계산 및 정렬.
-    market_caps: {ticker: float} — 변경 6 시가총액 가중에 사용
+    """복합점수 계산 및 정렬.
+
+    score = ADX×0.30 + ret3m×0.20 + ret12m_skip1×0.20 + 섹터강도×0.20 + 거래량안정성×0.10
+    USE_MKTCAP_WEIGHT=True 시: score × sqrt(market_cap) 로 대형주 우대
+
+    Args:
+        passed: {ticker: metrics_dict} 스크리닝 통과 종목
+        etf_data: {etf_ticker: df} 섹터 ETF 데이터 (섹터 강도 계산용)
+        market_caps: {ticker: float} 시가총액 (None이면 가중 비활성)
     """
     if not passed:
         return pd.DataFrame()
@@ -342,6 +386,12 @@ def rank_stocks(passed, etf_data, market_caps=None):
 
 # ── 시장 상태 ─────────────────────────────────────────────────
 def check_market():
+    """SPY MA20 vs MA60 골든/데드크로스 확인.
+
+    Returns:
+        dict: price, ma20, ma60, gap_pct, is_golden, close (Series)
+        None: SPY 데이터 다운로드 실패 시
+    """
     try:
         spy   = yf.download("SPY", period="1y", auto_adjust=True, progress=False)
         close = spy["Close"].squeeze()
