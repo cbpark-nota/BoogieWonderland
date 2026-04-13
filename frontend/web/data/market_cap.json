@@ -7,140 +7,160 @@
       "ticker": "NVDA",
       "market_cap_b": 4311.5,
       "sector": "Information Technology",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 2,
       "ticker": "AAPL",
       "market_cap_b": 3761.5,
       "sector": "Information Technology",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 3,
       "ticker": "GOOGL",
       "market_cap_b": 3577.9,
       "sector": "Communication Services",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 4,
       "ticker": "GOOG",
       "market_cap_b": 3562.1,
       "sector": "Communication Services",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 5,
       "ticker": "MSFT",
       "market_cap_b": 2775.7,
       "sector": "Information Technology",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 6,
       "ticker": "AMZN",
       "market_cap_b": 2251.9,
       "sector": "Consumer Discretionary",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 7,
       "ticker": "AVGO",
       "market_cap_b": 1491.4,
       "sector": "Information Technology",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 8,
       "ticker": "META",
       "market_cap_b": 1453.1,
       "sector": "Communication Services",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 9,
       "ticker": "TSLA",
       "market_cap_b": 1353.1,
       "sector": "Consumer Discretionary",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 10,
       "ticker": "BRK-B",
       "market_cap_b": 1029.6,
       "sector": "Financials",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 11,
       "ticker": "WMT",
       "market_cap_b": 1002.8,
       "sector": "Consumer Staples",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 12,
       "ticker": "LLY",
       "market_cap_b": 837.4,
       "sector": "Health Care",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 13,
       "ticker": "JPM",
       "market_cap_b": 794.5,
       "sector": "Financials",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 14,
       "ticker": "XOM",
       "market_cap_b": 669.6,
       "sector": "Energy",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 15,
       "ticker": "JNJ",
       "market_cap_b": 585.7,
       "sector": "Health Care",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 16,
       "ticker": "V",
       "market_cap_b": 580.0,
       "sector": "Financials",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 17,
       "ticker": "ASML",
       "market_cap_b": 517.2,
       "sector": "Information Technology",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 18,
       "ticker": "COST",
       "market_cap_b": 450.5,
       "sector": "Consumer Staples",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 19,
       "ticker": "MA",
       "market_cap_b": 440.4,
       "sector": "Financials",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     },
     {
       "rank": 20,
       "ticker": "ORCL",
       "market_cap_b": 421.0,
       "sector": "Information Technology",
-      "is_new_entrant": false
+      "is_new_entrant": false,
+      "entered_at": "2026-04-05"
     }
   ],
   "sector_distribution": [
