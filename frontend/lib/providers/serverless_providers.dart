@@ -9,149 +9,7 @@ import 'portfolio_upload_provider.dart';
 import 'screening_provider.dart';
 import 'portfolio_provider.dart';
 
-// ── 마켓 필터 enum (국가 선택, screening_screen에서 이동) ─────
-// v3.2: all = US(기본값), kr = KR 전용 데이터 로드, us = US 전용 데이터 로드
-
-enum MarketFilter { all, kr, us }
-
-// ── 선택 상태 providers ────────────────────────────────────
-
-class _SelectedStrategyNotifier extends Notifier<StrategyType> {
-  @override
-  StrategyType build() => StrategyType.balanced;
-}
-
-final selectedStrategyProvider =
-    NotifierProvider<_SelectedStrategyNotifier, StrategyType>(
-  _SelectedStrategyNotifier.new,
-);
-
-// v3.2: 기본값을 us로 변경 (US/KR 분리 스크리닝)
-class _SelectedMarketFilterNotifier extends Notifier<MarketFilter> {
-  @override
-  MarketFilter build() => MarketFilter.us;
-}
-
-final selectedMarketFilterProvider =
-    NotifierProvider<_SelectedMarketFilterNotifier, MarketFilter>(
-  _SelectedMarketFilterNotifier.new,
-);
-
-// ── 필터링된 스크리닝 결과 (메모이제이션) ────────────────────
-// v3.2: marketFilter에 따라 US 또는 KR 데이터를 별도 로드
-// (혼합 필터링 대신 국가별 전용 JSON 파일 사용)
-
-typedef _FilteredResult = ({ScreeningRun run, StrategyResult? sr, StrategyType selected});
-
-final filteredScreeningProvider =
-    Provider<AsyncValue<_FilteredResult?>>((ref) {
-  final marketFilter = ref.watch(selectedMarketFilterProvider);
-  final selected = ref.watch(selectedStrategyProvider);
-
-  // KR이면 KR 히스토리, 그 외(us/all)는 US 히스토리
-  final isKr = marketFilter == MarketFilter.kr;
-  final historyAsync = isKr
-      ? ref.watch(krHistoryScreeningProvider)
-      : ref.watch(historyScreeningProvider);
-
-  return historyAsync.whenData((data) {
-    if (data == null) return null;
-    final run = data.toScreeningRun(selected);
-    final sr = data.strategies[selected];
-    return (run: run, sr: sr, selected: selected);
-  });
-});
-
-// ── 리밸런싱 주기 ──────────────────────────────────────────
-
-enum RebalanceMode {
-  aggressive('공격적', '매주 금요일'),
-  balanced('균형', '격주 금요일'),
-  conservative('보수적', '월말 영업일');
-
-  final String label;
-  final String description;
-  const RebalanceMode(this.label, this.description);
-}
-
-// ── 리밸런싱 신호 모델 ────────────────────────────────────
-
-class RebalanceSignal {
-  final String? rebalanceDate;
-  final Set<String> screeningTickers;
-
-  const RebalanceSignal({this.rebalanceDate, required this.screeningTickers});
-
-  /// 해당 티커가 스크리닝에 없으면 true → 매도 검토
-  bool shouldSell(String ticker) =>
-      rebalanceDate != null && !screeningTickers.contains(ticker);
-}
-
-// ── 날짜 계산 헬퍼 ────────────────────────────────────────
-
-DateTime _lastFriday(DateTime date) {
-  // Friday = weekday 5. 오늘 포함 가장 최근 금요일
-  final daysBack = (date.weekday - 5) % 7;
-  return DateTime(date.year, date.month, date.day)
-      .subtract(Duration(days: daysBack));
-}
-
-DateTime _lastBiweeklyFriday(DateTime date) {
-  final lastFri = _lastFriday(date);
-  // 기준 격주 금요일: 2025-01-03
-  final ref = DateTime(2025, 1, 3);
-  final daysDiff = lastFri.difference(ref).inDays;
-  final remainder = daysDiff % 14;
-  if (remainder == 0) return lastFri;
-  return lastFri.subtract(Duration(days: remainder));
-}
-
-DateTime _lastMonthEndBusinessDay(DateTime today) {
-  // 이번 달 말일
-  final curMonthEnd = DateTime(today.year, today.month + 1, 0);
-  var d = curMonthEnd;
-  while (d.weekday == DateTime.saturday || d.weekday == DateTime.sunday) {
-    d = d.subtract(const Duration(days: 1));
-  }
-  // 아직 이번 달 말 영업일이 오지 않았으면 전 달 사용
-  if (d.isAfter(today)) {
-    final prevMonthEnd = DateTime(today.year, today.month, 0);
-    d = prevMonthEnd;
-    while (d.weekday == DateTime.saturday || d.weekday == DateTime.sunday) {
-      d = d.subtract(const Duration(days: 1));
-    }
-  }
-  return d;
-}
-
-DateTime _calcTargetRebalanceDate(RebalanceMode mode, DateTime today) {
-  switch (mode) {
-    case RebalanceMode.aggressive:
-      return _lastFriday(today);
-    case RebalanceMode.balanced:
-      return _lastBiweeklyFriday(today);
-    case RebalanceMode.conservative:
-      return _lastMonthEndBusinessDay(today);
-  }
-}
-
-String _dateToStr(DateTime d) =>
-    '${d.year.toString().padLeft(4, '0')}-'
-    '${d.month.toString().padLeft(2, '0')}-'
-    '${d.day.toString().padLeft(2, '0')}';
-
-/// 가용 날짜 중 target 이하인 가장 최근 날짜 반환
-String? _findClosestDate(DateTime target, List<String> availableDates) {
-  if (availableDates.isEmpty) return null;
-  final targetStr = _dateToStr(target);
-  for (final d in availableDates) {
-    // availableDates는 내림차순 정렬
-    if (d.compareTo(targetStr) <= 0) return d;
-  }
-  return null;
-}
-
-// ── 서버리스 스크리닝 ──────────────────────────────────────
+// ── 서버리스 스크리닝 ──────────────────────────────────────────
 
 class ServerlessScreeningNotifier extends ScreeningNotifier {
   final _source = StaticDataSource();
@@ -181,7 +39,7 @@ class ServerlessScreeningNotifier extends ScreeningNotifier {
   }
 }
 
-// ── 서버리스 포트폴리오 ────────────────────────────────────
+// ── 서버리스 포트폴리오 ────────────────────────────────────────
 
 class ServerlessHoldingsNotifier extends HoldingsNotifier {
   final _service = LocalPortfolioService();
@@ -209,7 +67,7 @@ class ServerlessHoldingsNotifier extends HoldingsNotifier {
   }
 }
 
-// ── 서버리스 시장 상태 ─────────────────────────────────────
+// ── 서버리스 시장 상태 ─────────────────────────────────────────
 // 스크리닝 JSON에 포함된 market_status를 사용
 
 Future<MarketStatus?> serverlessMarketStatus(Ref ref) async {
@@ -223,13 +81,13 @@ Future<MarketStatus?> serverlessMarketStatus(Ref ref) async {
   }
 }
 
-// ── 서버리스 스톱 체크 (정적 데이터 기반) ────────────────────
+// ── 서버리스 스톱 체크 (정적 데이터 기반) ─────────────────────
 
 Future<List<StopCheckResult>> serverlessStopCheck(Ref ref, void _) async {
   return [];
 }
 
-// ── 서버리스 4전략 데이터 (US) ────────────────────────────
+// ── 서버리스 4전략 데이터 (US) ──────────────────────────────────
 
 final strategyDataProvider =
     FutureProvider<StrategyScreeningData?>((ref) async {
@@ -241,7 +99,7 @@ final strategyDataProvider =
   }
 });
 
-// ── 서버리스 4전략 데이터 (KR, v3.2 신규) ─────────────────
+// ── 서버리스 4전략 데이터 (KR, v3.2 신규) ──────────────────────
 
 final krStrategyDataProvider =
     FutureProvider<StrategyScreeningData?>((ref) async {
@@ -253,7 +111,7 @@ final krStrategyDataProvider =
   }
 });
 
-// ── 서버리스 포트폴리오 데이터 (엑셀 기반) ──────────────────────
+// ── 서버리스 포트폴리오 데이터 (엑셀 기반) ───────────────────────
 // 우선순위: 사용자 업로드 파일 > 서버 portfolio.json
 
 final portfolioDataProvider = FutureProvider<PortfolioData>((ref) async {
@@ -275,7 +133,7 @@ final portfolioDataProvider = FutureProvider<PortfolioData>((ref) async {
   }
 });
 
-// ── 숏스퀴즈 데이터 ────────────────────────────────────────
+// ── 숏스퀴즈 데이터 ───────────────────────────────────────────
 
 final shortSqueezeProvider = FutureProvider<ShortSqueezeData?>((ref) async {
   try {
@@ -286,7 +144,7 @@ final shortSqueezeProvider = FutureProvider<ShortSqueezeData?>((ref) async {
   }
 });
 
-// ── 시총 Top 20 (트렌드 모니터링) ────────────────────────────
+// ── 시총 Top 20 (트렌드 모니터링) ─────────────────────────────
 
 final marketCapTop20Provider = FutureProvider<Map<String, dynamic>?>((ref) async {
   try {
@@ -296,13 +154,13 @@ final marketCapTop20Provider = FutureProvider<Map<String, dynamic>?>((ref) async
   }
 });
 
-// ── 히스토리 날짜 목록 ──────────────────────────────────────
+// ── 히스토리 날짜 목록 ────────────────────────────────────────
 
 final historyDatesProvider = FutureProvider<List<String>>((ref) async {
   return StaticDataSource().getHistoryDates();
 });
 
-// ── 선택된 히스토리 날짜 (null = 최신) ─────────────────────
+// ── 선택된 히스토리 날짜 (null = 최신) ────────────────────────
 
 class _SelectedHistoryDateNotifier extends Notifier<String?> {
   @override
@@ -314,7 +172,7 @@ final selectedHistoryDateProvider =
   _SelectedHistoryDateNotifier.new,
 );
 
-// ── 선택된 날짜의 스크리닝 데이터 (US) ─────────────────────
+// ── 선택된 날짜의 스크리닝 데이터 (US) ────────────────────────
 
 final historyScreeningProvider =
     FutureProvider<StrategyScreeningData?>((ref) async {
@@ -330,7 +188,7 @@ final historyScreeningProvider =
   }
 });
 
-// ── 선택된 날짜의 스크리닝 데이터 (KR, v3.2 신규) ───────────
+// ── 선택된 날짜의 스크리닝 데이터 (KR, v3.2 신규) ──────────────
 
 final krHistoryScreeningProvider =
     FutureProvider<StrategyScreeningData?>((ref) async {
@@ -343,54 +201,5 @@ final krHistoryScreeningProvider =
     return StrategyScreeningData.fromJson(data);
   } catch (_) {
     return null;
-  }
-});
-
-// ── 선택된 리밸런싱 주기 ──────────────────────────────────
-
-class _RebalanceModeNotifier extends Notifier<RebalanceMode> {
-  @override
-  RebalanceMode build() => RebalanceMode.conservative;
-}
-
-final selectedRebalanceModeProvider =
-    NotifierProvider<_RebalanceModeNotifier, RebalanceMode>(
-  _RebalanceModeNotifier.new,
-);
-
-// ── 리밸런싱 기준일 매도 신호 ─────────────────────────────
-
-final rebalanceSignalProvider =
-    FutureProvider<RebalanceSignal>((ref) async {
-  final mode = ref.watch(selectedRebalanceModeProvider);
-  final dates = await ref.watch(historyDatesProvider.future);
-
-  final today = DateTime.now();
-  final targetDate = _calcTargetRebalanceDate(mode, today);
-  final dateStr = _findClosestDate(targetDate, dates);
-
-  if (dateStr == null) {
-    return const RebalanceSignal(screeningTickers: {});
-  }
-
-  try {
-    final data = await StaticDataSource().getScreeningByDate(dateStr);
-    final strategyData = StrategyScreeningData.fromJson(data);
-
-    final StrategyType strategyType;
-    if (mode == RebalanceMode.aggressive) {
-      strategyType = StrategyType.aggressive;
-    } else if (mode == RebalanceMode.balanced) {
-      strategyType = StrategyType.balanced;
-    } else {
-      strategyType = StrategyType.conservative;
-    }
-
-    final sr = strategyData.strategies[strategyType];
-    final tickers = sr?.results.map((r) => r.ticker).toSet() ?? <String>{};
-
-    return RebalanceSignal(rebalanceDate: dateStr, screeningTickers: tickers);
-  } catch (_) {
-    return RebalanceSignal(rebalanceDate: dateStr, screeningTickers: {});
   }
 });

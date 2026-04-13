@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:momentum_app/main.dart';
 import 'package:momentum_app/providers/screening_provider.dart';
 import 'package:momentum_app/providers/market_provider.dart';
+import 'package:momentum_app/providers/rebalance_provider.dart';
 import 'package:momentum_app/providers/serverless_providers.dart';
 import 'package:momentum_app/models/screening_result.dart';
 import 'package:momentum_app/models/portfolio_data.dart';
