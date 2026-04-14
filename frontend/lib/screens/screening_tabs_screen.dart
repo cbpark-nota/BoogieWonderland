@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screening_screen.dart';
+import 'sell_signal_screen.dart';
 import 'short_squeeze_screen.dart';
 import 'vix_etf_calculator_screen.dart';
 
@@ -30,7 +31,7 @@ class ScreeningTabsScreen extends StatelessWidget {
           const Expanded(
             child: TabBarView(
               children: [
-                ScreeningScreen(),
+                _MomentumTabScreen(),
                 ShortSqueezeScreen(),
                 VixEtfCalculatorScreen(),
               ],
@@ -38,6 +39,62 @@ class ScreeningTabsScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 모멘텀 탭 내부 2단계 탭: 스크리닝 / 매도 신호
+class _MomentumTabScreen extends StatefulWidget {
+  const _MomentumTabScreen();
+
+  @override
+  State<_MomentumTabScreen> createState() => _MomentumTabScreenState();
+}
+
+class _MomentumTabScreenState extends State<_MomentumTabScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        TabBar(
+          controller: _tabController,
+          indicatorSize: TabBarIndicatorSize.tab,
+          dividerColor: colorScheme.outlineVariant,
+          labelStyle: const TextStyle(
+              fontWeight: FontWeight.bold, fontSize: 13),
+          unselectedLabelStyle: const TextStyle(
+              fontWeight: FontWeight.normal, fontSize: 13),
+          tabs: const [
+            Tab(text: '스크리닝'),
+            Tab(text: '매도 신호'),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: const [
+              ScreeningScreen(),
+              SellSignalScreen(),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
