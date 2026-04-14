@@ -1,5 +1,5 @@
 """
-모멘텀 종목 스크리너 v3.2 — US 전용
+모멘텀 종목 스크리너 v3.3 — US 전용
 ══════════════════════════════════════════════════════════
 버전 히스토리:
   v3.0  ATR 기반 동적 스톱로스 / 복합점수 비례 포지션 사이징
@@ -18,6 +18,10 @@
             HH_HL_MIN    3 →  2
             PRICE_52W   0.80 → 0.75
             MAX_WEIGHT  0.20 → 0.10
+  v3.3  ⑩ 트레일링 스톱         (monitor.py에서 보유 중 매일 스톱가 상향 갱신)
+        - 스크리닝 진입 조건 동일, 스크리너 출력에 peak_price 추가
+        - monitor.py: stop_price = max(기존, new_peak - ATR×2.5)
+        - holdings.json: stop_price 필드 영속화
 
 주요 상수:
   ATR_PERIOD   = 14   ATR 계산 기간
@@ -285,6 +289,8 @@ def screen(df):
 
     stop_dist = (stop_price - cur_price) / cur_price if not pd.isna(stop_price) else np.nan
 
+    peak_price = float(df["High"].tail(20).max())   # v3.3: 트레일링 스톱 초기 peak
+
     return True, {
         "ADX"         : float(adx),
         "RSI"         : float(rsi),
@@ -293,6 +299,7 @@ def screen(df):
         "vol_stab"    : vol_stab,
         "price"       : cur_price,
         "stop_price"  : stop_price,
+        "peak_price"  : peak_price,
         "stop_dist"   : stop_dist,
         "high52w"     : float(high52) if not pd.isna(high52) else np.nan,
         "atr"         : float(df["ATR"].dropna().iloc[-1])

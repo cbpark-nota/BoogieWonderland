@@ -1,13 +1,13 @@
 """
-V3.2 고정 스톱 vs 트레일링 스톱 비교 백테스트
+V3.2 고정 스톱 vs V3.3 트레일링 스톱 비교 백테스트
 ══════════════════════════════════════════════════════════════
-공통 기반: V3.1/V3.2 알고리즘 (US only, 격주 리밸런싱, ATR×2.5)
+공통 기반: V3.2 알고리즘 (US only, 격주 리밸런싱, ATR×2.5)
 
-[고정 스톱 - V3.2 기존]
+[고정 스톱 - V3.2]
   - 진입 시 스톱가 = 최근 20일 고점 - ATR(14) × 2.5 로 고정
   - 이후 보유 중 스톱가 업데이트 없음
 
-[트레일링 스톱 - V3.2 Trailing]
+[트레일링 스톱 - V3.3]
   - 진입 시 동일: 스톱가 = 최근 20일 고점 - ATR(14) × 2.5
   - 보유 중 매일: new_peak = max(기존 peak, 오늘 고가)
                   new_stop = new_peak - ATR(14) × 2.5
@@ -585,26 +585,26 @@ if __name__ == "__main__":
         use_trailing=False, label="V3.2 고정스톱",
     )
 
-    # ── 트레일링 스톱 백테스트 ──
+    # ── V3.3 트레일링 스톱 백테스트 ──
     nav_trail, trades_trail, prets_trail, stops_trail, hdays_trail = run_backtest(
         all_data_ind, etf_data, spy_close, universe_map, us_tickers, mktcaps,
-        use_trailing=True, label="V3.2 트레일링",
+        use_trailing=True, label="V3.3 트레일링",
     )
 
     # ── 성과 계산 ──
     m_fixed = calc_metrics(nav_fixed, prets_fixed, trades_fixed, stops_fixed, hdays_fixed, "V3.2 고정 스톱")
-    m_trail = calc_metrics(nav_trail, prets_trail, trades_trail, stops_trail, hdays_trail, "V3.2 트레일링 스톱")
+    m_trail = calc_metrics(nav_trail, prets_trail, trades_trail, stops_trail, hdays_trail, "V3.3 트레일링 스톱")
     m_spy   = calc_spy_metrics(spy_close)
 
     total_time = time.time() - t0
 
     # ── 결과 출력 ──
     print("\n" + "=" * 72)
-    print("  V3.2 고정 스톱 vs 트레일링 스톱 비교")
+    print("  V3.2 고정 스톱 vs V3.3 트레일링 스톱 비교")
     print(f"  기간: {START} ~ {END}  |  격주 리밸런싱  |  거래비용 편도 {COST_PER_SIDE:.1%}")
     print("=" * 72)
 
-    header = f"  {'항목':<16}  {'V3.2 고정스톱':>14}  {'V3.2 트레일링':>14}  {'SPY':>10}"
+    header = f"  {'항목':<16}  {'V3.2 고정스톱':>14}  {'V3.3 트레일링':>14}  {'SPY':>10}"
     print(header)
     print("  " + "─" * 60)
 
