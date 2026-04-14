@@ -95,8 +95,9 @@ class SellSignalScreen extends ConsumerWidget {
 
   DataRow _buildRow(BuildContext context, SellSignal s) {
     final isSell = s.sellReasons.isNotEmpty;
+    final colorScheme = Theme.of(context).colorScheme;
     final rowColor = isSell
-        ? WidgetStateProperty.all(Colors.red.shade50)
+        ? WidgetStateProperty.all(colorScheme.error.withValues(alpha: 0.12))
         : null;
 
     return DataRow(
@@ -113,7 +114,7 @@ class SellSignalScreen extends ConsumerWidget {
           Text(
             _formatPrice(s.stopPrice),
             style: TextStyle(
-              color: s.currentPrice <= s.stopPrice ? Colors.red.shade700 : null,
+              color: s.currentPrice <= s.stopPrice ? colorScheme.error : null,
               fontWeight: s.currentPrice <= s.stopPrice ? FontWeight.bold : null,
             ),
           ),
@@ -122,18 +123,20 @@ class SellSignalScreen extends ConsumerWidget {
           Text(
             s.rank > 25 ? '>25' : '${s.rank}',
             style: TextStyle(
-              color: s.rank > 25 ? Colors.orange.shade700 : null,
+              color: s.rank > 25 ? Colors.orange.shade400 : null,
               fontWeight: s.rank > 25 ? FontWeight.bold : null,
             ),
           ),
         ),
-        DataCell(_buildSignalChip(s)),
+        DataCell(_buildSignalChip(context, s)),
         DataCell(Text(s.sellTriggeredDate, style: const TextStyle(fontSize: 12))),
         DataCell(
           Text(
             '${s.daysRemaining}일',
             style: TextStyle(
-              color: s.daysRemaining == 1 ? Colors.red.shade700 : Colors.grey.shade700,
+              color: s.daysRemaining == 1
+                  ? colorScheme.error
+                  : colorScheme.onSurfaceVariant,
               fontWeight: s.daysRemaining == 1 ? FontWeight.bold : null,
             ),
           ),
@@ -142,7 +145,8 @@ class SellSignalScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSignalChip(SellSignal s) {
+  Widget _buildSignalChip(BuildContext context, SellSignal s) {
+    final colorScheme = Theme.of(context).colorScheme;
     final reasons = <String>[];
     if (s.isStopLoss) reasons.add('스톱로스');
     if (s.isRankOut) reasons.add('순위이탈');
@@ -156,14 +160,16 @@ class SellSignalScreen extends ConsumerWidget {
           margin: const EdgeInsets.only(bottom: 2),
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: isStop ? Colors.red.shade100 : Colors.orange.shade100,
+            color: isStop
+                ? colorScheme.error.withValues(alpha: 0.25)
+                : Colors.orange.withValues(alpha: 0.25),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Text(
             r,
             style: TextStyle(
               fontSize: 10,
-              color: isStop ? Colors.red.shade800 : Colors.orange.shade800,
+              color: isStop ? colorScheme.error : Colors.orange.shade400,
               fontWeight: FontWeight.bold,
             ),
           ),
