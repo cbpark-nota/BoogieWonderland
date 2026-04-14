@@ -63,6 +63,10 @@ jobs:
       - name: 포트폴리오 현재가 재조회
         run: python scripts/export_json.py --portfolio-only --output frontend/web/data/
 
+      - name: 매도 신호 계산
+        run: python scripts/sell_signal/compute_sell_signals.py --output frontend/web/data/sell_signals.json
+        continue-on-error: true
+
       # Flutter 웹 빌드 (서버리스 모드)
       - uses: actions/cache@v4
         with:
