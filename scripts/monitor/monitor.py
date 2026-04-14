@@ -1,8 +1,11 @@
 """
-보유 종목 스톱로스 모니터링
+보유 종목 스톱로스 모니터링 — v3.3 트레일링 스톱
 ══════════════════════════════════════════════════════════
-매일 실행해서 보유 종목의 현재가가 ATR 기반 스톱가에
-도달했는지 체크하고 매도 신호를 출력합니다.
+v3.3 변경사항:
+  - 트레일링 스톱: 보유 중 고점(High) 갱신 시 스톱가도 상향
+    stop_price = max(기존 stop_price, new_peak - ATR×2.5)
+  - holdings.json에 stop_price, peak_price 필드 영속화
+  - 고점 갱신 기준: 종가(Close) → 당일 고가(High)
 
 실행 방법:
     python monitor.py
@@ -31,7 +34,7 @@ import pandas_ta as ta
 # ── 설정 ──────────────────────────────────────────────────────
 HOLDINGS_FILE = "holdings.json"
 ATR_PERIOD    = 14
-ATR_MULT      = 2.5      # 스톱 = 고점 - ATR × 2.5
+ATR_MULT      = 2.5      # 스톱 = peak - ATR × 2.5
 WARN_BUFFER   = 0.05     # 스톱가 5% 이내 접근 시 경고
 
 
@@ -40,10 +43,14 @@ WARN_BUFFER   = 0.05     # 스톱가 5% 이내 접근 시 경고
 # ══════════════════════════════════════════════════════════════
 def load_holdings() -> dict:
     """
-    holdings.json 구조:
+    holdings.json 구조 (v3.3):
     {
-      "NVDA": {"entry_price": 130.50, "entry_date": "2025-01-15", "peak_price": 145.20},
-      "005930.KS": {"entry_price": 68000, "entry_date": "2025-02-01", "peak_price": 72000}
+      "NVDA": {
+        "entry_price": 130.50,
+        "entry_date": "2025-01-15",
+        "peak_price": 145.20,    ← 보유 중 최고 고가 (High 기준)
+        "stop_price": 138.50     ← 트레일링 스톱가 (오르기만 함)
+      }
     }
     """
     p = Path(HOLDINGS_FILE)
@@ -58,13 +65,15 @@ def save_holdings(holdings: dict):
 
 def add_holding(ticker: str, entry_price: float):
     holdings = load_holdings()
-    holdings[ticker.upper()] = {
+    t = ticker.upper()
+    holdings[t] = {
         "entry_price": entry_price,
         "entry_date" : datetime.now().strftime("%Y-%m-%d"),
         "peak_price" : entry_price,
+        "stop_price" : None,   # 최초 실행 시 ATR로 계산
     }
     save_holdings(holdings)
-    print(f"  ✅ {ticker.upper()} 추가 (매수가: {entry_price:,.2f})")
+    print(f"  ✅ {t} 추가 (매수가: {entry_price:,.2f})")
 
 def remove_holding(ticker: str):
     holdings = load_holdings()
@@ -81,45 +90,52 @@ def list_holdings():
     if not holdings:
         print("  보유 종목 없음")
         return
-    print(f"\n  {'종목':<14} {'매수가':>10} {'매수일':>12} {'현재 고점':>12}")
-    print("  " + "─"*52)
+    print(f"\n  {'종목':<14} {'매수가':>10} {'매수일':>12} {'고점':>12} {'스톱가':>12}")
+    print("  " + "─" * 62)
     for t, info in holdings.items():
+        stop_str = f"{info['stop_price']:>12,.2f}" if info.get('stop_price') else f"{'(미계산)':>12}"
         print(f"  {t:<14} {info['entry_price']:>10,.2f} "
-              f"{info['entry_date']:>12} {info['peak_price']:>12,.2f}")
+              f"{info['entry_date']:>12} {info['peak_price']:>12,.2f} {stop_str}")
 
 
 # ══════════════════════════════════════════════════════════════
-# ATR 기반 스톱가 계산
+# ATR 계산
 # ══════════════════════════════════════════════════════════════
-def calc_atr_stop(df: pd.DataFrame, peak_price: float) -> dict:
-    """
-    스톱가 = peak_price - ATR(14) × ATR_MULT
-    반환: {stop_price, atr, pct_from_stop}
-    """
+def calc_atr(df: pd.DataFrame) -> float:
+    """현재 ATR(14) 값 반환."""
     h = df["High"].squeeze()
     l = df["Low"].squeeze()
     c = df["Close"].squeeze()
-
     atr_series = ta.atr(h, l, c, length=ATR_PERIOD)
     if atr_series is None or len(atr_series) == 0:
-        return {}
-
-    atr        = float(atr_series.iloc[-1])
-    cur_price  = float(c.iloc[-1])
-    stop_price = peak_price - atr * ATR_MULT
-    pct_from_stop = (cur_price - stop_price) / stop_price
-
-    return {
-        "current"  : cur_price,
-        "atr"      : atr,
-        "stop"     : stop_price,
-        "pct_margin": pct_from_stop,   # 양수 = 스톱가 위, 음수 = 스톱가 아래
-    }
+        return np.nan
+    return float(atr_series.iloc[-1])
 
 
 # ══════════════════════════════════════════════════════════════
-# 수익률 계산
+# 트레일링 스톱가 갱신 (v3.3 핵심 로직)
 # ══════════════════════════════════════════════════════════════
+def update_trailing_stop(
+    old_peak: float,
+    old_stop: float | None,
+    current_high: float,
+    atr: float,
+) -> tuple[float, float]:
+    """
+    트레일링 스톱 갱신.
+    - new_peak = max(old_peak, current_high)
+    - new_stop = new_peak - ATR × ATR_MULT
+    - stop     = max(old_stop, new_stop)  ← 스톱가는 오르기만 함
+
+    Returns: (new_peak, new_stop)
+    """
+    new_peak = max(old_peak, current_high)
+    new_stop = new_peak - atr * ATR_MULT
+    if old_stop is None or np.isnan(old_stop):
+        return new_peak, new_stop
+    return new_peak, max(old_stop, new_stop)
+
+
 def calc_return(entry_price: float, current_price: float) -> float:
     return (current_price - entry_price) / entry_price
 
@@ -133,13 +149,12 @@ def run_monitor():
         print("\n  보유 종목이 없습니다.")
         print("  추가 방법: python monitor.py --add <종목코드> <매수가>")
         print("  예시:      python monitor.py --add NVDA 130.50")
-        print("             python monitor.py --add 005930.KS 68000")
         return
 
     today = datetime.now().strftime("%Y-%m-%d %H:%M")
     print("=" * 62)
-    print(f"  📊 보유 종목 스톱로스 모니터링  {today}")
-    print(f"  ATR({ATR_PERIOD}) × {ATR_MULT} 기반 동적 스톱")
+    print(f"  📊 보유 종목 트레일링 스톱 모니터링  {today}")
+    print(f"  ATR({ATR_PERIOD}) × {ATR_MULT} 트레일링 스톱 (v3.3)")
     print("=" * 62)
 
     tickers   = list(holdings.keys())
@@ -150,9 +165,10 @@ def run_monitor():
     updated_holdings = {}
 
     for ticker in tickers:
-        info = holdings[ticker]
+        info     = holdings[ticker]
         entry_px = info["entry_price"]
         peak_px  = info.get("peak_price", entry_px)
+        stop_px  = info.get("stop_price")   # None이면 최초 계산
 
         try:
             raw = yf.download(ticker, period="3mo",
@@ -162,37 +178,45 @@ def run_monitor():
                 updated_holdings[ticker] = info
                 continue
 
-            cur_px = float(raw["Close"].iloc[-1])
+            cur_px      = float(raw["Close"].iloc[-1])
+            cur_high    = float(raw["High"].iloc[-1])   # v3.3: High로 peak 갱신
+            atr         = calc_atr(raw)
 
-            # 고점 갱신
-            new_peak = max(peak_px, cur_px)
-            info["peak_price"] = new_peak
-
-            calc = calc_atr_stop(raw, new_peak)
-            if not calc:
+            if np.isnan(atr):
                 updated_holdings[ticker] = info
                 continue
 
-            ret_pct  = calc_return(entry_px, cur_px)
-            margin   = calc["pct_margin"]
-            flag     = "🇺🇸" if not ticker.endswith(".KS") else "🇰🇷"
+            # ── v3.3 트레일링 스톱 갱신 ──────────────────────
+            new_peak, new_stop = update_trailing_stop(
+                old_peak=peak_px,
+                old_stop=stop_px,
+                current_high=cur_high,
+                atr=atr,
+            )
+            info["peak_price"] = new_peak
+            info["stop_price"] = new_stop
+
+            pct_margin = (cur_px - new_stop) / new_stop
+            ret_pct    = calc_return(entry_px, cur_px)
+            flag       = "🇺🇸" if not ticker.endswith(".KS") else "🇰🇷"
 
             row = {
-                "ticker"  : ticker,
-                "flag"    : flag,
-                "entry"   : entry_px,
-                "current" : cur_px,
-                "peak"    : new_peak,
-                "stop"    : calc["stop"],
-                "atr"     : calc["atr"],
-                "ret_pct" : ret_pct,
-                "margin"  : margin,
+                "ticker" : ticker,
+                "flag"   : flag,
+                "entry"  : entry_px,
+                "current": cur_px,
+                "high"   : cur_high,
+                "peak"   : new_peak,
+                "stop"   : new_stop,
+                "atr"    : atr,
+                "ret_pct": ret_pct,
+                "margin" : pct_margin,
             }
 
-            if margin < 0:
-                sell_list.append(row)      # 스톱 이탈
-            elif margin < WARN_BUFFER:
-                warn_list.append(row)      # 스톱 근접 경고
+            if pct_margin < 0:
+                sell_list.append(row)
+            elif pct_margin < WARN_BUFFER:
+                warn_list.append(row)
             else:
                 safe_list.append(row)
 
@@ -201,7 +225,7 @@ def run_monitor():
 
         updated_holdings[ticker] = info
 
-    # 고점 업데이트 저장
+    # 갱신된 peak/stop 저장
     save_holdings(updated_holdings)
 
     # ── 매도 신호 ──────────────────────────────────────────
@@ -216,7 +240,7 @@ def run_monitor():
                 f"\n     고점     : {r['peak']:>10,.2f}"
                 f"   스톱가   : {r['stop']:>10,.2f}"
                 f"   ATR     : {r['atr']:>8,.2f}"
-                f"\n     ⛔ 현재가가 스톱가 아래입니다 — 매도 검토 권장"
+                f"\n     ⛔ 현재가가 트레일링 스톱가 아래 — 매도 검토 권장"
             )
     else:
         print("\n  🚨 매도 신호: 없음")
@@ -267,7 +291,7 @@ def run_monitor():
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="보유 종목 ATR 스톱로스 모니터링"
+        description="보유 종목 ATR 트레일링 스톱 모니터링 (v3.3)"
     )
     parser.add_argument("--add",    nargs=2,
                         metavar=("TICKER", "PRICE"),
