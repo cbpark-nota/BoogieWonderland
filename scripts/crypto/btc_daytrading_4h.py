@@ -31,8 +31,12 @@ BTC 4시간봉 데이 트레이딩 알고리즘
   python scripts/crypto/btc_daytrading_4h.py
 """
 
+import argparse
+import json
 import time
 import warnings
+from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -43,6 +47,14 @@ warnings.filterwarnings("ignore")
 
 # 4h 연간 캔들 수 (24/7 crypto: 365일 × 6봉/일)
 BARS_PER_YEAR = 2190
+
+# 캐시 설정
+CACHE_PATH = Path("scripts/crypto/data/btc_4h.csv")
+CACHE_MAX_AGE_HOURS = 12
+
+# 결과 저장 경로
+RESULTS_DIR = Path("scripts/backtest/results/btc_4h")
+DOCS_DIR    = Path("docs")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -77,44 +89,96 @@ def _fetch_binance_4h(start_ms: int, end_ms: int) -> list:
     return all_rows
 
 
-def get_btc_data_4h(start: str = "2021-01-01") -> pd.DataFrame:
-    """
-    BTC-USD/USDT 4시간봉 데이터 수집
-    1순위: Binance 공개 API (BTC/USDT, 2021~현재 전체)
-    2순위: yfinance 1h → 4h 리샘플링 (최근 730일)
-    """
-    print("BTC 4h 데이터 수집 중...")
+def _rows_to_df(rows: list) -> pd.DataFrame:
+    """Binance 응답 rows → OHLCV DataFrame"""
+    df = pd.DataFrame(rows, columns=[
+        "open_time", "open", "high", "low", "close", "volume",
+        "close_time", "quote_vol", "n_trades",
+        "taker_base", "taker_quote", "ignore",
+    ])
+    df["open_time"] = pd.to_datetime(df["open_time"], unit="ms", utc=True)
+    df = df.set_index("open_time")
+    df = df[["open", "high", "low", "close", "volume"]].astype(float)
+    return df[~df.index.duplicated(keep="first")].sort_index()
 
-    # ── Binance API ──────────────────────────────────────────
+
+def get_btc_data_4h(
+    start: str = "2021-01-01",
+    refresh_cache: bool = False,
+    cache_only: bool = False,
+) -> pd.DataFrame:
+    """
+    BTC-USD/USDT 4시간봉 데이터 수집 (캐시 우선)
+
+    캐시 동작:
+      1. 캐시 없음 → Binance 전량 다운로드 후 CSV 저장
+      2. 캐시 있음 + 최신 봉 12h 이내 → 네트워크 호출 없이 CSV 로드
+      3. 캐시 있음 + 12h 초과 → 증분 다운로드 후 병합·재저장
+
+    Fallback: Binance 실패 시 yfinance 1h→4h 리샘플링 (캐시 저장 생략)
+
+    Parameters
+    ----------
+    start         : 백테스트 시작 날짜 (캐시 없을 때 전량 다운로드 기준)
+    refresh_cache : True 이면 캐시 무시하고 전량 재다운로드
+    cache_only    : True 이면 네트워크 호출 금지, 캐시만 사용 (없으면 에러)
+    """
+    CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    now_ms = int(pd.Timestamp.now(tz="UTC").timestamp() * 1000)
+
+    # ── cache_only 모드 ───────────────────────────────────────
+    if cache_only:
+        if not CACHE_PATH.exists():
+            raise FileNotFoundError(f"캐시 파일 없음: {CACHE_PATH}  (--cache-only 모드)")
+        df = pd.read_csv(CACHE_PATH, index_col=0, parse_dates=True)
+        df.index = pd.to_datetime(df.index, utc=True)
+        return df
+
+    # ── 캐시 파일이 존재하고 최신 봉이 12h 이내 ─────────────
+    if not refresh_cache and CACHE_PATH.exists():
+        df_cached = pd.read_csv(CACHE_PATH, index_col=0, parse_dates=True)
+        df_cached.index = pd.to_datetime(df_cached.index, utc=True)
+
+        if len(df_cached) > 0:
+            last_ts_ms = int(df_cached.index[-1].timestamp() * 1000)
+            age_hours  = (now_ms - last_ts_ms) / (3_600_000)
+
+            if age_hours <= CACHE_MAX_AGE_HOURS:
+                return df_cached
+
+            # ── 증분 다운로드 ──────────────────────────────
+            inc_start_ms = last_ts_ms + 4 * 3600 * 1000  # 다음 봉부터
+            try:
+                rows = _fetch_binance_4h(inc_start_ms, now_ms)
+                if len(rows) > 0:
+                    df_new = _rows_to_df(rows)
+                    df_merged = pd.concat([df_cached, df_new])
+                    df_merged = df_merged[~df_merged.index.duplicated(keep="last")].sort_index()
+                    df_merged.to_csv(CACHE_PATH)
+                    return df_merged
+                return df_cached
+            except Exception as e:
+                print(f"  증분 다운로드 실패: {e}  — 캐시 데이터 사용")
+                return df_cached
+
+    # ── 전량 다운로드 (캐시 없거나 refresh_cache=True) ────────
+    start_ms = int(pd.Timestamp(start).timestamp() * 1000)
     try:
-        start_ms = int(pd.Timestamp(start).timestamp() * 1000)
-        end_ms   = int(pd.Timestamp.now().timestamp() * 1000)
-        rows = _fetch_binance_4h(start_ms, end_ms)
-
+        rows = _fetch_binance_4h(start_ms, now_ms)
         if len(rows) > 200:
-            df = pd.DataFrame(rows, columns=[
-                "open_time", "open", "high", "low", "close", "volume",
-                "close_time", "quote_vol", "n_trades",
-                "taker_base", "taker_quote", "ignore",
-            ])
-            df["open_time"] = pd.to_datetime(df["open_time"], unit="ms", utc=True)
-            df = df.set_index("open_time")
-            df = df[["open", "high", "low", "close", "volume"]].astype(float)
-            df = df[~df.index.duplicated(keep="first")].sort_index()
-            print(f"  [Binance] 기간: {df.index[0].date()} ~ {df.index[-1].date()}  ({len(df):,}봉, 4h)")
+            df = _rows_to_df(rows)
+            df.to_csv(CACHE_PATH)
             return df
     except Exception as e:
         print(f"  Binance 실패: {e}  — yfinance 1h 데이터로 대체")
 
-    # ── yfinance 1h → 4h 리샘플링 ────────────────────────────
-    print("  yfinance 1h 수집 중...")
+    # ── Fallback: yfinance 1h → 4h 리샘플링 ──────────────────
     raw = yf.download("BTC-USD", period="730d", interval="1h",
                       progress=False, auto_adjust=True)
     raw.columns = [c[0].lower() if isinstance(c, tuple) else c.lower()
                    for c in raw.columns]
     raw = raw[["open", "high", "low", "close", "volume"]].dropna()
 
-    # 4h 리샘플링
     df = raw.resample("4h", closed="left", label="left").agg({
         "open":   "first",
         "high":   "max",
@@ -124,7 +188,6 @@ def get_btc_data_4h(start: str = "2021-01-01") -> pd.DataFrame:
     }).dropna()
 
     df = df.loc[start:] if start else df
-    print(f"  [yfinance 1h→4h] 기간: {df.index[0].date()} ~ {df.index[-1].date()}  ({len(df):,}봉, 4h)")
     return df
 
 
@@ -1274,6 +1337,201 @@ def strategy_v10(df: pd.DataFrame) -> pd.DataFrame:
 # 7. 결과 출력 및 메인
 # ══════════════════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════════════════
+# 8. 전략 레지스트리 (모듈 레벨)
+# ══════════════════════════════════════════════════════════════════════
+
+STRATEGIES = {
+    "v1":  ("V1: Squeeze Momentum 기본 (4h)",          strategy_v1),
+    "v2":  ("V2: + MA200(33일) 추세 필터",              strategy_v2),
+    "v3":  ("V3: + VWAP(20일) 이탈 회귀",               strategy_v3),
+    "v4":  ("V4: + RSI Pullback + 다중 시간프레임",      strategy_v4),
+    "v5":  ("V5: 레짐 감지 + 자동 전환",                strategy_v5),
+    "v6":  ("V6: 파라미터 완화 (거래 빈도 확대)",       strategy_v6),
+    "v7":  ("V7: + BB Break 신호",                      strategy_v7),
+    "v8":  ("V8: 롱온리 전략",                          strategy_v8),
+    "v9":  ("V9: + Squeeze 조기진입 + EMA 크로스",      strategy_v9),
+    "v10": ("V10: 복합 최적화 (주간 +1% 목표)",         strategy_v10),
+}
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 9. JSON 저장 / 집계
+# ══════════════════════════════════════════════════════════════════════
+
+def _serialize_metrics(m: dict) -> dict:
+    """metrics dict에서 JSON 직렬화 불가 항목 제거 후 반환"""
+    out = {}
+    for k, v in m.items():
+        if k == "weekly_returns":
+            wr = v
+            out["weekly_median"]   = float(wr.median())
+            out["weekly_p25"]      = float(wr.quantile(0.25))
+            out["weekly_p75"]      = float(wr.quantile(0.75))
+        elif isinstance(v, (np.floating, np.integer)):
+            out[k] = float(v)
+        elif isinstance(v, float):
+            out[k] = v
+        elif isinstance(v, int):
+            out[k] = v
+        # pd.Series 등 직렬화 불가 항목은 건너뜀
+    return out
+
+
+def save_result(
+    version: str,
+    name: str,
+    equity: np.ndarray,
+    trades_df: pd.DataFrame,
+    metrics: dict,
+    period_metrics: dict,
+    df_dates: pd.DatetimeIndex,
+    fee_rate: float = 0.001,
+) -> None:
+    """버전별 백테스트 결과를 JSON으로 저장"""
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    path = RESULTS_DIR / f"{version}.json"
+
+    n_trades = int(metrics.get("n_trades", len(trades_df)))
+    years    = float(metrics.get("years", 1.0))
+
+    result = {
+        "version":   version,
+        "name":      name,
+        "run_at":    datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "fee_rate":  fee_rate,
+        "period": {
+            "start": str(df_dates[0].date()),
+            "end":   str(df_dates[-1].date()),
+            "bars":  len(df_dates),
+        },
+        "metrics": _serialize_metrics(metrics),
+        "period_breakdown": {
+            k: {"cagr": float(v["cagr"]), "mdd": float(v["mdd"])}
+            for k, v in period_metrics.items()
+        },
+        "trades_count": n_trades,
+    }
+    path.write_text(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def aggregate_results() -> None:
+    """v1~v10 JSON 파일을 읽어 통합 보고서 생성"""
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    DOCS_DIR.mkdir(parents=True, exist_ok=True)
+
+    records = {}
+    for v in [f"v{i}" for i in range(1, 11)]:
+        p = RESULTS_DIR / f"{v}.json"
+        if p.exists():
+            records[v] = json.loads(p.read_text())
+        else:
+            print(f"  [경고] {v}.json 없음 — 해당 버전 집계에서 제외")
+
+    if not records:
+        print("집계할 결과 없음. v1~v10 중 하나 이상 실행 후 다시 시도하세요.")
+        return
+
+    # ── 집계 JSON 저장 ────────────────────────────────────────
+    agg_path = RESULTS_DIR / "aggregate_summary.json"
+    agg_path.write_text(json.dumps(records, ensure_ascii=False, indent=2))
+
+    # ── 마크다운 보고서 생성 ─────────────────────────────────
+    today = datetime.now().strftime("%Y%m%d")
+    md_path = DOCS_DIR / f"btc_4h_backtest_results_{today}.md"
+
+    lines = [
+        "# BTC 4시간봉 백테스트 결과 — V1~V10",
+        "",
+        f"> 생성일: {datetime.now().strftime('%Y-%m-%d')}  ",
+        f"> 수수료: 매수 0.05% + 매도 0.05% = RT 0.1%  ",
+        f"> 기간: 2021-01-01 ~ 현재 | 시간 단위: 4h  ",
+        "",
+        "---",
+        "",
+        "## 전략 성과 요약 (V1~V10)",
+        "",
+        "| 버전 | 전략명 | CAGR | MDD | 샤프 | 거래수/년 | 승률 | 주간≥1% |",
+        "|------|--------|------|-----|------|-----------|------|---------|",
+    ]
+
+    for v, r in records.items():
+        m   = r.get("metrics", {})
+        cagr     = m.get("cagr", 0)
+        mdd      = m.get("mdd", 0)
+        sharpe   = m.get("sharpe", 0)
+        tpy      = m.get("trades_per_yr", 0)
+        wr       = m.get("win_rate", 0)
+        w1pct    = m.get("weekly_1pct", 0)
+        name     = r.get("name", v)
+        lines.append(
+            f"| {v} | {name} | {cagr*100:.1f}% | {mdd*100:.1f}% | "
+            f"{sharpe:.2f} | {tpy:.0f} | {wr*100:.1f}% | {w1pct*100:.1f}% |"
+        )
+
+    # ── 시기별 분석 ───────────────────────────────────────────
+    lines += [
+        "",
+        "---",
+        "",
+        "## 시기별 성과 분석",
+        "",
+        "| 버전 | 기간 | CAGR | MDD |",
+        "|------|------|------|-----|",
+    ]
+    for v, r in records.items():
+        for period_name, pd_m in r.get("period_breakdown", {}).items():
+            lines.append(
+                f"| {v} | {period_name} | "
+                f"{pd_m.get('cagr', 0)*100:.1f}% | "
+                f"{pd_m.get('mdd', 0)*100:.1f}% |"
+            )
+
+    # ── 주간 +1% 목표 달성 여부 ───────────────────────────────
+    lines += [
+        "",
+        "---",
+        "",
+        "## 주간 +1% 목표 달성 여부",
+        "",
+        "| 버전 | 주간≥1% | 주간평균 | CAGR | 달성 여부 |",
+        "|------|---------|---------|------|----------|",
+    ]
+    for v, r in records.items():
+        m     = r.get("metrics", {})
+        w1pct = m.get("weekly_1pct", 0)
+        wavg  = m.get("weekly_avg", 0)
+        cagr  = m.get("cagr", 0)
+        flag  = "✓ 달성" if w1pct >= 0.30 else "✗ 미달"
+        lines.append(
+            f"| {v} | {w1pct*100:.1f}% | {wavg*100:.2f}% | {cagr*100:.1f}% | {flag} |"
+        )
+
+    lines += ["", "---", "", "*본 문서는 투자 조언이 아니며, 내부 개발 참고용입니다.*", ""]
+
+    md_path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"  보고서 저장: {md_path}")
+
+    # ── 콘솔 출력 ─────────────────────────────────────────────
+    print(f"\n{'='*70}")
+    print("  [V1~V10] 통합 성과 비교")
+    print(f"{'='*70}")
+    hdr = f"  {'버전':<6} {'CAGR':>7} {'MDD':>7} {'샤프':>6} {'주간≥1%':>7} {'거래/년':>7}"
+    print(hdr)
+    print(f"  {'-'*60}")
+    for v, r in records.items():
+        m = r.get("metrics", {})
+        print(
+            f"  {v:<6} "
+            f"{m.get('cagr',0)*100:>6.1f}% "
+            f"{m.get('mdd',0)*100:>6.1f}% "
+            f"{m.get('sharpe',0):>6.2f} "
+            f"{m.get('weekly_1pct',0)*100:>6.1f}% "
+            f"{m.get('trades_per_yr',0):>7.0f}"
+        )
+    print(f"{'='*70}")
+
+
 SEP  = "=" * 82
 LINE = "-" * 82
 
@@ -1334,7 +1592,70 @@ def print_trade_detail(name: str, trades_df: pd.DataFrame, m: dict) -> None:
             print(f"    {d:5s}          : {len(sub):3d}회, 승률={pf(wr)}, 평균={pf(avg, 2)}")
 
 
+def run_single_version(
+    version: str,
+    refresh_cache: bool = False,
+    cache_only: bool = False,
+) -> None:
+    """--version vN 모드: 단일 버전 백테스트 후 JSON 저장"""
+    if version not in STRATEGIES:
+        raise ValueError(f"알 수 없는 버전: {version}  (유효: {list(STRATEGIES)})")
+
+    name, func = STRATEGIES[version]
+    FEE = 0.001  # RT 0.1%
+
+    df = get_btc_data_4h("2021-01-01", refresh_cache=refresh_cache, cache_only=cache_only)
+    df = add_indicators(df)
+
+    eq, tr  = run_backtest(df, func, fee_rate=FEE)
+    m       = calc_metrics(eq, df.index, tr)
+    pm      = calc_period(eq, df.index)
+
+    cagr = m.get("cagr", 0)
+    mdd  = m.get("mdd", 0)
+    sh   = m.get("sharpe", 0)
+    tpy  = m.get("trades_per_yr", 0)
+
+    save_result(version, name, eq, tr, m, pm, df.index, fee_rate=FEE)
+    print(
+        f"[{version}] {name}  CAGR={cagr*100:.1f}%  MDD={mdd*100:.1f}%  "
+        f"샤프={sh:.2f}  거래={tpy:.1f}회/년  "
+        f"→ {RESULTS_DIR}/{version}.json"
+    )
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="BTC 4시간봉 백테스트 (v1~v10 개별 실행 또는 집계)"
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--version", metavar="vN",
+        help="개별 버전 실행 (v1~v10). 완료 후 scripts/backtest/results/btc_4h/vN.json 저장."
+    )
+    group.add_argument(
+        "--aggregate", action="store_true",
+        help="v1~v10 JSON 파일을 읽어 집계 보고서 생성."
+    )
+    parser.add_argument("--refresh-cache", action="store_true",
+                        help="캐시 무시하고 Binance에서 전량 재다운로드.")
+    parser.add_argument("--cache-only", action="store_true",
+                        help="네트워크 호출 금지, 캐시만 사용.")
+    args = parser.parse_args()
+
+    if args.version:
+        run_single_version(
+            args.version,
+            refresh_cache=args.refresh_cache,
+            cache_only=args.cache_only,
+        )
+        return
+
+    if args.aggregate:
+        aggregate_results()
+        return
+
+    # ── 기존 전체 실행 모드 (인자 없음) ──────────────────────
     print(SEP)
     print("  BTC 4시간봉 데이 트레이딩  ─  V1~V10 백테스트")
     print(f"  기간: 2021-01-01 ~ 현재 | 수수료: RT 0.1% | 1일 = 6봉 (4h)")
@@ -1342,24 +1663,17 @@ def main() -> None:
     print(f"  데이터: Binance BTC/USDT 4h (Fallback: yfinance 1h → 4h 리샘플)")
     print(SEP)
 
-    df = get_btc_data_4h("2021-01-01")
+    df = get_btc_data_4h(
+        "2021-01-01",
+        refresh_cache=args.refresh_cache,
+        cache_only=args.cache_only,
+    )
     df = add_indicators(df)
     print(f"\n  지표 계산 완료: {len(df):,}봉, {len(df)/6:.0f}일 분량\n")
 
     FEE = 0.001  # RT 0.1%
 
-    STRATEGIES = [
-        ("V1: Squeeze Momentum 기본 (4h)",             strategy_v1),
-        ("V2: + MA200(33일) 추세 필터",                strategy_v2),
-        ("V3: + VWAP(20일) 이탈 회귀",                 strategy_v3),
-        ("V4: + RSI Pullback + 다중 시간프레임",        strategy_v4),
-        ("V5: 레짐 감지 + 자동 전환",                  strategy_v5),
-        ("V6: 파라미터 완화 (거래 빈도 확대)",         strategy_v6),
-        ("V7: + BB Break 신호",                        strategy_v7),
-        ("V8: 롱온리 전략",                            strategy_v8),
-        ("V9: + Squeeze 조기진입 + EMA 크로스",        strategy_v9),
-        ("V10: 복합 최적화 (주간 +1% 목표)",           strategy_v10),
-    ]
+    strat_list = list(STRATEGIES.values())
 
     # ── Buy & Hold ────────────────────────────────────────
     bh_equity = df["close"].values / df["close"].values[0]
@@ -1368,32 +1682,30 @@ def main() -> None:
     # ── 전략 실행 ──────────────────────────────────────────
     print("[V1~V5] 레거시 기본 전략 실행 중...\n")
     results = {}
-    for name, func in STRATEGIES[:5]:
-        print(f"  {name} ...", end=" ", flush=True)
+    for name, func in strat_list[:5]:
         try:
             eq, tr = run_backtest(df, func, fee_rate=FEE)
             m = calc_metrics(eq, df.index, tr)
             results[name] = (eq, tr, m)
             n_yr = m.get("trades_per_yr", 0)
-            print(f"CAGR={pf(m['cagr'])}  MDD={pf(m['mdd'])}  "
+            print(f"  {name}  CAGR={pf(m['cagr'])}  MDD={pf(m['mdd'])}  "
                   f"샤프={m['sharpe']:.2f}  거래={n_yr:.1f}회/년")
         except Exception as exc:
-            print(f"오류: {exc}")
+            print(f"  {name}  오류: {exc}")
             import traceback; traceback.print_exc()
 
     print(f"\n[V6~V10] 최적화 전략 실행 중...\n")
     new_results = {}
-    for name, func in STRATEGIES[5:]:
-        print(f"  {name} ...", end=" ", flush=True)
+    for name, func in strat_list[5:]:
         try:
             eq, tr = run_backtest(df, func, fee_rate=FEE)
             m = calc_metrics(eq, df.index, tr)
             new_results[name] = (eq, tr, m)
             n_yr = m.get("trades_per_yr", 0)
-            print(f"CAGR={pf(m['cagr'])}  MDD={pf(m['mdd'])}  "
+            print(f"  {name}  CAGR={pf(m['cagr'])}  MDD={pf(m['mdd'])}  "
                   f"샤프={m['sharpe']:.2f}  거래={n_yr:.1f}회/년")
         except Exception as exc:
-            print(f"오류: {exc}")
+            print(f"  {name}  오류: {exc}")
             import traceback; traceback.print_exc()
 
     all_results = {**results, **new_results}
