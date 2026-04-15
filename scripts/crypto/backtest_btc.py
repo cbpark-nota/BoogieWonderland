@@ -14,6 +14,7 @@ Bitcoin 알고리즘 트레이딩 백테스트 — v1 ~ v5 단계별 개선 비�
 """
 
 import warnings
+from datetime import datetime
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -34,8 +35,8 @@ DOCS_DIR    = Path(__file__).parent.parent.parent / "docs"
 RESULTS_DIR.mkdir(exist_ok=True)
 
 INITIAL_CAPITAL = 10_000.0  # USD
-FEE_BUY  = 0.005  # 0.5%
-FEE_SELL = 0.005  # 0.5%
+FEE_BUY  = 0.0005  # 0.05%
+FEE_SELL = 0.0005  # 0.05%
 
 
 # ════════════════════════════════════════════════════════════════
@@ -393,7 +394,7 @@ def run_backtest(df: pd.DataFrame, alloc_signal: pd.Series,
 
     거래 규칙:
     - 신호는 종가에 계산되고 다음날 시가에 실행 (lookahead 방지)
-    - 매수 수수료 0.5%, 매도 수수료 0.5%
+    - 매수 수수료 0.05%, 매도 수수료 0.05%
     - 포지션 규모 변경 시 수수료 발생
     """
     # 신호를 1일 지연 (다음날 시가 실행)
@@ -683,7 +684,6 @@ def save_csv(results: dict):
 
 def generate_markdown(results: dict, df: pd.DataFrame):
     """docs/bitcoin_trading_algorithm.md 생성"""
-    from datetime import datetime
     now = datetime.now().strftime("%Y-%m-%d")
 
     m_bnh = results["BTC Buy&Hold"]["metrics"]
@@ -717,7 +717,7 @@ def generate_markdown(results: dict, df: pd.DataFrame):
         "- **지속형 신호**: 일시적 크로스오버(whipsaw) 방지 — Golden Cross 상태가 5일 이상 지속 시만 진입",
         "- **다중 확인**: 가격 모멘텀 외 온체인(Hash Rate, Active Addresses) + 시장 심리(F&G) 순차 적용",
         "- **적응형 변동성**: BTC는 제도권 편입으로 변동성 감소 → 스톱로스를 현재 시장 환경에 동적 조정",
-        "- **비용 반영**: 매수/매도 각 0.5% 수수료를 모든 거래에 반영, lookahead 없음",
+        "- **비용 반영**: 매수/매도 각 0.05% 수수료를 모든 거래에 반영, lookahead 없음",
         "",
         "### BTC 변동성 구조 변화",
         "```",
@@ -736,8 +736,8 @@ def generate_markdown(results: dict, df: pd.DataFrame):
     version_details = {
         "BTC Buy&Hold": {
             "지표": "없음",
-            "진입": "시작일 전량 매수 (수수료 0.5% 반영)",
-            "청산": "백테스트 종료일 (수수료 0.5% 반영)",
+            "진입": "시작일 전량 매수 (수수료 0.05% 반영)",
+            "청산": "백테스트 종료일 (수수료 0.05% 반영)",
             "스톱": "없음",
             "추가지표": "벤치마크 (비교 기준)",
         },
@@ -871,7 +871,8 @@ def generate_markdown(results: dict, df: pd.DataFrame):
         "*자동 생성: scripts/crypto/backtest_btc.py*",
     ]
 
-    doc_path = DOCS_DIR / "bitcoin_trading_algorithm.md"
+    today    = datetime.now().strftime("%Y%m%d")
+    doc_path = DOCS_DIR / f"btc_longterm_backtest_{today}.md"
     doc_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"  문서 저장: {doc_path}")
 
@@ -917,8 +918,9 @@ def main():
     )
     print(f"\n  BTC Buy&Hold CAGR:  {bnh_cagr*100:.1f}%")
     print(f"  최고 성과 버전:      {best[0]} (CAGR {best[1]*100:.1f}%)")
+    today = datetime.now().strftime("%Y%m%d")
     print(f"\n  결과 파일: {RESULTS_DIR}")
-    print(f"  알고리즘 문서: {DOCS_DIR / 'bitcoin_trading_algorithm.md'}")
+    print(f"  알고리즘 문서: {DOCS_DIR / f'btc_longterm_backtest_{today}.md'}")
     print("\n백테스트 완료!")
 
 
