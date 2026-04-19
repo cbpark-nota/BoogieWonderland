@@ -7,6 +7,27 @@ import '../providers/market_filter_provider.dart';
 import '../providers/serverless_providers.dart';
 import '../widgets/stock_card.dart';
 
+// 3전략 세그먼트 버튼 설정
+const _kMainStrategies = [
+  StrategyType.aggressive,
+  StrategyType.balanced,
+  StrategyType.conservative,
+];
+
+// 세그먼트 버튼에 표시할 짧은 라벨
+const _kStrategyShortLabel = {
+  StrategyType.aggressive: '공격적',
+  StrategyType.balanced: '균형',
+  StrategyType.conservative: '보수적',
+};
+
+// 세그먼트 버튼에 표시할 파라미터 라벨
+const _kStrategyParamLabel = {
+  StrategyType.aggressive: 'ATR×1.5 / TOP 15',
+  StrategyType.balanced: 'ATR×2.0 / TOP 10',
+  StrategyType.conservative: 'ATR×2.5 / TOP 7',
+};
+
 class ScreeningScreen extends ConsumerWidget {
   const ScreeningScreen({super.key});
 
@@ -22,19 +43,14 @@ class ScreeningScreen extends ConsumerWidget {
 
   Widget _buildServerlessView(BuildContext context, WidgetRef ref) {
     final filteredAsync = ref.watch(filteredScreeningProvider);
-    final sortOrder = ref.watch(selectedSortOrderProvider);
+    final sortOrder = ref.watch(sortOrderProvider);
 
     return Scaffold(
       body: Column(
         children: [
           _buildDateSelector(context, ref),
           _buildStrategySelector(context, ref),
-          Row(
-            children: [
-              Expanded(child: _buildMarketFilter(context, ref)),
-              _buildSortToggle(context, ref, sortOrder),
-            ],
-          ),
+          _buildMarketAndSortRow(context, ref),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async {
@@ -45,16 +61,8 @@ class ScreeningScreen extends ConsumerWidget {
               child: filteredAsync.when(
                 data: (result) {
                   if (result == null) return _buildEmpty();
-                  final sorted = _applySort(result.run.results, sortOrder);
-                  final sortedRun = ScreeningRun(
-                    runId: result.run.runId,
-                    runDate: result.run.runDate,
-                    marketStatus: result.run.marketStatus,
-                    totalScreened: result.run.totalScreened,
-                    totalPassed: result.run.totalPassed,
-                    results: sorted,
-                  );
-                  return _buildResultList(sortedRun, result.sr, result.selected);
+                  return _buildResultList(
+                      result.run, result.sr, result.selected, sortOrder);
                 },
                 loading: () =>
                     const Center(child: CircularProgressIndicator()),
@@ -63,92 +71,6 @@ class ScreeningScreen extends ConsumerWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  List<ScreeningResult> _applySort(
-      List<ScreeningResult> results, SortOrder order) {
-    final copy = [...results];
-    if (order == SortOrder.alpha) {
-      copy.sort((a, b) => a.ticker.compareTo(b.ticker));
-    } else {
-      copy.sort((a, b) => a.rank.compareTo(b.rank));
-    }
-    return copy;
-  }
-
-  Widget _buildSortToggle(
-      BuildContext context, WidgetRef ref, SortOrder current) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _sortChip(
-            context, ref,
-            label: '순위',
-            icon: Icons.format_list_numbered,
-            value: SortOrder.rank,
-            current: current,
-          ),
-          const SizedBox(width: 4),
-          _sortChip(
-            context, ref,
-            label: 'A→Z',
-            icon: Icons.sort_by_alpha,
-            value: SortOrder.alpha,
-            current: current,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sortChip(
-    BuildContext context,
-    WidgetRef ref, {
-    required String label,
-    required IconData icon,
-    required SortOrder value,
-    required SortOrder current,
-  }) {
-    final isSelected = current == value;
-    final colorScheme = Theme.of(context).colorScheme;
-    return GestureDetector(
-      onTap: () =>
-          ref.read(selectedSortOrderProvider.notifier).state = value,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? colorScheme.primary.withValues(alpha: 0.15)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? colorScheme.primary : colorScheme.outline,
-            width: 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon,
-                size: 14,
-                color: isSelected ? colorScheme.primary : colorScheme.outline),
-            const SizedBox(width: 3),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color:
-                    isSelected ? colorScheme.primary : colorScheme.onSurface,
-                fontWeight:
-                    isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -241,7 +163,8 @@ class ScreeningScreen extends ConsumerWidget {
         child: screeningAsync.when(
           data: (run) {
             if (run == null || run.results.isEmpty) return _buildEmpty();
-            return _buildResultList(run, null, StrategyType.balanced);
+            return _buildResultList(
+                run, null, StrategyType.balanced, SortOrder.rank);
           },
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('오류: $e')),
@@ -260,81 +183,179 @@ class ScreeningScreen extends ConsumerWidget {
     );
   }
 
-  // ── 전략 선택 바 ──
+  // ── 전략 선택 바 (3전략 세그먼트: 공격적/균형/보수적) ──
 
   Widget _buildStrategySelector(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(selectedStrategyProvider);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: StrategyType.values.map((st) {
-            final isSelected = st == selected;
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: ChoiceChip(
-                label: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(st.label,
-                        style: TextStyle(
-                            fontWeight:
-                                isSelected ? FontWeight.bold : FontWeight.normal,
-                            fontSize: 13)),
-                    Text(st.description,
-                        style: TextStyle(
-                            fontSize: 10,
-                            color: isSelected
-                                ? Theme.of(context).colorScheme.onPrimary
-                                : Colors.grey)),
-                  ],
-                ),
-                selected: isSelected,
-                onSelected: (_) =>
+      child: Row(
+        children: _kMainStrategies.map((st) {
+          final isSelected = st == selected;
+          return Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: GestureDetector(
+                onTap: () =>
                     ref.read(selectedStrategyProvider.notifier).state = st,
-                selectedColor: _chipColor(st),
-                labelStyle: TextStyle(
-                    color: isSelected ? Colors.white : null),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? _chipColor(st)
+                        : Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isSelected
+                          ? _chipColor(st)
+                          : Theme.of(context).colorScheme.outlineVariant,
+                      width: isSelected ? 0 : 1,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _kStrategyShortLabel[st] ?? st.label,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: isSelected
+                              ? Colors.white
+                              : Theme.of(context).colorScheme.onSurface,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _kStrategyParamLabel[st] ?? st.description,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: isSelected
+                              ? Colors.white.withValues(alpha: 0.85)
+                              : Colors.grey,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            );
-          }).toList(),
-        ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
 
-  Widget _buildMarketFilter(BuildContext context, WidgetRef ref) {
+  // ── 국가 필터 + 정렬 옵션 한 줄 ──
+
+  Widget _buildMarketAndSortRow(BuildContext context, WidgetRef ref) {
     final marketFilter = ref.watch(selectedMarketFilterProvider);
-    // v3.2: 국가별 전용 데이터 파일 사용 — all 제거, us/kr 탭만 표시
+    final sortOrder = ref.watch(sortOrderProvider);
     const countries = [MarketFilter.us, MarketFilter.kr];
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
       child: Row(
-        children: countries.map((f) {
-          final isSelected = f == marketFilter;
-          final label = f == MarketFilter.kr ? '🇰🇷 한국' : '🇺🇸 미국';
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(label,
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.normal)),
-              selected: isSelected,
-              onSelected: (_) {
-                ref.read(selectedMarketFilterProvider.notifier).state = f;
-                // 국가 전환 시 히스토리 날짜 초기화 (최신 데이터 로드)
-                ref.read(selectedHistoryDateProvider.notifier).state = null;
-              },
-              selectedColor: f == MarketFilter.kr
-                  ? Colors.red.shade700
-                  : Colors.blue.shade700,
-              labelStyle: TextStyle(color: isSelected ? Colors.white : null),
-            ),
-          );
-        }).toList(),
+        children: [
+          // 국가 필터
+          ...countries.map((f) {
+            final isSelected = f == marketFilter;
+            final label = f == MarketFilter.kr ? '🇰🇷 한국' : '🇺🇸 미국';
+            return Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: ChoiceChip(
+                label: Text(label,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal)),
+                selected: isSelected,
+                onSelected: (_) {
+                  ref.read(selectedMarketFilterProvider.notifier).state = f;
+                  ref.read(selectedHistoryDateProvider.notifier).state = null;
+                },
+                selectedColor: f == MarketFilter.kr
+                    ? Colors.red.shade700
+                    : Colors.blue.shade700,
+                labelStyle:
+                    TextStyle(color: isSelected ? Colors.white : null),
+                visualDensity: VisualDensity.compact,
+              ),
+            );
+          }),
+          const Spacer(),
+          // 정렬 옵션
+          _sortButton(
+            context: context,
+            icon: Icons.format_list_numbered,
+            label: '순위',
+            isSelected: sortOrder == SortOrder.rank,
+            onTap: () => ref.read(sortOrderProvider.notifier).state =
+                SortOrder.rank,
+          ),
+          const SizedBox(width: 4),
+          _sortButton(
+            context: context,
+            icon: Icons.sort_by_alpha,
+            label: '알파벳',
+            isSelected: sortOrder == SortOrder.alphabetical,
+            onTap: () => ref.read(sortOrderProvider.notifier).state =
+                SortOrder.alphabetical,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sortButton({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final color = isSelected
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Theme.of(context)
+                  .colorScheme
+                  .primaryContainer
+                  .withValues(alpha: 0.6)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.outlineVariant,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 3),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: color)),
+          ],
+        ),
       ),
     );
   }
@@ -354,9 +375,16 @@ class ScreeningScreen extends ConsumerWidget {
 
   // ── 결과 리스트 ──
 
-  Widget _buildResultList(
-      ScreeningRun run, StrategyResult? sr, StrategyType selected) {
+  Widget _buildResultList(ScreeningRun run, StrategyResult? sr,
+      StrategyType selected, SortOrder sortOrder) {
     if (run.results.isEmpty) return _buildEmpty();
+
+    final sorted = List<ScreeningResult>.from(run.results);
+    if (sortOrder == SortOrder.alphabetical) {
+      sorted.sort((a, b) => a.ticker.compareTo(b.ticker));
+    } else {
+      sorted.sort((a, b) => a.rank.compareTo(b.rank));
+    }
 
     return ListView(
       children: [
@@ -392,7 +420,7 @@ class ScreeningScreen extends ConsumerWidget {
             ),
           ),
         ],
-        ...run.results.map((r) => StockCard(result: r)),
+        ...sorted.map((r) => StockCard(result: r)),
         const SizedBox(height: 80),
       ],
     );
