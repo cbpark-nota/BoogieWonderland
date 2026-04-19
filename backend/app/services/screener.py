@@ -1,5 +1,5 @@
 """
-스크리너 v3.2 알고리즘 — 서비스 레이어
+스크리너 v3.3 알고리즘 — 서비스 레이어
 ══════════════════════════════════════════════════════════
 버전 히스토리:
   v3.0: ATR 기반 동적 스톱로스 + 복합점수 비례 포지션 사이징
@@ -10,6 +10,9 @@
         - KR: KOSPI 200 + KOSDAQ 150 동적 수집 (pykrx)
         - 하드코딩 유니버스 제거
         - 예외 처리 강화 (HTTPException 500)
+  v3.3: 트레일링 스톱 도입
+        - 스크리닝 진입 조건 동일, 출력에 peak_price(최근 20일 고가) 필드 추가
+        - monitor.py: stop_price = max(기존, new_peak - ATR×2.5) 영속화
 
 scripts/ 에서 직접 import 하지 말 것 — backend는 독립 구현.
 ══════════════════════════════════════════════════════════
@@ -389,7 +392,8 @@ def screen_stock(df: pd.DataFrame) -> tuple[bool, dict]:
     if not pd.isna(stop_price) and cur_price <= stop_price:
         return False, {}
 
-    stop_dist = (stop_price - cur_price) / cur_price if not pd.isna(stop_price) else np.nan
+    stop_dist  = (stop_price - cur_price) / cur_price if not pd.isna(stop_price) else np.nan
+    peak_price = float(df["High"].tail(20).max())   # v3.3: 트레일링 스톱 초기 peak
 
     return True, {
         "ADX":          float(adx),
@@ -399,6 +403,7 @@ def screen_stock(df: pd.DataFrame) -> tuple[bool, dict]:
         "vol_stab":     vol_stab,
         "price":        cur_price,
         "stop_price":   stop_price,
+        "peak_price":   peak_price,
         "stop_dist":    stop_dist,
         "atr":          float(df["ATR"].dropna().iloc[-1])
                         if "ATR" in df.columns and len(df["ATR"].dropna()) > 0 else np.nan,
@@ -637,6 +642,7 @@ def run_screening(market: str = "US", held_tickers: list[str] | None = None) -> 
                 "ret_3m":         float(row["ret3m"])        if not pd.isna(row["ret3m"])      else None,
                 "ret_12m_skip1":  float(row["ret12m_skip1"]) if "ret12m_skip1" in row and not pd.isna(row["ret12m_skip1"]) else None,
                 "stop_price":     float(row["stop_price"])   if not pd.isna(row["stop_price"]) else None,
+                "peak_price":     float(row["peak_price"])  if "peak_price" in row and not pd.isna(row["peak_price"]) else None,
                 "stop_dist_pct":  float(row["stop_dist"]) * 100 if not pd.isna(row.get("stop_dist")) else None,
                 "atr":            float(row["atr"])          if not pd.isna(row["atr"])        else None,
                 "is_held":        ticker in held_tickers,
