@@ -447,7 +447,7 @@ void main() {
     test('aggressive 전략의 key, label, description이 올바르다', () {
       expect(StrategyType.aggressive.key, 'aggressive');
       expect(StrategyType.aggressive.label, '공격적');
-      expect(StrategyType.aggressive.description, 'ATR 1.5 / 주간 / TOP15');
+      expect(StrategyType.aggressive.description, 'ATR 1.5 / 격주 / TOP25');
     });
 
     test('balanced 전략의 key, label, description이 올바르다', () {

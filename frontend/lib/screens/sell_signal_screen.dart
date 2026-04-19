@@ -1,22 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/sell_signal.dart';
-import '../providers/sell_signal_provider.dart';
+import '../models/screening_result.dart';
+import '../providers/serverless_providers.dart';
 
-class SellSignalScreen extends ConsumerWidget {
-  const SellSignalScreen({super.key});
+/// 모멘텀 현재 순위 화면 (공격적 전략 Top 25)
+///
+/// screening_strategies.json의 aggressive 결과(25개)를 직접 표시한다.
+/// stop_price ≤ 현재가인 종목은 "SELL" 마크 표시.
+class CurrentRankScreen extends ConsumerWidget {
+  const CurrentRankScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final asyncData = ref.watch(sellSignalProvider);
+    final asyncData = ref.watch(strategyDataProvider);
 
     return Scaffold(
       body: asyncData.when(
         data: (data) {
           if (data == null) return _buildError('데이터를 불러올 수 없습니다.');
+          final results =
+              data.strategies[StrategyType.aggressive]?.results ?? [];
           return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(sellSignalProvider),
-            child: _buildContent(context, data),
+            onRefresh: () async => ref.invalidate(strategyDataProvider),
+            child: _buildContent(context, data.runDate, results),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -25,160 +31,167 @@ class SellSignalScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context, SellSignalData data) {
-    final signals = data.signals;
-
+  Widget _buildContent(
+      BuildContext context, String runDate, List<ScreeningResult> results) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader(context, data),
-        if (signals.isEmpty)
-          Expanded(child: _buildEmpty())
+        _buildHeader(context, runDate, results.length),
+        if (results.isEmpty)
+          const Expanded(
+            child: Center(
+              child: Text('데이터가 없습니다.',
+                  style: TextStyle(color: Colors.grey)),
+            ),
+          )
         else
-          Expanded(child: _buildTable(context, signals)),
+          Expanded(child: _buildTable(context, results)),
       ],
     );
   }
 
-  Widget _buildHeader(BuildContext context, SellSignalData data) {
+  Widget _buildHeader(
+      BuildContext context, String runDate, int count) {
+    final dateStr =
+        runDate.length >= 10 ? runDate.substring(0, 10) : runDate;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            '매도 신호 ${data.signals.length}건',
+            '모멘텀 순위 TOP $count',
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          if (data.updatedAt.isNotEmpty)
-            Text(
-              data.updatedAt,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-            ),
+          Text(
+            dateStr,
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildTable(BuildContext context, List<SellSignal> signals) {
-    // 정렬: sell_triggered_date 최신순, 같으면 days_remaining 오름차순
-    final sorted = [...signals]
-      ..sort((a, b) {
-        final dc = b.sellTriggeredDate.compareTo(a.sellTriggeredDate);
-        if (dc != 0) return dc;
-        return a.daysRemaining.compareTo(b.daysRemaining);
-      });
-
+  Widget _buildTable(
+      BuildContext context, List<ScreeningResult> results) {
     return SingleChildScrollView(
       scrollDirection: Axis.vertical,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
-          columnSpacing: 16,
+          columnSpacing: 14,
           headingRowHeight: 40,
           dataRowMinHeight: 48,
-          dataRowMaxHeight: 64,
+          dataRowMaxHeight: 56,
           columns: const [
-            DataColumn(label: Text('티커', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('현재가', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-            DataColumn(label: Text('스톱로스', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-            DataColumn(label: Text('순위', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-            DataColumn(label: Text('신호', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('발생일', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('남은일', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+            DataColumn(
+                label: Text('순위',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                numeric: true),
+            DataColumn(
+                label: Text('티커',
+                    style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(
+                label: Text('현재가',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                numeric: true),
+            DataColumn(
+                label: Text('스코어',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                numeric: true),
+            DataColumn(
+                label: Text('스톱가',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                numeric: true),
+            DataColumn(
+                label: Text('여유%',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                numeric: true),
+            DataColumn(
+                label: Text('상태',
+                    style: TextStyle(fontWeight: FontWeight.bold))),
           ],
-          rows: sorted.map((s) => _buildRow(context, s)).toList(),
+          rows: results.map((r) => _buildRow(context, r)).toList(),
         ),
       ),
     );
   }
 
-  DataRow _buildRow(BuildContext context, SellSignal s) {
-    final isSell = s.sellReasons.isNotEmpty;
+  DataRow _buildRow(BuildContext context, ScreeningResult r) {
+    final isSell =
+        r.stopPrice != null && r.price <= r.stopPrice!;
     final colorScheme = Theme.of(context).colorScheme;
     final rowColor = isSell
-        ? WidgetStateProperty.all(colorScheme.error.withValues(alpha: 0.12))
+        ? WidgetStateProperty.all(
+            colorScheme.error.withValues(alpha: 0.10))
         : null;
 
     return DataRow(
       color: rowColor,
       cells: [
+        DataCell(Text('${r.rank}',
+            style: const TextStyle(fontWeight: FontWeight.bold))),
+        DataCell(Text(r.ticker,
+            style: const TextStyle(
+                fontWeight: FontWeight.bold, fontSize: 13))),
+        DataCell(Text(_formatPrice(r.price, r.market))),
+        DataCell(Text(r.score.toStringAsFixed(3))),
         DataCell(
           Text(
-            s.ticker,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-          ),
-        ),
-        DataCell(Text(_formatPrice(s.currentPrice))),
-        DataCell(
-          Text(
-            _formatPrice(s.stopPrice),
+            r.stopPrice != null
+                ? _formatPrice(r.stopPrice!, r.market)
+                : '-',
             style: TextStyle(
-              color: s.currentPrice <= s.stopPrice ? colorScheme.error : null,
-              fontWeight: s.currentPrice <= s.stopPrice ? FontWeight.bold : null,
+              color: isSell ? colorScheme.error : null,
+              fontWeight: isSell ? FontWeight.bold : null,
             ),
           ),
         ),
-        DataCell(
-          Text(
-            s.rank > 25 ? '>25' : '${s.rank}',
-            style: TextStyle(
-              color: s.rank > 25 ? Colors.orange.shade400 : null,
-              fontWeight: s.rank > 25 ? FontWeight.bold : null,
-            ),
-          ),
-        ),
-        DataCell(_buildSignalChip(context, s)),
-        DataCell(Text(s.sellTriggeredDate, style: const TextStyle(fontSize: 12))),
-        DataCell(
-          Text(
-            '${s.daysRemaining}일',
-            style: TextStyle(
-              color: s.daysRemaining == 1
-                  ? colorScheme.error
-                  : colorScheme.onSurfaceVariant,
-              fontWeight: s.daysRemaining == 1 ? FontWeight.bold : null,
-            ),
-          ),
-        ),
+        DataCell(_buildDistCell(context, r.stopDistPct, isSell)),
+        DataCell(_buildStatusChip(context, isSell)),
       ],
     );
   }
 
-  Widget _buildSignalChip(BuildContext context, SellSignal s) {
+  Widget _buildDistCell(
+      BuildContext context, double? stopDistPct, bool isSell) {
+    if (stopDistPct == null) return const Text('-');
     final colorScheme = Theme.of(context).colorScheme;
-    final reasons = <String>[];
-    if (s.isStopLoss) reasons.add('스톱로스');
-    if (s.isRankOut) reasons.add('순위이탈');
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: reasons.map((r) {
-        final isStop = r == '스톱로스';
-        return Container(
-          margin: const EdgeInsets.only(bottom: 2),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: isStop
-                ? colorScheme.error.withValues(alpha: 0.25)
-                : Colors.orange.withValues(alpha: 0.25),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            r,
-            style: TextStyle(
-              fontSize: 10,
-              color: isStop ? colorScheme.error : Colors.orange.shade400,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        );
-      }).toList(),
+    final isWarning = !isSell && stopDistPct < 3.0;
+    final color = isSell
+        ? colorScheme.error
+        : (isWarning ? Colors.orange.shade400 : null);
+    final sign = stopDistPct >= 0 ? '' : '';
+    return Text(
+      '$sign${stopDistPct.toStringAsFixed(1)}%',
+      style: TextStyle(color: color),
     );
   }
 
-  String _formatPrice(double price) {
+  Widget _buildStatusChip(BuildContext context, bool isSell) {
+    final colorScheme = Theme.of(context).colorScheme;
+    if (!isSell) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: colorScheme.error.withValues(alpha: 0.20),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        'SELL',
+        style: TextStyle(
+          fontSize: 11,
+          color: colorScheme.error,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  String _formatPrice(double price, String market) {
+    if (market == 'KR') {
+      return '₩${price.toStringAsFixed(0)}';
+    }
     if (price >= 1000) {
       return '\$${price.toStringAsFixed(0)}';
     } else if (price >= 10) {
@@ -186,27 +199,6 @@ class SellSignalScreen extends ConsumerWidget {
     } else {
       return '\$${price.toStringAsFixed(4)}';
     }
-  }
-
-  Widget _buildEmpty() {
-    return ListView(
-      children: const [
-        SizedBox(height: 160),
-        Center(
-          child: Column(
-            children: [
-              Icon(Icons.check_circle_outline, size: 64, color: Colors.green),
-              SizedBox(height: 16),
-              Text('현재 매도 신호가 없습니다',
-                  style: TextStyle(fontSize: 16, color: Colors.grey)),
-              SizedBox(height: 8),
-              Text('모든 보유 후보 종목이 정상 범위에 있습니다.',
-                  style: TextStyle(fontSize: 13, color: Colors.grey)),
-            ],
-          ),
-        ),
-      ],
-    );
   }
 
   Widget _buildError(String message) {

@@ -187,7 +187,7 @@ class ScreeningRun {
 
 /// 전략 유형
 enum StrategyType {
-  aggressive('aggressive', '공격적', 'ATR 1.5 / 주간 / TOP15'),
+  aggressive('aggressive', '공격적', 'ATR 1.5 / 격주 / TOP25'),
   balanced('balanced', '균형형', 'ATR 2.0 / 격주 / TOP10'),
   conservative('conservative', '보수적', 'ATR 2.5 / 월간 / TOP7'),
   adaptive('adaptive', '적응형', '국면별 동적 전환');
@@ -263,15 +263,26 @@ class StrategyScreeningData {
   }
 
   /// 특정 전략의 ScreeningRun 변환 (기존 위젯 호환)
+  /// 스크리닝 탭 표시 개수: 데이터 저장량(aggressive=25)과 별개로 전략별 원래 top_n만큼만 표시.
+  static const _screeningDisplayN = {
+    StrategyType.aggressive: 15,
+    StrategyType.balanced: 10,
+    StrategyType.conservative: 7,
+    StrategyType.adaptive: 10,
+  };
+
   ScreeningRun toScreeningRun(StrategyType type) {
     final sr = strategies[type];
+    final allResults = sr?.results ?? [];
+    final displayN = _screeningDisplayN[type] ?? allResults.length;
+    final results = allResults.take(displayN).toList();
     return ScreeningRun(
       runId: runId,
       runDate: runDate,
       marketStatus: marketStatus,
       totalScreened: sr?.totalScreened ?? 0,
       totalPassed: sr?.totalPassed ?? 0,
-      results: sr?.results ?? [],
+      results: results,
     );
   }
 }
