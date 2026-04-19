@@ -47,7 +47,7 @@ from data_cache import fetch_sp500_tickers, fetch_nasdaq100_tickers
 KR_NAMES: dict[str, str] = {}
 
 STRATEGIES = {
-    "aggressive":   {"atr_mult": 1.5, "label": "공격적", "rebal_freq": "격주",  "top_n": 15},
+    "aggressive":   {"atr_mult": 1.5, "label": "공격적", "rebal_freq": "격주",  "top_n": 25},
     "balanced":     {"atr_mult": 2.0, "label": "균형형", "rebal_freq": "격주",  "top_n": 10},
     "conservative": {"atr_mult": 2.5, "label": "보수적", "rebal_freq": "격주",  "top_n": 7},
     "adaptive":     {"atr_mult": 2.0, "label": "적응형", "rebal_freq": "격주",  "top_n": 10},

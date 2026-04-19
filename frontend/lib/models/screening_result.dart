@@ -263,15 +263,26 @@ class StrategyScreeningData {
   }
 
   /// 특정 전략의 ScreeningRun 변환 (기존 위젯 호환)
+  /// 스크리닝 탭 표시 개수: 데이터 저장량(aggressive=25)과 별개로 전략별 원래 top_n만큼만 표시.
+  static const _screeningDisplayN = {
+    StrategyType.aggressive: 15,
+    StrategyType.balanced: 10,
+    StrategyType.conservative: 7,
+    StrategyType.adaptive: 10,
+  };
+
   ScreeningRun toScreeningRun(StrategyType type) {
     final sr = strategies[type];
+    final allResults = sr?.results ?? [];
+    final displayN = _screeningDisplayN[type] ?? allResults.length;
+    final results = allResults.take(displayN).toList();
     return ScreeningRun(
       runId: runId,
       runDate: runDate,
       marketStatus: marketStatus,
       totalScreened: sr?.totalScreened ?? 0,
       totalPassed: sr?.totalPassed ?? 0,
-      results: sr?.results ?? [],
+      results: results,
     );
   }
 }

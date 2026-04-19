@@ -101,13 +101,4 @@ class StaticDataSource {
     return {...data, 'strategies': data['kr_strategies'] ?? {}};
   }
 
-  // ── 매도 신호 ─────────────────────────────────────────────
-
-  /// 모멘텀 매도 신호 (sell_signals.json)
-  Future<Map<String, dynamic>> getSellSignals() async {
-    final bust = DateTime.now().millisecondsSinceEpoch ~/ 60000;
-    final res = await _dio.get('$_baseDataUrl/sell_signals.json?v=$bust');
-    return res.data as Map<String, dynamic>;
-  }
-
 }
