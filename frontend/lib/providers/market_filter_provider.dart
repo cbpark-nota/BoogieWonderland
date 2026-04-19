@@ -6,6 +6,9 @@ import 'serverless_providers.dart';
 // v3.2: us/kr 두 값만 존재. all 제거됨.
 enum MarketFilter { kr, us }
 
+// ── 정렬 모드 enum ────────────────────────────────────────────
+enum SortOrder { rank, alpha }
+
 // ── 전략 선택 ────────────────────────────────────────────────
 
 class _SelectedStrategyNotifier extends Notifier<StrategyType> {
@@ -16,6 +19,18 @@ class _SelectedStrategyNotifier extends Notifier<StrategyType> {
 final selectedStrategyProvider =
     NotifierProvider<_SelectedStrategyNotifier, StrategyType>(
   _SelectedStrategyNotifier.new,
+);
+
+// ── 정렬 선택 ────────────────────────────────────────────────
+
+class _SortOrderNotifier extends Notifier<SortOrder> {
+  @override
+  SortOrder build() => SortOrder.rank;
+}
+
+final selectedSortOrderProvider =
+    NotifierProvider<_SortOrderNotifier, SortOrder>(
+  _SortOrderNotifier.new,
 );
 
 // ── 마켓 필터 선택 ───────────────────────────────────────────

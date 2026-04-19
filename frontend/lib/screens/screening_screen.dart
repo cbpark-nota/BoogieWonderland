@@ -22,13 +22,19 @@ class ScreeningScreen extends ConsumerWidget {
 
   Widget _buildServerlessView(BuildContext context, WidgetRef ref) {
     final filteredAsync = ref.watch(filteredScreeningProvider);
+    final sortOrder = ref.watch(selectedSortOrderProvider);
 
     return Scaffold(
       body: Column(
         children: [
           _buildDateSelector(context, ref),
           _buildStrategySelector(context, ref),
-          _buildMarketFilter(context, ref),
+          Row(
+            children: [
+              Expanded(child: _buildMarketFilter(context, ref)),
+              _buildSortToggle(context, ref, sortOrder),
+            ],
+          ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async {
@@ -39,7 +45,16 @@ class ScreeningScreen extends ConsumerWidget {
               child: filteredAsync.when(
                 data: (result) {
                   if (result == null) return _buildEmpty();
-                  return _buildResultList(result.run, result.sr, result.selected);
+                  final sorted = _applySort(result.run.results, sortOrder);
+                  final sortedRun = ScreeningRun(
+                    runId: result.run.runId,
+                    runDate: result.run.runDate,
+                    marketStatus: result.run.marketStatus,
+                    totalScreened: result.run.totalScreened,
+                    totalPassed: result.run.totalPassed,
+                    results: sorted,
+                  );
+                  return _buildResultList(sortedRun, result.sr, result.selected);
                 },
                 loading: () =>
                     const Center(child: CircularProgressIndicator()),
@@ -48,6 +63,92 @@ class ScreeningScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  List<ScreeningResult> _applySort(
+      List<ScreeningResult> results, SortOrder order) {
+    final copy = [...results];
+    if (order == SortOrder.alpha) {
+      copy.sort((a, b) => a.ticker.compareTo(b.ticker));
+    } else {
+      copy.sort((a, b) => a.rank.compareTo(b.rank));
+    }
+    return copy;
+  }
+
+  Widget _buildSortToggle(
+      BuildContext context, WidgetRef ref, SortOrder current) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _sortChip(
+            context, ref,
+            label: '순위',
+            icon: Icons.format_list_numbered,
+            value: SortOrder.rank,
+            current: current,
+          ),
+          const SizedBox(width: 4),
+          _sortChip(
+            context, ref,
+            label: 'A→Z',
+            icon: Icons.sort_by_alpha,
+            value: SortOrder.alpha,
+            current: current,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sortChip(
+    BuildContext context,
+    WidgetRef ref, {
+    required String label,
+    required IconData icon,
+    required SortOrder value,
+    required SortOrder current,
+  }) {
+    final isSelected = current == value;
+    final colorScheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: () =>
+          ref.read(selectedSortOrderProvider.notifier).state = value,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? colorScheme.primary.withValues(alpha: 0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? colorScheme.primary : colorScheme.outline,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 14,
+                color: isSelected ? colorScheme.primary : colorScheme.outline),
+            const SizedBox(width: 3),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color:
+                    isSelected ? colorScheme.primary : colorScheme.onSurface,
+                fontWeight:
+                    isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

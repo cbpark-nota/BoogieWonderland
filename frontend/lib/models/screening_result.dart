@@ -187,7 +187,7 @@ class ScreeningRun {
 
 /// 전략 유형
 enum StrategyType {
-  aggressive('aggressive', '공격적', 'ATR 1.5 / 주간 / TOP15'),
+  aggressive('aggressive', '공격적', 'ATR 1.5 / 격주 / TOP25'),
   balanced('balanced', '균형형', 'ATR 2.0 / 격주 / TOP10'),
   conservative('conservative', '보수적', 'ATR 2.5 / 월간 / TOP7'),
   adaptive('adaptive', '적응형', '국면별 동적 전환');
