@@ -41,16 +41,6 @@ final currentRankSortOrderProvider =
   _CurrentRankSortOrderNotifier.new,
 );
 
-class _CurrentRankStrategyNotifier extends Notifier<StrategyType> {
-  @override
-  StrategyType build() => StrategyType.aggressive;
-}
-
-final currentRankStrategyProvider =
-    NotifierProvider<_CurrentRankStrategyNotifier, StrategyType>(
-  _CurrentRankStrategyNotifier.new,
-);
-
 // ── 마켓 필터 선택 ───────────────────────────────────────────
 
 class _SelectedMarketFilterNotifier extends Notifier<MarketFilter> {
