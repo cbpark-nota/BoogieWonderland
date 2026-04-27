@@ -1,4 +1,4 @@
-name: BTC 신호 업데이트 (4시간마다)
+name: BTC/ETH 신호 업데이트 (4시간마다)
 
 on:
   schedule:
@@ -76,6 +76,11 @@ jobs:
       - name: BTC 신호 계산
         run: python scripts/crypto/update_btc_signal.py --output frontend/web/data/
         continue-on-error: true  # API 실패 시에도 기존 Pages 데이터로 재배포
+
+      # ── ETH 신호 계산 (BTC V10 신호 기반, 동일 commit으로 함께 배포) ──
+      - name: ETH 신호 계산
+        run: python scripts/crypto/update_eth_signal.py --output frontend/web/data/
+        continue-on-error: true
 
       # ── Flutter 웹 빌드 ───────────────────────────────────────
       - uses: actions/cache@v4

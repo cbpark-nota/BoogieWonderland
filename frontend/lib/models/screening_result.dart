@@ -103,6 +103,37 @@ class BtcSignal {
   }
 }
 
+/// ETH V10 시그널 — BTC V10 신호 기반 ETH 카피 트레이딩 (B안)
+/// 구조는 BtcSignal과 동일.
+class EthSignal {
+  final String signal; // "buy" | "hold"
+  final double? price;
+  final String reason;
+  final String strategy;
+  final String timestamp;
+  final String? regime;
+
+  EthSignal({
+    required this.signal,
+    this.price,
+    required this.reason,
+    required this.strategy,
+    required this.timestamp,
+    this.regime,
+  });
+
+  factory EthSignal.fromJson(Map<String, dynamic> json) {
+    return EthSignal(
+      signal: json['signal'] ?? 'hold',
+      price: (json['price'] as num?)?.toDouble(),
+      reason: json['reason'] ?? '',
+      strategy: json['strategy'] ?? 'V10',
+      timestamp: json['timestamp'] ?? '',
+      regime: json['regime'],
+    );
+  }
+}
+
 class MarketStatus {
   final double spyPrice;
   final bool isGoldenCross;
@@ -152,6 +183,7 @@ class ScreeningRun {
   final String runDate;
   final MarketStatus? marketStatus;
   final BtcSignal? btcSignal;
+  final EthSignal? ethSignal;
   final int totalScreened;
   final int totalPassed;
   final List<ScreeningResult> results;
@@ -161,6 +193,7 @@ class ScreeningRun {
     required this.runDate,
     this.marketStatus,
     this.btcSignal,
+    this.ethSignal,
     required this.totalScreened,
     required this.totalPassed,
     required this.results,
@@ -175,6 +208,9 @@ class ScreeningRun {
           : null,
       btcSignal: json['btc_signal'] != null
           ? BtcSignal.fromJson(json['btc_signal'] as Map<String, dynamic>)
+          : null,
+      ethSignal: json['eth_signal'] != null
+          ? EthSignal.fromJson(json['eth_signal'] as Map<String, dynamic>)
           : null,
       totalScreened: json['total_screened'] ?? 0,
       totalPassed: json['total_passed'] ?? 0,
