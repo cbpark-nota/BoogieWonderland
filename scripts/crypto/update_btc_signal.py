@@ -174,12 +174,27 @@ def calculate_btc_signal() -> dict:
 
 
 def _patch_json(path: Path, btc_signal: dict) -> bool:
-    """JSON 파일의 btc_signal 필드를 업데이트. 파일 없으면 False 반환."""
+    """JSON 파일의 btc_signal 필드를 업데이트. 파일 없으면 False 반환.
+
+    새 시그널의 price가 None이면 기존 btc_signal을 유지하되 reason/timestamp만
+    갱신해 stale 상태를 사용자에게 알린다.
+    """
     if not path.exists():
         return False
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    data["btc_signal"] = btc_signal
+
+    new_signal = btc_signal
+    if btc_signal.get("price") is None:
+        prev = data.get("btc_signal")
+        if isinstance(prev, dict) and prev.get("price") is not None:
+            new_signal = {
+                **prev,
+                "reason": btc_signal.get("reason", prev.get("reason")),
+                "timestamp": btc_signal.get("timestamp", prev.get("timestamp")),
+            }
+
+    data["btc_signal"] = new_signal
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     return True

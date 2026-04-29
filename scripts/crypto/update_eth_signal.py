@@ -120,7 +120,20 @@ def _patch_json(path: Path, eth_signal: dict) -> bool:
         return False
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    data["eth_signal"] = eth_signal
+
+    # 새 시그널의 price가 None이면 기존 eth_signal을 유지하되
+    # reason/timestamp만 갱신해 stale 상태를 사용자에게 알린다.
+    new_signal = eth_signal
+    if eth_signal.get("price") is None:
+        prev = data.get("eth_signal")
+        if isinstance(prev, dict) and prev.get("price") is not None:
+            new_signal = {
+                **prev,
+                "reason": eth_signal.get("reason", prev.get("reason")),
+                "timestamp": eth_signal.get("timestamp", prev.get("timestamp")),
+            }
+
+    data["eth_signal"] = new_signal
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     return True

@@ -24,6 +24,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import requests
+import yfinance as yf
 
 # btc_daytrading_4h의 지표/엔진/전략을 재사용
 from btc_daytrading_4h import (
@@ -87,7 +88,10 @@ def get_eth_data_4h(
     refresh_cache: bool = False,
     cache_only: bool = False,
 ) -> pd.DataFrame:
-    """Binance ETHUSDT 4h. 캐시 정책은 BTC와 동일."""
+    """Binance ETHUSDT 4h. 캐시 정책은 BTC와 동일.
+
+    Fallback: Binance 실패 시 yfinance ETH-USD 1h → 4h 리샘플링 (캐시 저장 생략)
+    """
     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
     now_ms = int(pd.Timestamp.now(tz="UTC").timestamp() * 1000)
 
@@ -121,12 +125,32 @@ def get_eth_data_4h(
                 return df_old
 
     start_ms = int(pd.Timestamp(start).timestamp() * 1000)
-    rows = _fetch_binance("ETHUSDT", start_ms, now_ms)
-    if len(rows) > 200:
-        df = _rows_to_df(rows)
-        df.to_csv(CACHE_PATH)
-        return df
-    raise RuntimeError("Binance ETH 4h 데이터 다운로드 실패")
+    try:
+        rows = _fetch_binance("ETHUSDT", start_ms, now_ms)
+        if len(rows) > 200:
+            df = _rows_to_df(rows)
+            df.to_csv(CACHE_PATH)
+            return df
+    except Exception as e:
+        print(f"  Binance 실패: {e}  — yfinance 1h 데이터로 대체")
+
+    # ── Fallback: yfinance 1h → 4h 리샘플링 ──────────────────
+    raw = yf.download("ETH-USD", period="730d", interval="1h",
+                      progress=False, auto_adjust=True)
+    raw.columns = [c[0].lower() if isinstance(c, tuple) else c.lower()
+                   for c in raw.columns]
+    raw = raw[["open", "high", "low", "close", "volume"]].dropna()
+
+    df = raw.resample("4h", closed="left", label="left").agg({
+        "open":   "first",
+        "high":   "max",
+        "low":    "min",
+        "close":  "last",
+        "volume": "sum",
+    }).dropna()
+
+    df = df.loc[start:] if start else df
+    return df
 
 
 # ══════════════════════════════════════════════════════════════════════
