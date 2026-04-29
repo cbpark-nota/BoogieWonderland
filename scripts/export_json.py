@@ -41,16 +41,15 @@ import screener_v3_kr as sc_kr
 from data_cache import fetch_sp500_tickers, fetch_nasdaq100_tickers
 
 # 4가지 전략 프리셋 — v3 최적 ATR 승수 + 전략별 종목 수
-# top_n: 공격적(25) > 균형형(10) > 보수적(7) — 위험선호도에 따라 포트폴리오 집중도 차별화
-# 적응형: ATR 2.0, TOP 10 고정 (균형형 기준, 국면 정보는 별도 표시)
+# top_n: 모든 전략 25로 통일 — 스크리닝/현재 순위 탭 모두 최대 25위 표시
 # 한국 종목명 캐시 (ticker → 회사명)
 KR_NAMES: dict[str, str] = {}
 
 STRATEGIES = {
     "aggressive":   {"atr_mult": 1.5, "label": "공격적", "rebal_freq": "격주",  "top_n": 25},
-    "balanced":     {"atr_mult": 2.0, "label": "균형형", "rebal_freq": "격주",  "top_n": 10},
-    "conservative": {"atr_mult": 2.5, "label": "보수적", "rebal_freq": "격주",  "top_n": 7},
-    "adaptive":     {"atr_mult": 2.0, "label": "적응형", "rebal_freq": "격주",  "top_n": 10},
+    "balanced":     {"atr_mult": 2.0, "label": "균형형", "rebal_freq": "격주",  "top_n": 25},
+    "conservative": {"atr_mult": 2.5, "label": "보수적", "rebal_freq": "격주",  "top_n": 25},
+    "adaptive":     {"atr_mult": 2.0, "label": "적응형", "rebal_freq": "격주",  "top_n": 25},
 }
 
 

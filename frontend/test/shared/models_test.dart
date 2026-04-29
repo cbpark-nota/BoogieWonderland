@@ -453,13 +453,13 @@ void main() {
     test('balanced 전략의 key, label, description이 올바르다', () {
       expect(StrategyType.balanced.key, 'balanced');
       expect(StrategyType.balanced.label, '균형형');
-      expect(StrategyType.balanced.description, 'ATR 2.0 / 격주 / TOP10');
+      expect(StrategyType.balanced.description, 'ATR 2.0 / 격주 / TOP25');
     });
 
     test('conservative 전략의 key, label, description이 올바르다', () {
       expect(StrategyType.conservative.key, 'conservative');
       expect(StrategyType.conservative.label, '보수적');
-      expect(StrategyType.conservative.description, 'ATR 2.5 / 월간 / TOP7');
+      expect(StrategyType.conservative.description, 'ATR 2.5 / 격주 / TOP25');
     });
 
     test('adaptive 전략의 key, label, description이 올바르다', () {
