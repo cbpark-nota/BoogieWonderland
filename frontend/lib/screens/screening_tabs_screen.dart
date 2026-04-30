@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'screening_screen.dart';
 import 'short_squeeze_screen.dart';
+import 'trend_reversal_screen.dart';
 import 'vix_etf_calculator_screen.dart';
 
 class ScreeningTabsScreen extends StatelessWidget {
@@ -12,13 +13,16 @@ class ScreeningTabsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       initialIndex: initialIndex,
       child: Column(
         children: [
           TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: const [
               Tab(text: '모멘텀'),
+              Tab(text: '추세 전환'),
               Tab(text: '숏 스퀴즈'),
               Tab(text: 'VIX ETF'),
             ],
@@ -31,6 +35,7 @@ class ScreeningTabsScreen extends StatelessWidget {
             child: TabBarView(
               children: [
                 ScreeningScreen(),
+                TrendReversalScreen(),
                 ShortSqueezeScreen(),
                 VixEtfCalculatorScreen(),
               ],
