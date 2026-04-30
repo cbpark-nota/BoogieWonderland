@@ -487,16 +487,39 @@ def check_kospi_market() -> dict | None:
         return None
 
 
-def fetch_vix_etf_prices() -> dict:
+def _vix_value_keys(key: str) -> tuple[str, str]:
+    """VIX는 (current, prev_close), 나머지는 (current_price, prev_close)."""
+    return ("current", "prev_close") if key == "vix" else ("current_price", "prev_close")
+
+
+def fetch_vix_etf_prices(output_dir: Path | None = None) -> dict:
     """VIX, SVXY, SVIX 현재가·전일 종가 조회 → vix_etf_prices.json 형식 반환.
 
-    yfinance로 각 티커의 최근 2일 종가를 가져와서
-    current_price (최신), prev_close (전날) 를 추출한다.
+    yfinance로 각 티커의 최근 2일 종가를 추출.
+    실패한 종목은 직전 vix_etf_prices.json의 값을 보존 (ETH/BTC 동일 패턴).
     """
     import yfinance as yf
 
     now_str = datetime.now().isoformat(timespec="seconds")
     result: dict = {"updated_at": now_str, "vix": {}, "svxy": {}, "svix": {}}
+
+    # 기존 파일에서 보존용 prior 값 읽기
+    prior: dict = {}
+    if output_dir is not None:
+        prior_path = output_dir / "vix_etf_prices.json"
+        if prior_path.exists():
+            try:
+                with open(prior_path, encoding="utf-8") as f:
+                    prior = json.load(f)
+            except Exception as e:
+                logger.warning("  기존 vix_etf_prices.json 읽기 실패 (%s)", e)
+
+    def _carry(key: str) -> dict:
+        cur_k, prev_k = _vix_value_keys(key)
+        old = prior.get(key) if isinstance(prior.get(key), dict) else None
+        if old:
+            return {cur_k: old.get(cur_k), prev_k: old.get(prev_k)}
+        return {cur_k: None, prev_k: None}
 
     tickers = {"^VIX": "vix", "SVXY": "svxy", "SVIX": "svix"}
     try:
@@ -508,25 +531,21 @@ def fetch_vix_etf_prices() -> dict:
         )
         close = raw["Close"] if "Close" in raw.columns else raw
         for yf_ticker, key in tickers.items():
+            cur_k, prev_k = _vix_value_keys(key)
             try:
                 series = close[yf_ticker].dropna() if yf_ticker in close.columns else None
                 if series is None or series.empty:
-                    result[key] = {"current_price": None, "prev_close": None}
-                    continue
+                    raise ValueError("가격 없음")
                 current = round(float(series.iloc[-1]), 4)
                 prev = round(float(series.iloc[-2]), 4) if len(series) >= 2 else current
-                if key == "vix":
-                    result[key] = {"current": current, "prev_close": prev}
-                else:
-                    result[key] = {"current_price": current, "prev_close": prev}
+                result[key] = {cur_k: current, prev_k: prev}
             except Exception as e:
-                logger.warning("  %s 조회 실패: %s", yf_ticker, e)
-                if key == "vix":
-                    result[key] = {"current": None, "prev_close": None}
-                else:
-                    result[key] = {"current_price": None, "prev_close": None}
+                logger.warning("  %s 조회 실패 (%s) — 직전 값 보존", yf_ticker, e)
+                result[key] = _carry(key)
     except Exception as e:
-        logger.warning("  VIX ETF 가격 일괄 조회 실패 (%s)", e)
+        logger.warning("  VIX ETF 가격 일괄 조회 실패 (%s) — 직전 값 보존", e)
+        for key in tickers.values():
+            result[key] = _carry(key)
 
     return result
 
@@ -623,27 +642,6 @@ def fetch_market_cap_top20(
         "top20": results,
         "sector_distribution": sector_dist,
     }
-
-
-def fetch_vix_etf_prices() -> dict:
-    """VIX, SVXY, SVIX 현재가를 yfinance로 조회하여 반환.
-
-    실패 시 빈 딕셔너리 반환.
-    """
-    import yfinance as yf
-
-    result = {"run_date": datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}
-    for symbol in ("^VIX", "SVXY", "SVIX"):
-        try:
-            ticker = yf.Ticker(symbol)
-            price = ticker.fast_info.last_price
-            if price is None or price != price:  # None or NaN
-                raise ValueError("가격 없음")
-            key = symbol.lstrip("^").lower()
-            result[key] = round(float(price), 2)
-        except Exception as e:
-            logger.warning("  %s 가격 조회 실패: %s", symbol, e)
-    return result
 
 
 def export_all_strategies(output_dir: Path, screening_date: str | None = None):
@@ -885,7 +883,7 @@ def export_all_strategies(output_dir: Path, screening_date: str | None = None):
     # VIX ETF 이론가 계산기용 가격 데이터 (서버리스 모드)
     if not is_history_only:
         try:
-            vix_data = fetch_vix_etf_prices()
+            vix_data = fetch_vix_etf_prices(output_dir=output_dir)
             vix_path = output_dir / "vix_etf_prices.json"
             with open(vix_path, "w", encoding="utf-8") as f:
                 json.dump(vix_data, f, ensure_ascii=False, indent=2)

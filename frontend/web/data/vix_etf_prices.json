@@ -1,6 +1,15 @@
 {
-  "run_date": "2026-04-11T00:00:00",
-  "vix": 21.35,
-  "svxy": 47.82,
-  "svix": 14.53
+  "updated_at": "2026-05-01T01:24:12",
+  "vix": {
+    "current": 17.37,
+    "prev_close": 18.81
+  },
+  "svxy": {
+    "current_price": 50.91,
+    "prev_close": 50.44
+  },
+  "svix": {
+    "current_price": 19.245,
+    "prev_close": 18.84
+  }
 }

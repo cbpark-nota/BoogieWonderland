@@ -29,18 +29,6 @@ final selectedStrategyProvider =
   _SelectedStrategyNotifier.new,
 );
 
-// ── 현재 순위 탭 전용 정렬/전략 ─────────────────────────────────
-
-class _CurrentRankSortOrderNotifier extends Notifier<SortOrder> {
-  @override
-  SortOrder build() => SortOrder.rank;
-}
-
-final currentRankSortOrderProvider =
-    NotifierProvider<_CurrentRankSortOrderNotifier, SortOrder>(
-  _CurrentRankSortOrderNotifier.new,
-);
-
 // ── 마켓 필터 선택 ───────────────────────────────────────────
 
 class _SelectedMarketFilterNotifier extends Notifier<MarketFilter> {
