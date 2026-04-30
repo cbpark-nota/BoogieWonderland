@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/trend_reversal_data.dart';
-import '../providers/market_filter_provider.dart' show SortOrder;
 import '../providers/trend_reversal_provider.dart';
 
 /// 추세 전환 화면 — 5MA / 120MA 일봉 골든크로스 후보 Top 25
@@ -34,7 +33,7 @@ class TrendReversalScreen extends ConsumerWidget {
     WidgetRef ref,
     TrendReversalData data,
     TrendReversalMarket market,
-    SortOrder sortOrder,
+    TrendReversalSort sortOrder,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,7 +81,7 @@ class TrendReversalScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     TrendReversalMarket market,
-    SortOrder sortOrder,
+    TrendReversalSort sortOrder,
   ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
@@ -116,25 +115,35 @@ class TrendReversalScreen extends ConsumerWidget {
                 .state = TrendReversalMarket.kr,
           ),
           const Spacer(),
-          // 정렬 토글
+          // 정렬 토글: 최근 돌파순 / gap / A→Z
           _segChip(
             context: context,
-            icon: Icons.format_list_numbered,
-            label: '순위',
-            isSelected: sortOrder == SortOrder.rank,
+            icon: Icons.fiber_new,
+            label: '최근',
+            isSelected: sortOrder == TrendReversalSort.recent,
             onTap: () => ref
                 .read(trendReversalSortProvider.notifier)
-                .state = SortOrder.rank,
+                .state = TrendReversalSort.recent,
+          ),
+          const SizedBox(width: 4),
+          _segChip(
+            context: context,
+            icon: Icons.trending_up,
+            label: 'Gap',
+            isSelected: sortOrder == TrendReversalSort.gap,
+            onTap: () => ref
+                .read(trendReversalSortProvider.notifier)
+                .state = TrendReversalSort.gap,
           ),
           const SizedBox(width: 4),
           _segChip(
             context: context,
             icon: Icons.sort_by_alpha,
             label: 'A→Z',
-            isSelected: sortOrder == SortOrder.alphabetical,
+            isSelected: sortOrder == TrendReversalSort.alphabetical,
             onTap: () => ref
                 .read(trendReversalSortProvider.notifier)
-                .state = SortOrder.alphabetical,
+                .state = TrendReversalSort.alphabetical,
           ),
         ],
       ),
@@ -196,13 +205,16 @@ class TrendReversalScreen extends ConsumerWidget {
   Widget _buildTable(
     BuildContext context,
     List<TrendReversalResult> results,
-    SortOrder sortOrder,
+    TrendReversalSort sortOrder,
   ) {
     final sorted = List<TrendReversalResult>.from(results);
-    if (sortOrder == SortOrder.alphabetical) {
-      sorted.sort((a, b) => a.ticker.compareTo(b.ticker));
-    } else {
-      sorted.sort((a, b) => a.rank.compareTo(b.rank));
+    switch (sortOrder) {
+      case TrendReversalSort.alphabetical:
+        sorted.sort((a, b) => a.ticker.compareTo(b.ticker));
+      case TrendReversalSort.gap:
+        sorted.sort((a, b) => b.score.compareTo(a.score));
+      case TrendReversalSort.recent:
+        sorted.sort((a, b) => a.rank.compareTo(b.rank));
     }
 
     return SingleChildScrollView(
@@ -221,6 +233,9 @@ class TrendReversalScreen extends ConsumerWidget {
                 numeric: true),
             DataColumn(
                 label: Text('티커',
+                    style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(
+                label: Text('돌파일',
                     style: TextStyle(fontWeight: FontWeight.bold))),
             DataColumn(
                 label: Text('현재가',
@@ -265,6 +280,7 @@ class TrendReversalScreen extends ConsumerWidget {
         DataCell(Text(r.ticker,
             style: const TextStyle(
                 fontWeight: FontWeight.bold, fontSize: 13))),
+        DataCell(_buildCrossCell(context, r.crossDate, r.crossDaysAgo)),
         DataCell(Text(_formatPrice(r.price, r.market))),
         DataCell(Text(r.score.toStringAsFixed(3))),
         DataCell(
@@ -280,6 +296,32 @@ class TrendReversalScreen extends ConsumerWidget {
         ),
         DataCell(_buildDistCell(context, r.stopDistPct, isSell)),
         DataCell(_buildStatusChip(context, isSell)),
+      ],
+    );
+  }
+
+  Widget _buildCrossCell(
+    BuildContext context,
+    String? crossDate,
+    int? crossDaysAgo,
+  ) {
+    if (crossDate == null) return const Text('-');
+    final dStr = crossDaysAgo == null
+        ? ''
+        : (crossDaysAgo == 0 ? '오늘' : 'D+$crossDaysAgo');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          crossDate,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+        if (dStr.isNotEmpty)
+          Text(
+            dStr,
+            style: const TextStyle(fontSize: 10, color: Colors.grey),
+          ),
       ],
     );
   }

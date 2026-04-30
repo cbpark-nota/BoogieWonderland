@@ -335,8 +335,9 @@ class _LogicCard extends StatelessWidget {
             const _BulletRow('MA25 (단기): 최근 25 거래일 종가 평균 — 단기 흐름 반영'),
             const _BulletRow('MA600 (장기): 최근 600 거래일 종가 평균 — 약 2.4년 장기 추세'),
             const _BulletRow('골든크로스: 전일까지 MA25 ≤ MA600, 오늘 MA25 > MA600'),
+            const _BulletRow('스크리너 노출: 최근 10영업일 내 신규 골든크로스가 발생한 종목만'),
             const _BulletRow('보유 유지: 격주 금요일 리밸런싱 시 MA25 > MA600 유지 여부 확인'),
-            const _BulletRow('Top 25: gap ratio 스코어 상위 25 종목만 동일비중 보유'),
+            const _BulletRow('Top 25: 최근 돌파 우선 + gap ratio 동률 정렬, 동일비중 보유'),
             const SizedBox(height: 12),
             _HighlightBox(
               color: _trendColor,
@@ -367,10 +368,11 @@ class _EntryConditionsCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     const conditions = [
-      ('필수', '전일까지 MA25 ≤ MA600 (장기 약세 또는 횡보)', Colors.red),
-      ('필수', '오늘 MA25 > MA600 (골든크로스 발생)', Colors.red),
+      ('필수', '최근 10영업일(=2주) 내에 MA25 ≤ MA600 → MA25 > MA600 전환 발생', Colors.red),
+      ('필수', '오늘 시점에도 MA25 > MA600 유지 (재이탈 종목 제외)', Colors.red),
       ('스코어', 'gap ratio = (MA25 − MA600) / MA600 — 양수일수록 상위', Colors.blue),
-      ('포지션', 'gap ratio Top 25 동일비중 (US/KR 통합 슬롯 공유)', Colors.green),
+      ('정렬', 'cross_days_ago 오름차순(최근 돌파부터) — 동률 시 gap 내림차순', Colors.purple),
+      ('포지션', 'Top 25 동일비중 (US/KR 통합 슬롯 공유)', Colors.green),
       ('타이밍', '격주 금요일 리밸런싱 시 신규 진입 / 편출 결정', Colors.orange),
     ];
 

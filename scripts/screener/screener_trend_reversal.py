@@ -1,14 +1,18 @@
 """
-추세 전환 스크리너 — 일봉 5MA / 120MA 골든크로스 (백테스트 정합화)
+추세 전환 스크리너 — 일봉 5MA / 120MA 골든크로스 (최근 발생 종목)
 ══════════════════════════════════════════════════════════════
-백테스트(`backtest_5w_120w_cross.py`)와 동일한 알고리즘으로 매수 후보 산출.
+백테스트(`backtest_5w_120w_cross.py`)와 동일한 MA/ATR 정의를 사용하되,
+스크리너는 "현재 유지 중"이 아니라 **최근 10영업일 내에 신규 돌파한 종목**만 노출.
 
   - MA_SHORT  = 25일  (5주 × 5거래일)
   - MA_LONG   = 600일 (120주 × 5거래일)
-  - 후보 조건: 현재 MA25 > MA600 (골든크로스 유지 중)
+  - 후보 조건: 최근 CROSS_LOOKBACK(=10) 영업일 내에
+                MA25 ≤ MA600 → MA25 > MA600 으로 전환된 시점이 존재 ∧
+                오늘 시점 MA25 > MA600 유지
   - 데이터 길이: MA_LONG + ATR_PERIOD + 5 = 619 행 이상 (백테스트와 동일)
   - 스코어   : MA gap ratio = (MA25 - MA600) / MA600
-  - Top N    : 시장별 25개 (gap 내림차순)
+  - 정렬 기본: cross_days_ago 오름차순 (가장 최근 돌파부터)
+  - Top N    : 시장별 25개
   - 스톱가  : 진입일(=오늘) High - ATR(14) × 2.5
               ↳ 백테스트 진입 시점의 peak = 진입일 단일 High와 동일
 
@@ -61,6 +65,9 @@ ATR_MULT     = 2.5
 TOP_N        = 25
 MIN_ROWS     = MA_LONG + ATR_PERIOD + 5     # 백테스트 [C]와 동일 (619)
 DOWNLOAD_DAYS = 800                          # MA600 워밍업 + 버퍼
+
+# ── 스크리너 전용: 최근 돌파 윈도우 ──────────────────────────
+CROSS_LOOKBACK = 10    # 영업일 10일 ≒ 최근 2주
 
 
 # ── 시장 분류 (백테스트와 동일) ──────────────────────────────
@@ -158,10 +165,44 @@ def _download_market(tickers: list[str], label: str) -> dict:
     return out
 
 
-# ── 스크리닝 (백테스트 [C] 후보 선정 + [F] 진입 스톱가와 동일) ─
+# ── 스크리닝 (최근 CROSS_LOOKBACK 영업일 내 신규 골든크로스) ─
+
+def _find_recent_cross(d: pd.DataFrame, lookback: int) -> tuple | None:
+    """최근 lookback 영업일 내에 MA25 ≤ MA600 → MA25 > MA600 전환이
+    발생한 가장 최근 일자(=cross_date)를 반환.
+
+    백테스트 [C]가 매 리밸런싱 시점에 `MA_S > MA_L` 만 검사하는 것과 동일한
+    비교 연산자(≤ vs >)를 사용해 정의:
+        cross_at(t) := MA_S(t-1) ≤ MA_L(t-1) AND MA_S(t) > MA_L(t)
+
+    Returns
+    -------
+    (cross_date: pd.Timestamp, cross_days_ago: int) 또는 None
+        cross_days_ago는 최신 영업일 인덱스 기준 0(오늘)부터의 거리.
+    """
+    n = len(d)
+    if n < 2:
+        return None
+    ma_s = d["MA_S"].to_numpy()
+    ma_l = d["MA_L"].to_numpy()
+    # 마지막 lookback+1 구간만 검사 (i, i-1 비교를 위해 +1)
+    start = max(1, n - lookback)
+    # 최근부터 거꾸로 스캔하여 가장 마지막 전환 시점 찾기
+    for i in range(n - 1, start - 1, -1):
+        s_now, l_now = ma_s[i], ma_l[i]
+        s_prev, l_prev = ma_s[i - 1], ma_l[i - 1]
+        if (
+            not (pd.isna(s_now) or pd.isna(l_now) or pd.isna(s_prev) or pd.isna(l_prev))
+            and s_prev <= l_prev
+            and s_now > l_now
+        ):
+            return d.index[i], (n - 1 - i)
+    return None
+
 
 def _screen(all_data: dict, market_label: str) -> list[dict]:
-    """현재 MA25 > MA600 인 종목 → gap 내림차순 Top N.
+    """최근 CROSS_LOOKBACK 영업일 내 신규 골든크로스 발생 종목 →
+    cross_days_ago 오름차순(=가장 최근 돌파부터) Top N.
 
     market_label: 결과 row의 'market' 필드 — 'US' | 'KR' | 'ALL'
     각 종목의 시장은 ticker 접미사로 별도 판정 (ALL 시 혼합).
@@ -180,10 +221,17 @@ def _screen(all_data: dict, market_label: str) -> list[dict]:
 
         if pd.isna(ma_s) or pd.isna(ma_l) or ma_l <= 0:
             continue
+        # 현재 시점에서 다시 깨졌으면 후보 제외
         if ma_s <= ma_l:
             continue
         if pd.isna(close) or pd.isna(high):
             continue
+
+        # 최근 윈도우 내 신규 돌파 시점 검사
+        cross = _find_recent_cross(d, CROSS_LOOKBACK)
+        if cross is None:
+            continue
+        cross_dt, cross_days_ago = cross
 
         gap = float((ma_s - ma_l) / ma_l)
 
@@ -207,9 +255,12 @@ def _screen(all_data: dict, market_label: str) -> list[dict]:
             "stop_price": stop_price,
             "stop_dist_pct": stop_dist,
             "atr": round(float(atr_v), 4) if not pd.isna(atr_v) else None,
+            "cross_date": pd.Timestamp(cross_dt).strftime("%Y-%m-%d"),
+            "cross_days_ago": int(cross_days_ago),
         })
 
-    rows.sort(key=lambda r: r["score"], reverse=True)
+    # 정렬: cross_days_ago 오름차순 → 동률 시 gap 내림차순
+    rows.sort(key=lambda r: (r["cross_days_ago"], -r["score"]))
     top = rows[:TOP_N]
     for i, r in enumerate(top, 1):
         r["rank"] = i
