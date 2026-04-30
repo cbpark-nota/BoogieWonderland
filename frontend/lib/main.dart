@@ -18,6 +18,7 @@ enum _DrawerDestination {
   dashboard,
   screening,
   screeningMomentum,
+  screeningTrendReversal,
   screeningShortSqueeze,
   screeningVix,
   portfolio,
@@ -126,6 +127,8 @@ class _MainNavigationState extends State<MainNavigation> {
       case _DrawerDestination.screening:
       case _DrawerDestination.screeningMomentum:
         return '모멘텀';
+      case _DrawerDestination.screeningTrendReversal:
+        return '추세 전환';
       case _DrawerDestination.screeningShortSqueeze:
         return '숏 스퀴즈';
       case _DrawerDestination.screeningVix:
@@ -149,15 +152,20 @@ class _MainNavigationState extends State<MainNavigation> {
           key: ValueKey('screening-momentum'),
           initialIndex: 0,
         );
+      case _DrawerDestination.screeningTrendReversal:
+        return const ScreeningTabsScreen.withIndex(
+          key: ValueKey('screening-trend-reversal'),
+          initialIndex: 1,
+        );
       case _DrawerDestination.screeningShortSqueeze:
         return const ScreeningTabsScreen.withIndex(
           key: ValueKey('screening-short-squeeze'),
-          initialIndex: 1,
+          initialIndex: 2,
         );
       case _DrawerDestination.screeningVix:
         return const ScreeningTabsScreen.withIndex(
           key: ValueKey('screening-vix'),
-          initialIndex: 2,
+          initialIndex: 3,
         );
       case _DrawerDestination.portfolio:
         return const PortfolioScreen();
@@ -271,6 +279,13 @@ class _MainNavigationState extends State<MainNavigation> {
               label: '모멘텀',
               icon: Icons.trending_up_outlined,
               selectedIcon: Icons.trending_up,
+              isIndented: true,
+            ),
+            _menuTile(
+              destination: _DrawerDestination.screeningTrendReversal,
+              label: '추세 전환',
+              icon: Icons.swap_vert_outlined,
+              selectedIcon: Icons.swap_vert,
               isIndented: true,
             ),
             _menuTile(

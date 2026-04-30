@@ -85,6 +85,15 @@ class StaticDataSource {
     return res.data as Map<String, dynamic>;
   }
 
+  /// 추세 전환 후보 (5MA/120MA 일봉 골든크로스)
+  /// market: 'us' | 'kr'
+  Future<Map<String, dynamic>> getTrendReversal(String market) async {
+    final bust = DateTime.now().millisecondsSinceEpoch ~/ 60000;
+    final res = await _dio
+        .get('$_baseDataUrl/trend_reversal_$market.json?v=$bust');
+    return res.data as Map<String, dynamic>;
+  }
+
   // ── v3.2 KR 분리 스크리닝 ─────────────────────────────────
 
   /// KR 4전략 전체 결과 (screening_kr_strategies.json)

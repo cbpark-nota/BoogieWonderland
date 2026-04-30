@@ -60,6 +60,10 @@ jobs:
         run: python scripts/export_json.py --output frontend/web/data/
         continue-on-error: true  # 스크리닝 실패 시에도 포트폴리오 재조회는 반드시 실행
 
+      - name: 추세 전환 스크리닝 (5MA/120MA)
+        run: python scripts/screener/screener_trend_reversal.py --output frontend/web/data/
+        continue-on-error: true
+
       - name: 포트폴리오 현재가 재조회
         run: python scripts/export_json.py --portfolio-only --output frontend/web/data/
 
