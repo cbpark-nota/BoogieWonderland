@@ -88,7 +88,16 @@ class TrendReversalScreen extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
       child: Row(
         children: [
-          // 시장 토글: 🇺🇸 / 🇰🇷
+          // 시장 토글: 🌍 통합 / 🇺🇸 / 🇰🇷
+          _segChip(
+            context: context,
+            label: '🌍 통합',
+            isSelected: market == TrendReversalMarket.all,
+            onTap: () => ref
+                .read(trendReversalMarketProvider.notifier)
+                .state = TrendReversalMarket.all,
+          ),
+          const SizedBox(width: 4),
           _segChip(
             context: context,
             label: '🇺🇸 미국',
