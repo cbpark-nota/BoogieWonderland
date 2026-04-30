@@ -22,6 +22,8 @@ class TrendReversalResult {
   final double? atr;
   final double? maShort;
   final double? maLong;
+  final String? crossDate;
+  final int? crossDaysAgo;
 
   TrendReversalResult({
     required this.rank,
@@ -35,6 +37,8 @@ class TrendReversalResult {
     this.atr,
     this.maShort,
     this.maLong,
+    this.crossDate,
+    this.crossDaysAgo,
   });
 
   factory TrendReversalResult.fromJson(Map<String, dynamic> json) {
@@ -50,6 +54,8 @@ class TrendReversalResult {
       atr: (json['atr'] as num?)?.toDouble(),
       maShort: (json['ma_short'] as num?)?.toDouble(),
       maLong: (json['ma_long'] as num?)?.toDouble(),
+      crossDate: json['cross_date'] as String?,
+      crossDaysAgo: (json['cross_days_ago'] as num?)?.toInt(),
     );
   }
 }
