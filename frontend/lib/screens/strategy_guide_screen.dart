@@ -81,10 +81,6 @@ class StrategyGuideScreen extends StatelessWidget {
         const SizedBox(height: 12),
         const _MarketCapStrategyCard(),
         const SizedBox(height: 24),
-        _SectionHeader(title: '비트코인 V10 전략', colorScheme: colorScheme),
-        const SizedBox(height: 12),
-        const _BtcStrategyCard(),
-        const SizedBox(height: 24),
         _SectionHeader(title: '스코어 산식', colorScheme: colorScheme),
         const SizedBox(height: 12),
         const _ScoreFormulaCard(),
@@ -762,90 +758,6 @@ class _LegendItem extends StatelessWidget {
   }
 }
 
-class _BtcStrategyCard extends StatelessWidget {
-  const _BtcStrategyCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    const btcColor = Color(0xFFF7931A);
-    return Card(
-      elevation: 2,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: btcColor.withValues(alpha: 0.15),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                const Icon(Icons.currency_bitcoin, color: btcColor, size: 22),
-                const SizedBox(width: 10),
-                Text(
-                  'Bitcoin V10 — 4시간봉',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: btcColor,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: const [
-                    _Chip(label: '타임프레임', value: '4시간봉', color: btcColor),
-                    _Chip(label: '방향', value: '롱온리', color: btcColor),
-                    _Chip(label: '스톱로스', value: '적응형 SL', color: btcColor),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _BulletRow('Squeeze Momentum 지표 기반 모멘텀 감지'),
-                _BulletRow('Bollinger Band Break 신호 진입 트리거'),
-                _BulletRow('EMA 크로스 필터 (추세 방향 확인)'),
-                _BulletRow('Bull / Bear / Neutral 레짐 자동 판별'),
-                _BulletRow('레짐별 파라미터 동적 전환 (ATR 승수, 포지션 크기)'),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: btcColor.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.bar_chart, size: 16, color: btcColor),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'CAGR 31.5% | MDD -28.4% | 샤프 0.89',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: btcColor,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ScoreFormulaCard extends StatelessWidget {
   const _ScoreFormulaCard();
 
@@ -952,27 +864,6 @@ class _InfoRow extends StatelessWidget {
           child: Text(value, style: theme.textTheme.bodySmall),
         ),
       ],
-    );
-  }
-}
-
-class _BulletRow extends StatelessWidget {
-  final String text;
-  const _BulletRow(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('• ', style: TextStyle(fontSize: 14)),
-          Expanded(
-            child: Text(text, style: Theme.of(context).textTheme.bodySmall),
-          ),
-        ],
-      ),
     );
   }
 }
