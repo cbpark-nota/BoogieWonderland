@@ -48,7 +48,8 @@ void main() {
             try {
               final data = await ApiClient().getLatestScreening();
               return StrategyScreeningData.fromJson(data);
-            } catch (_) {
+            } catch (e) {
+              debugPrint('strategyDataProvider(fullstack): latest screening fetch failed: $e');
               return null;
             }
           }),
@@ -62,14 +63,16 @@ void main() {
                 data = await ApiClient().getScreeningByDate(date);
               }
               return StrategyScreeningData.fromJson(data);
-            } catch (_) {
+            } catch (e) {
+              debugPrint('historyScreeningProvider(fullstack, date=$date): fetch failed: $e');
               return null;
             }
           }),
           historyDatesProvider.overrideWith((ref) async {
             try {
               return await ApiClient().getScreeningHistoryDates(days: 30);
-            } catch (_) {
+            } catch (e) {
+              debugPrint('historyDatesProvider(fullstack): fetch failed: $e');
               return [];
             }
           }),

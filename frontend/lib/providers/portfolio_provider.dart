@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/holding.dart';
 import '../services/api_client.dart';
@@ -12,7 +13,8 @@ class HoldingsNotifier extends AsyncNotifier<List<Holding>> {
     try {
       final data = await ApiClient().getHoldings();
       return data.map((h) => Holding.fromJson(h)).toList();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('HoldingsNotifier: holdings fetch failed: $e');
       return [];
     }
   }

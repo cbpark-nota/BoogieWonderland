@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 /// 서버리스 모드 데이터 소스
 /// GitHub Pages에 배포된 정적 JSON 파일을 읽는다.
@@ -50,7 +51,8 @@ class StaticDataSource {
         final dt = DateTime.parse(d);
         return dt.weekday < 6;
       }).toList();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('StaticDataSource.getHistoryDates: history/index.json fetch failed: $e');
       return [];
     }
   }
@@ -73,6 +75,7 @@ class StaticDataSource {
       final res = await _dio.get('$_baseDataUrl/market_cap.json');
       return res.data as Map<String, dynamic>;
     } catch (_) {
+      // 의도적 무시: market_cap.json 미존재 시 구 파일명(market_cap_latest.json) fallback
       final fallback = await _dio.get('$_baseDataUrl/market_cap_latest.json');
       return fallback.data as Map<String, dynamic>;
     }

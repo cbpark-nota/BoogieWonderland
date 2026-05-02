@@ -34,7 +34,9 @@ class BtcSignalWidget extends StatelessWidget {
       try {
         final dt = DateTime.parse(signal.timestamp).toLocal();
         timeStr = '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-      } catch (_) {}
+      } catch (_) {
+        // 의도적 무시: 파싱 실패 시 timeStr은 빈 문자열 그대로 두어 라벨을 숨김
+      }
     }
 
     return Container(

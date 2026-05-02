@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/screening_result.dart';
 import '../services/api_client.dart';
@@ -12,7 +13,8 @@ class ScreeningNotifier extends AsyncNotifier<ScreeningRun?> {
     try {
       final data = await ApiClient().getLatestScreening();
       return ScreeningRun.fromJson(data);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('ScreeningNotifier: latest screening fetch failed: $e');
       return null;
     }
   }

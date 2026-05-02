@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/trend_reversal_data.dart';
 import '../services/static_data_source.dart';
@@ -45,7 +46,8 @@ final trendReversalDataProvider =
   try {
     final data = await StaticDataSource().getTrendReversal(key);
     return TrendReversalData.fromJson(data);
-  } catch (_) {
+  } catch (e) {
+    debugPrint('trendReversalDataProvider($key): fetch failed: $e');
     return TrendReversalData.empty();
   }
 });

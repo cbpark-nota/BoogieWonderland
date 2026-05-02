@@ -145,6 +145,7 @@ class DashboardScreen extends ConsumerWidget {
       if (days == 0) return 'D-Day';
       return 'D-$days';
     } catch (_) {
+      // 의도적 무시: 잘못된 날짜 형식은 빈 문자열로 표시(D-day 라벨 자체를 숨김)
       return '';
     }
   }
