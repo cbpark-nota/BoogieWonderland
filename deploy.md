@@ -1,11 +1,13 @@
 # 배포 계획서: 앱 + 웹 듀얼 타겟
 
-> **상태**: v0.2 (2026-05-02 갱신) — 2개 핵심 결정 확정 후 반영본
-> **확정 결정 요약**:
+> **상태**: v0.3 (2026-05-02 갱신) — 코드 공유 구조 + 앱 측 DB 종류 확정
+> **확정 결정 요약 (v0.3 추가분 포함)**:
 > 1. **N3 SSoT 모델**: "각 채널 독립 운영" — 앱·웹 각자 on-demand 스크리닝, 데이터 소스 공유 안 함. **cron 기반 정기 갱신 폐기**, 사용자 요청 시점에 스크리닝.
 > 2. **데이터 전송 방식**: **DB 저장 + 캐시 패턴**. 라이브 캐시 TTL 5분, 종가 스냅샷은 KST 06:30 / 15:35 두 번. 콜드 캐시 첫 사용자는 그냥 대기.
 > 3. **웹 측 Python 실행 (§3.2.2)**: **B. Cloudflare Containers** 확정. 웹 인프라 전체가 CF 단일 벤더 (D1 / R2 / KV / Workers / Cron Triggers).
-> **여전히 미결**: 앱 측 DB 종류, 인증/접근 제어, 코드 공유 구조, GH Actions 워크플로 처분, `backend/api` 처분, 비용·모니터링, 모바일 앱 base URL 분기 등 → §9 체크리스트 참조.
+> 4. **N1 코드 공유 구조 (v0.3 신규)**: **`scripts/` = 알고리즘 R&D**, **`backend/` = 프로덕션 단일 소스**. 호스트 백엔드와 CF Container 모두 `backend/` 코드를 사용. `scripts/screener/*.py` → `backend/app/services/*.py` 는 **수동 복사** 기반(import 공유 패키지 추출 X). 정책은 프로젝트 루트 `README.md` 에 명문화됨.
+> 5. **D1 앱 측 DB (v0.3 신규)**: **PostgreSQL** 확정. asyncpg + Alembic 그대로. docker compose 에 `db` 서비스 포함. 도미노로 D8/D10/D11/D12 자동 결정.
+> **여전히 미결**: 인증/접근 제어, GH Actions 워크플로 처분, `backend/api` 처분, 비용·모니터링, 모바일 앱 base URL 분기, TTL 매핑, 콜드 UX, `portfolio.xlsx` 위치 등 → §9 체크리스트 참조.
 > **코드 변경 0건**: 본 커밋은 문서 갱신만 포함.
 > **자율 판단 금지**: 미결 항목에 대해서는 단정형 결정을 포함하지 않는다.
 
@@ -18,8 +20,9 @@
 - **갱신 모델 전환**:
   - 이전 모델: GitHub Actions cron (KR 04:00 / US 08:00 KST) → 정적 JSON push.
   - **새 모델**: 사용자 요청 시점에 **on-demand 스크리닝** + **5분 TTL 라이브 캐시** + **KST 06:30(US 마감 후) / 15:35(KR 마감 후) 종가 스냅샷 2회 저장**.
-- **앱 타겟**: 호스트 머신(VPS/자체 서버)에 FastAPI(`backend/app`) + APScheduler(종가 스냅샷용 cron만 잔존) + DB. **DB 종류는 미결**.
-- **웹 타겟**: Cloudflare 단일 벤더. **CF Pages**(Flutter Web 호스팅) + **CF Workers**(API 라우팅) + **CF Containers**(Python 스크리너 실행) + **D1**(캐시 + 종가 스냅샷) + **R2**(정적 자산/대형 산출물) + **CF Cron Triggers**(종가 스냅샷 트리거).
+- **앱 타겟**: 호스트 머신(VPS/자체 서버)에 FastAPI(`backend/app`) + APScheduler(종가 스냅샷용 cron만 잔존) + **PostgreSQL**.
+- **웹 타겟**: Cloudflare 단일 벤더. **CF Pages**(Flutter Web 호스팅) + **CF Workers**(API 라우팅) + **CF Containers**(Python 스크리너 실행, **빌드 컨텍스트 = `backend/`**) + **D1**(캐시 + 종가 스냅샷) + **R2**(정적 자산/대형 산출물) + **CF Cron Triggers**(종가 스냅샷 트리거).
+- **코드 공유**: `backend/` 가 호스트와 컨테이너 양쪽의 단일 소스. `scripts/` 는 R&D 전용이며 배포 대상이 아님(상세는 `README.md`).
 
 ---
 
@@ -187,10 +190,13 @@
 
 #### 3.1.1 컴포넌트
 - **프론트엔드**: Flutter (iOS/Android). API base URL 환경 분기 정책 미결(§5 N2).
-- **백엔드 프레임워크**: `backend/app/` 의 FastAPI 활용.
+- **백엔드 프레임워크**: `backend/app/` 의 FastAPI 활용. **`backend/` 는 프로덕션 코드의 단일 소스** — CF Container 도 같은 디렉토리를 빌드 컨텍스트로 사용한다(§3.2).
 - **스케줄러**: `backend/app/scheduler.py` — 정기 cron은 **종가 스냅샷 2회(06:30/15:35 KST)** 만 잔존. 일간 스크리닝 잡은 on-demand 모델로 전환되어 사실상 폐기 (코드 수정은 단계 1에서).
-- **DB**: **종류 미결** (Postgres vs SQLite — §4 D1 / §9 체크리스트).
-  - `backend/app/config.py` 의 기본값은 `postgresql+asyncpg://...`. SQLite로 가면 `aiosqlite` 드라이버로 전환 + `alembic` 호환성 점검 필요.
+- **DB**: ✅ **PostgreSQL 확정** (`postgresql+asyncpg://...`).
+  - 드라이버: `asyncpg` 유지.
+  - 마이그레이션: `alembic` 그대로(`backend/alembic/`). 첫 revision 생성 여부는 단계 1에서 결정 (§6 단계 1 체크리스트).
+  - 운영 형태: docker compose `db` 서비스 또는 호스트 PostgreSQL 별도 운영 — 단계 1에서 확정.
+- **알고리즘 코드**: `backend/app/services/screener.py` 가 운영용 단일 소스. R&D 결과는 `scripts/screener/*.py` 에서 검증한 뒤 **수동 복사** 로 반영(§7.1 #6 drift 위험 참조).
 - **푸시**: Firebase Cloud Messaging — `app/services/notification.py`, 자격증명은 `APP_FCM_CREDENTIALS_PATH`.
 
 #### 3.1.2 데이터 갱신 흐름
@@ -200,7 +206,7 @@
 
 #### 3.1.3 운영
 - 단일 호스트(VPS) — `uvicorn` + systemd 또는 docker compose 1대.
-- 백업: DB `pg_dump` 또는 SQLite 파일 cron 복사 → 외부 스토리지.
+- 백업: **`pg_dump` cron + 외부 스토리지 업로드** (권장 패턴, 사용자 결정 필요 — §9 체크리스트).
 - 모니터링: 별도 결정 필요(N5).
 
 ### 3.2 웹 — Cloudflare 단일 벤더 (옵션 B 확정)
@@ -208,7 +214,7 @@
 #### 3.2.1 컴포넌트
 - **호스팅**: Cloudflare Pages — Flutter Web 빌드 산출물.
 - **라우팅·캐시 게이트**: Cloudflare Workers (TS/JS) — `/api/*` 진입점, D1 캐시 조회 후 MISS 시 Containers 호출.
-- **스크리너 실행**: Cloudflare Containers — 호스트 측과 동일한 `scripts/screener/*` Python 코드 베이스를 Docker 이미지로 빌드.
+- **스크리너 실행**: Cloudflare Containers — 호스트 측과 동일한 **`backend/`** 디렉토리를 Docker 빌드 컨텍스트로 사용. 즉 컨테이너 안에서도 `backend/app/services/*` 코드를 실행한다. (이미지 사이즈 최적화 + 단일 소스 유지 목적. `scripts/` 는 컨테이너에 포함하지 않음.)
 - **DB**: D1 (SQLite 호환). 캐시 + 종가 스냅샷.
 - **오브젝트 스토리지**: R2 — 대형 산출물(parquet, history archive) 또는 정적 자산.
 - **KV**: 작은 키/값(예: 마지막 cron 실행 시각). **사용 여부는 미결** — 단계 3에서 확정 가능.
@@ -245,18 +251,18 @@
 
 | ID | 항목 | 앱 타겟 (호스트) | 웹 타겟 (CF) |
 |---|---|---|---|
-| **D1** | DB 종류 | ❓ **미결** — Postgres vs SQLite | ✅ **D1** (+ R2 보조) |
+| **D1** | DB 종류 | ✅ **PostgreSQL** (asyncpg) | ✅ **D1** (+ R2 보조) |
 | **D2** | 백엔드 구현 (`backend/app` vs `backend/api`) | ✅ `backend/app` 사용 | ✅ 백엔드 프로세스 없음 — Workers + Containers (`backend/api` 처분은 N5) |
 | **D3** | 스케줄러 라이브러리 / 작업 정의 위치 | ✅ APScheduler (잡은 종가 스냅샷 2회만 잔존) | ✅ **CF Cron Triggers** (06:30 / 15:35 KST) |
 | **D4** | 스케줄러가 호출할 인터페이스 | ✅ **함수 호출(in-process)** — `run_screening()` | ✅ **Worker → Container HTTP 호출** (Container 내부는 함수 호출 또는 subprocess — 컨테이너 진입점 설계 시 결정) |
 | **D5** | 갱신 주기 | ✅ on-demand + 종가 스냅샷 2회. 별도 정기 cron 없음 | ✅ on-demand + 종가 스냅샷 2회. 별도 정기 cron 없음 |
 | **D6** | 출력 파일/데이터 저장 위치 | ✅ DB 테이블(`cache_snapshot`, `eod_snapshot`). 파일 산출물은 비핵심 | ✅ D1 테이블(동일 스키마 권장) + 대형은 R2 |
 | **D7** | 프론트엔드 동작 모드 | ✅ **로컬 REST API 모드** (모바일이 호스트 백엔드 호출) — `DEPLOY_ENV=local` 변형 정합성 점검 필요 | ✅ Workers `/api/*` → 정적 SPA가 호출. 정적 JSON 직접 fetch 모델은 폐기 |
-| **D8** | 포트 할당 | ❓ FastAPI 8000 + DB(5432 or SQLite 파일) + reverse proxy(80/443). 구체 매핑 미결 | ✅ 해당 없음 (서버리스) |
+| **D8** | 포트 할당 | ✅ 골격 결정 — FastAPI **8000** + Postgres **5432** + reverse proxy **80/443**. ❓ 외부 노출 여부/매핑 세부는 운영 방식(systemd vs docker compose)에 종속 | ✅ 해당 없음 (서버리스) |
 | **D9** | 환경변수 파일/설정 위치 | ❓ `.env` 위치/시크릿 매니저 미결 (특히 FCM 자격증명) | ✅ CF Pages 환경변수 + Workers/Containers Secrets (CF 표준 패턴) |
-| **D10** | 의존성 설치 방식 | ❓ `uv sync` (개인 Mac) vs Docker (Linux 호스트) 미결 | ✅ Docker 이미지 빌드(컨테이너) — `pyproject.toml` 또는 `requirements.txt` 기반 |
-| **D11** | DB 마이그레이션 방식 | ❓ Alembic (Postgres) 또는 Alembic+aiosqlite (SQLite) — DB 종류 결정 후 자동 종속 | ✅ **D1 마이그레이션 도구**(`wrangler d1 migrations`) |
-| **D12** | 시작 명령 / 단일 진입점 | ❓ docker compose vs systemd 미결 | ✅ `wrangler deploy` (Workers + Cron Triggers + Containers) + Pages 배포 |
+| **D10** | 의존성 설치 방식 | ✅ **`uv sync`** (개인 Mac 개발) + **Docker 이미지** (Linux 호스트) 병행. `pyproject.toml` 단일 매니페스트 사용 | ✅ Docker 이미지 빌드 (`backend/` 컨텍스트) — 동일 `pyproject.toml` 사용 |
+| **D11** | DB 마이그레이션 방식 | ✅ **Alembic + asyncpg** (`backend/alembic/`). ❓ 첫 revision 생성 vs `Base.metadata.create_all` 잔존 — 단계 1에서 결정 | ✅ **D1 마이그레이션 도구**(`wrangler d1 migrations`) |
+| **D12** | 시작 명령 / 단일 진입점 | ✅ **docker compose** (`api` + `db` 2개 서비스) 권장 패턴. ❓ systemd 옵션 vs docker compose 옵션 최종 선택은 단계 1에서 | ✅ `wrangler deploy` (Workers + Cron Triggers + Containers) + Pages 배포 |
 | **D13** | `portfolio.xlsx` 위치 / 캐시 디렉토리 | ❓ 호스트 경로 미결 (예: `/var/lib/momentum/portfolio.xlsx`) | ❓ R2 prefix vs 컨테이너 이미지 동봉 미결 — 누가 편집/업로드하는지 SSoT 정의 필요 |
 
 ### 4.1 신규 항목 (on-demand + 캐시 모델 도입으로 추가)
@@ -268,22 +274,24 @@
 | **C3** | 콜드 캐시 정책 | ✅ **그냥 대기** — stale-while-revalidate 미사용. 첫 사용자는 5~30초 로딩. **로딩 인디케이터/예상 시간 표시 정책은 UX 권장 사항으로 §7.4** |
 
 ### 4.2 매트릭스 요약
-- 본 결정으로 **자동 해결된 항목**: D2(앱), D3, D4, D5, D6, D7, D11(웹), D12(웹), C1·C2·C3(원칙).
-- **여전히 사용자 결정이 필요한 항목**: D1(앱), D8(앱), D9(앱), D10(앱), D11(앱), D12(앱), D13, 그리고 §5 N1·N2·N4·N5, C1 매핑 표.
+- v0.3 결정으로 **추가 해결된 항목**: D1(앱), D10(앱), D11(앱) 골격, D12(앱) 골격, D8(앱) 골격, N1.
+- **자동 해결된 항목 누적**: D1, D2, D3, D4, D5, D6, D7, D10, D11, D12 (앱/웹 양측), C1·C2·C3 원칙.
+- **여전히 사용자 결정이 필요한 항목**: D8(앱) 외부 노출 세부, D9(앱), D11(앱) 첫 revision 정책, D12(앱) systemd vs docker compose 최종 선택, D13, 그리고 §5 N2·N4·N5, C1 매핑 표, §3.1.3 백업 정책.
 
 ---
 
 ## 5. 신규 결정 항목 (듀얼 아키텍처 도입으로 발생)
 
-### N1. 코드 공유 — 호스트 Python ↔ CF Container Python ❓ **미결**
-- **현황**: 같은 `scripts/screener/*.py` 와 `backend/app/services/screener.py` 를 두 환경이 모두 실행해야 함. 컨테이너 이미지는 호스트 코드를 빌드 시점에 동봉.
-- **옵션**:
-  - (a) 단일 모노레포 + 양쪽이 동일 Python 패키지 import (현 구조)
-  - (b) 공통 패키지(`momentum_core/`)로 분리 → 호스트 / 컨테이너 / 스크립트 모두 import
-  - (c) 코드 복제 (비추)
-- **결정 필요 질문**:
-  - 모노레포 구조를 유지할 것인가? (b)로 분리할 가치가 있는가?
-  - CF Container 이미지 빌드 시 호스트 코드를 어떻게 가져올 것인가? (`pyproject.toml` build context vs git submodule vs 단일 Dockerfile에서 전체 repo COPY)
+### N1. 코드 공유 — 호스트 Python ↔ CF Container Python ✅ **확정 (v0.3)**
+- **결정**: **(a) 모노레포 변형** — `scripts/` 는 알고리즘 R&D / 백테스트 전용이며 배포 대상 아님. **`backend/` 가 프로덕션 코드의 단일 소스(SSoT)** 이며, 호스트 백엔드와 CF Container 모두 이 디렉토리를 사용한다.
+- **세부**:
+  - CF Container Dockerfile 빌드 컨텍스트 = **`backend/` 디렉토리만** (이미지 사이즈 최적화).
+  - `scripts/screener/*.py` ↔ `backend/app/services/*.py` 는 **수동 복사** 로 동기화. import 공유 패키지(`momentum_core/`) 추출은 하지 않음.
+  - 정책은 프로젝트 루트 `README.md` 의 "프로젝트 구조 및 책임 분리" 섹션에 명문화됨.
+- **수반 위험**: 수동 복사이므로 두 코드가 어긋날(drift) 수 있음 → §7.1 #6 항목으로 별도 관리.
+- **함의**:
+  - 호스트와 컨테이너가 동일 `pyproject.toml` 의존성 셋을 사용 → D10 자동 결정.
+  - 컨테이너 빌드 캐시가 `scripts/`, `docs/`, `frontend/` 변경의 영향을 받지 않음.
 
 ### N2. 모바일 앱의 API base URL 환경별 분기 ❓ **미결**
 - **현황**: `frontend/lib/config/api_config.dart` 가 base URL을 보유한다고 추정. 모바일 앱은 항상 호스트 백엔드를 호출하지만, 개발/스테이징/프로덕션 호스트가 다를 수 있음.
@@ -325,16 +333,23 @@
 > **전제**: §9 미결 항목 결정이 단계 1 시작 전에 끝나야 함 (특히 앱 측 DB 종류, 인증 정책).
 
 ### 단계 1 — 앱 측 호스트 백엔드 구현 (on-demand + 캐시)
-- [ ] **DB 종류 결정 후** 호스트 셋업 (Postgres or SQLite)
-- [ ] DB 스키마 적용: `cache_snapshot(market, payload, expires_at, ...)`, `eod_snapshot(market, snapshot_date, payload, ...)`, 기존 `holdings` / `device_tokens` 유지
+- [ ] **PostgreSQL 셋업** — docker compose `db` 서비스 또는 호스트 Postgres 별도 운영 (D12 최종 선택은 단계 1 시작 시)
+- [ ] **Alembic 첫 revision 생성** — 현재 `Base.metadata.create_all` 잔존 여부 확인 후 마이그레이션 기준선 확립 (D11 세부)
+- [ ] DB 스키마 적용:
+  - `cache_snapshot(market, payload, expires_at, ...)`
+  - `eod_snapshot(market, snapshot_date, payload, ...)`
+  - 기존 `holdings` / `device_tokens` 유지
+- [ ] **알고리즘 코드 복사 정책 코드화** — 현재 `scripts/screener/screener_v3.py` 의 검증된 로직을 `backend/app/services/screener.py` 로 복사·정리. 두 파일 간 핵심 함수 시그니처/상수 1차 동기화 (drift 방지를 위한 베이스라인 — §7.1 #6).
 - [ ] `backend/app/scheduler.py` 정리: 일간 스크리닝 잡 제거, **KST 06:30 / 15:35 두 잡만 잔존**
 - [ ] `backend/app/routers/screening.py`: on-demand 캐시 게이트 구현 (TTL 5분, MISS 시 동기 실행)
 - [ ] BTC/ETH 시그널 등 싼 엔드포인트 TTL 매핑 적용 (C1)
+- [ ] `pg_dump` cron 백업 스크립트 (사용자 결정 후 적용 — §3.1.3)
 - [ ] 단위 테스트 + 스모크 테스트 (캐시 HIT/MISS, TTL 만료, 종가 스냅샷 cron 발화)
 - **검증 기준**:
   - 호스트 단독으로 on-demand 응답 5~30초 이내
   - 5분 내 동일 요청은 < 100ms 응답
   - 06:30/15:35 cron이 실제로 발화 + DB INSERT 확인
+  - `backend/app/services/screener.py` 결과가 `scripts/screener/screener_v3.py` 결과와 **동일 시점·동일 입력에서 일치** (drift 베이스라인)
   - 1주 무중단
 
 ### 단계 2 — 모바일 앱 통합 + 환경 분기
@@ -383,12 +398,16 @@
 
 ## 7. 위험 / 가정 / 미해결
 
-### 7.1 코드 사실 관계 미해결 5건
+### 7.1 코드 사실 관계 미해결 6건
 1. **ApiClient 스키마 mismatch 가능성** — `frontend/lib/services/api_client.dart` 와 `backend/app/schemas/*` 일치 점검 필요. on-demand 엔드포인트 응답 스펙 정합성 확인 필수.
 2. **`data_cache` 위치** — `scripts/monitor/download_data.py` 의 parquet 캐시 위치. 호스트/컨테이너가 같은 경로 가정 가능한지 점검.
 3. **`/api/screening` 경로 mismatch** — `backend/app/routers/screening.py` 라우트와 프론트엔드 호출 경로 일치 여부 미확인.
 4. **collector 역할** — `scripts/collector/` Dockerfile + crontab(KST 23:00 KR / 07:00 US) 의 역할이 신규 종가 스냅샷 cron(06:30/15:35)과 중복인지 확인 후 정리 필요.
 5. **FCM 자격증명** — 출처/소유/회전 정책 미정. 단계 2 전에 확정 필요.
+6. **`scripts/` ↔ `backend/services/` 동기화 (drift)** — N1 결정에 따라 두 디렉토리는 **수동 복사** 로 동기화된다. 현재 `scripts/screener/screener_v3.py` 와 `backend/app/services/screener.py` 가 어느 정도 일치하는지 미확인. 단계 1 첫 작업으로 베이스라인을 맞춰야 하며, 이후에도:
+   - 알고리즘 변경 시 양쪽 모두 반영했는지 검증할 수단 부재 (수동 점검에 의존).
+   - 향후 drift 감지 자동화(예: 핵심 함수 해시 비교 CI) 도입 여부는 별도 결정.
+   - 위험: 백테스트와 프로덕션이 다른 알고리즘으로 돌아가는 silent drift 가능.
 
 ### 7.2 각 채널 독립 운영의 데이터 일관성 위험 (수용)
 - 같은 시점에 두 채널이 스크리닝해도 외부 소스 응답 시점·결측 처리·실행 머신 차이로 결과 미세 차이 발생 가능.
@@ -455,26 +474,48 @@
 
 ## 9. 다음 행동 (사용자 입장) — 미결 항목 체크리스트
 
-본 갱신으로 큰 결정 3개가 확정되었다. 단계 1 시작 전 다음 미결 항목에 대한 사용자 답이 필요하다.
+v0.3 갱신으로 N1(코드 공유), D1(앱 측 DB)이 추가 확정되었다. 단계 1 시작 전 다음 미결 항목에 대한 사용자 답이 필요하다.
 
-- [ ] **앱 측 DB 종류** — Postgres vs SQLite (D1, 단계 1 직결)
 - [ ] **인증/접근 제어 정책** — 호스트 측(API key/JWT/터널), Worker 측(레이트리밋/Turnstile/익명) (N4)
-- [ ] **코드 공유 구조** — 모노레포 유지 vs `momentum_core/` 분리, Container 이미지 빌드 방식 (N1)
 - [ ] **GH Actions 워크플로 처분** — 5개 워크플로 각각 보존/제거 시점 (§7.5)
 - [ ] **`backend/api` 처분** — 통합 후 삭제 vs 보존 (N5)
 - [ ] **비용·모니터링 정책** — 모니터링 채널 1개 선택 (N5)
 - [ ] **모바일 앱 base URL 환경 분기** — `--dart-define` vs flavor vs 런타임 입력 (N2)
 - [ ] **싼 작업 TTL 매핑 표** — BTC/ETH 시그널 등 엔드포인트별 TTL 값 (C1 매핑)
 - [ ] **콜드 캐시 UX 권장 적용 여부** — 로딩 인디케이터/예상 시간 표시, 종가 스냅샷 폴백 (§7.4)
-- [ ] **앱 호스트 운영 방식** — docker compose vs systemd, 포트 매핑, `.env` 위치 (D8/D9/D10/D12)
+- [ ] **앱 호스트 운영 세부** — docker compose vs systemd 최종 선택, 외부 노출 매핑, `.env` 위치 (D8 세부 / D9 / D12 세부)
+- [ ] **DB 마이그레이션 첫 revision 정책** — Alembic 첫 revision 생성 vs `Base.metadata.create_all` 잔존 (D11 세부)
+- [ ] **`pg_dump` 백업 정책** — 빈도/보관 기간/외부 스토리지 (§3.1.3)
 - [ ] **`portfolio.xlsx` SSoT** — 호스트 경로 / R2 prefix / 컨테이너 동봉 (D13)
 - [ ] **종가 스냅샷 시점 검증** — 06:30 / 15:35 가 yfinance/pykrx 종가 갱신 시점과 정합한지 (§7.6)
+- [ ] **drift 감지 자동화 도입 여부** — `scripts/` ↔ `backend/services/` 일치 검증 CI (§7.1 #6)
 
 > 위 항목이 결정되면 §6 단계 1 작업을 시작할 수 있다.
 
 ---
 
 ## 10. 결정 이력 / 변경 로그
+
+### v0.3 — 2026-05-02
+**확정**:
+- **N1 코드 공유 구조**: `scripts/` = R&D 전용(배포 대상 아님), `backend/` = 프로덕션 단일 소스(SSoT). 호스트 + CF Container 모두 `backend/` 사용. `scripts/` ↔ `backend/services/` 는 **수동 복사** 동기화. 정책은 `README.md` 에 명문화.
+- **D1 앱 측 DB**: PostgreSQL (asyncpg) 확정.
+- 도미노로 자동 결정: D10(`uv` + Docker 병행, 동일 `pyproject.toml`), D11 골격(Alembic + asyncpg), D12 골격(docker compose `api` + `db`), D8 골격(8000 + 5432 + 80/443).
+
+**변경**:
+- 머리말에 결정 4·5 추가, 미결 목록 갱신
+- §3.1 — DB Postgres 확정, `backend/` 단일 소스 명시, 알고리즘 코드 복사 정책 추가
+- §3.1.3 — `pg_dump` cron 백업 권장 명시 (사용자 결정 필요)
+- §3.2.1 — CF Container 빌드 컨텍스트 = `backend/` 명시 (`scripts/` 미포함)
+- §4 매트릭스 — D1/D8/D10/D11/D12 ✅ 갱신, §4.2 요약 다시 정리
+- §5 N1 — 확정 표기로 전환, (a) 변형 + drift 위험 함의 명시
+- §6 단계 1 — Postgres 셋업 / Alembic 첫 revision / 알고리즘 복사 정책 코드화 / 백업 cron 항목 추가, 검증 기준에 drift 베이스라인 추가
+- §7.1 — #6 항목 신설 (scripts/ ↔ backend/ 동기화 drift 위험)
+- §9 — N1·D1 항목 제거, 새 미결 항목(첫 revision 정책 / `pg_dump` 정책 / drift 자동화) 추가
+- §10 — v0.3 항목 신설
+
+**미해결 (사용자 결정 대기)**:
+- §9 체크리스트 12개
 
 ### v0.2 — 2026-05-02
 **확정**:
