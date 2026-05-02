@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/short_squeeze_result.dart';
 import '../providers/short_squeeze_provider.dart';
+import '../theme/app_colors.dart';
 
 class ShortSqueezeScreen extends ConsumerWidget {
   const ShortSqueezeScreen({super.key});
@@ -91,11 +92,11 @@ class _ResultList extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.grey),
+            const Icon(Icons.error_outline, size: 48, color: AppColors.mutedText),
             const SizedBox(height: 8),
             Text('데이터 로드 실패\n$e',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.grey)),
+                style: const TextStyle(color: AppColors.mutedText)),
           ],
         ),
       ),
@@ -115,7 +116,7 @@ class _ResultList extends ConsumerWidget {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
           const SizedBox(height: 4),
           const Text('조건을 통과한 종목이 없거나 데이터가 아직 없습니다.',
-              style: TextStyle(color: Colors.grey, fontSize: 13)),
+              style: TextStyle(color: AppColors.mutedText, fontSize: 13)),
         ],
       ),
     );
@@ -217,6 +218,7 @@ class _SummaryHeader extends StatelessWidget {
       return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-'
           '${dt.day.toString().padLeft(2, '0')}';
     } catch (_) {
+      // 의도적 무시: 파싱 불가능한 형식은 원본 ISO 문자열을 그대로 표시
       return iso;
     }
   }
@@ -259,7 +261,7 @@ class _ShortSqueezeCard extends StatelessWidget {
                             ? '${result.ticker} · ${result.sector}'
                             : result.sector,
                         style:
-                            const TextStyle(fontSize: 11, color: Colors.grey),
+                            const TextStyle(fontSize: 11, color: AppColors.mutedText),
                       ),
                     ],
                   ),
@@ -269,7 +271,7 @@ class _ShortSqueezeCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     const Text('Squeeze Score',
-                        style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        style: TextStyle(fontSize: 10, color: AppColors.mutedText)),
                     Text(
                       score.toStringAsFixed(1),
                       style: TextStyle(
@@ -294,8 +296,8 @@ class _ShortSqueezeCard extends StatelessWidget {
   }
 
   Color _scoreColor(double score, ColorScheme cs) {
-    if (score >= 70) return Colors.red.shade600;
-    if (score >= 40) return Colors.orange.shade700;
+    if (score >= 70) return AppColors.priceDownMid;
+    if (score >= 40) return AppColors.warningStrong;
     return cs.primary;
   }
 }
@@ -309,10 +311,10 @@ class _RankBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = score >= 70
-        ? Colors.red.shade700
+        ? AppColors.priceDownStrong
         : score >= 40
-            ? Colors.orange.shade700
-            : Colors.blue;
+            ? AppColors.warningStrong
+            : AppColors.info;
 
     return Container(
       width: 32,
@@ -386,13 +388,13 @@ class _UsMetrics extends StatelessWidget {
     return Column(
       children: [
         Text(label,
-            style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            style: const TextStyle(fontSize: 10, color: AppColors.mutedText)),
         Text(
           value,
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: highlight ? Colors.red.shade700 : null,
+            color: highlight ? AppColors.priceDownStrong : null,
           ),
         ),
       ],
@@ -450,13 +452,13 @@ class _KrMetrics extends StatelessWidget {
     return Column(
       children: [
         Text(label,
-            style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            style: const TextStyle(fontSize: 10, color: AppColors.mutedText)),
         Text(
           value,
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: highlight ? Colors.red.shade700 : null,
+            color: highlight ? AppColors.priceDownStrong : null,
           ),
         ),
       ],

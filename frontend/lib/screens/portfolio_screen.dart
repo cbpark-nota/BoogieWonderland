@@ -8,6 +8,7 @@ import '../providers/rebalance_provider.dart';
 import '../providers/serverless_providers.dart';
 import '../services/portfolio_download.dart';
 import '../services/portfolio_xlsx_service.dart';
+import '../theme/app_colors.dart';
 
 class PortfolioScreen extends ConsumerWidget {
   const PortfolioScreen({super.key});
@@ -50,10 +51,10 @@ class PortfolioScreen extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.account_balance_wallet_outlined,
-                    size: 64, color: Colors.grey),
+                    size: 64, color: AppColors.mutedText),
                 SizedBox(height: 16),
                 Text('포트폴리오 데이터가 없습니다',
-                    style: TextStyle(fontSize: 16, color: Colors.grey)),
+                    style: TextStyle(fontSize: 16, color: AppColors.mutedText)),
                 SizedBox(height: 8),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 32),
@@ -61,7 +62,7 @@ class PortfolioScreen extends ConsumerWidget {
                     '위 "파일 업로드" 버튼으로 xlsx 파일을 업로드하거나\n'
                     'scripts/portfolio.xlsx를 작성 후 GitHub Actions를 실행하세요.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                    style: TextStyle(fontSize: 13, color: AppColors.mutedText),
                   ),
                 ),
               ],
@@ -93,7 +94,7 @@ class PortfolioScreen extends ConsumerWidget {
           Center(
             child: Text(
               '리밸런싱 기준일: ${signal!.rebalanceDate}',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style: const TextStyle(fontSize: 12, color: AppColors.mutedText),
             ),
           ),
         ],
@@ -106,7 +107,7 @@ class PortfolioScreen extends ConsumerWidget {
           Center(
             child: Text(
               '업데이트: ${portfolio.updatedAt.substring(0, 10)}',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style: const TextStyle(fontSize: 12, color: AppColors.mutedText),
             ),
           ),
         const SizedBox(height: 80),
@@ -133,7 +134,7 @@ class PortfolioScreen extends ConsumerWidget {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('파일 크기 초과 (최대 1MB)'),
-              backgroundColor: Colors.red,
+              backgroundColor: AppColors.priceDown,
             ),
           );
         }
@@ -150,7 +151,7 @@ class PortfolioScreen extends ConsumerWidget {
           SnackBar(
             content: Text(
                 '포트폴리오 업로드 완료 (${portfolio.holdings.length}개 종목)'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.priceUp,
           ),
         );
       }
@@ -159,7 +160,7 @@ class PortfolioScreen extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('파일 파싱 실패: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.priceDown,
           ),
         );
       }
@@ -180,7 +181,7 @@ class PortfolioScreen extends ConsumerWidget {
       triggerFileDownload(bytes, 'portfolio_$date.xlsx');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('다운로드 실패: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('다운로드 실패: $e'), backgroundColor: AppColors.priceDown),
       );
     }
   }
@@ -248,12 +249,12 @@ class _UploadToolbar extends StatelessWidget {
               padding: const EdgeInsets.only(top: 6),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline, size: 13, color: Colors.blue),
+                  const Icon(Icons.info_outline, size: 13, color: AppColors.info),
                   const SizedBox(width: 4),
                   Text(
                     '로컬 파일 사용 중 — 현재가·수익률은 미반영',
                     style: TextStyle(
-                        fontSize: 11, color: Colors.blue.shade700),
+                        fontSize: 11, color: AppColors.infoStrong),
                   ),
                 ],
               ),
@@ -270,7 +271,7 @@ class _UploadToolbar extends StatelessWidget {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('템플릿 생성 실패: $e'), backgroundColor: Colors.red),
+            content: Text('템플릿 생성 실패: $e'), backgroundColor: AppColors.priceDown),
       );
     }
   }
@@ -324,7 +325,7 @@ class _SummaryCardState extends State<_SummaryCard> {
     final cs = Theme.of(context).colorScheme;
     final p = widget.portfolio;
     final isPositive = p.totalReturnPct >= 0;
-    final returnColor = isPositive ? Colors.green : Colors.red;
+    final returnColor = isPositive ? AppColors.priceUp : AppColors.priceDown;
 
     final invested = _showKrw ? p.totalInvestedKrw : p.totalInvestedUsd;
     final current = _showKrw ? p.totalCurrentKrw : p.totalCurrentUsd;
@@ -377,7 +378,7 @@ class _SummaryCardState extends State<_SummaryCard> {
                   : '환율 조회 실패',
               style: TextStyle(
                 fontSize: 11,
-                color: p.usdkrw != null ? Colors.grey : Colors.orange,
+                color: p.usdkrw != null ? AppColors.mutedText : AppColors.warning,
               ),
             ),
           ],
@@ -433,14 +434,14 @@ class _ToggleBtn extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? cs.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: selected ? cs.primary : Colors.grey),
+          border: Border.all(color: selected ? cs.primary : AppColors.mutedText),
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
-            color: selected ? cs.onPrimary : Colors.grey,
+            color: selected ? cs.onPrimary : AppColors.mutedText,
           ),
         ),
       ),
@@ -460,7 +461,7 @@ class _MetricTile extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(label,
-            style: const TextStyle(fontSize: 11, color: Colors.grey),
+            style: const TextStyle(fontSize: 11, color: AppColors.mutedText),
             textAlign: TextAlign.center),
         const SizedBox(height: 4),
         Text(value,
@@ -533,7 +534,7 @@ class _WeightChart extends StatelessWidget {
                             Container(
                               height: 18,
                               decoration: BoxDecoration(
-                                color: Colors.grey.withAlpha(30),
+                                color: AppColors.mutedText.withAlpha(30),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                             ),
@@ -602,10 +603,10 @@ class _HoldingCard extends StatelessWidget {
     final returnPct = holding.returnPct;
     final isPositive = (returnPct ?? 0) >= 0;
     final returnColor = returnPct == null
-        ? Colors.grey
+        ? AppColors.mutedText
         : isPositive
-            ? Colors.green
-            : Colors.red;
+            ? AppColors.priceUp
+            : AppColors.priceDown;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -621,7 +622,7 @@ class _HoldingCard extends StatelessWidget {
                   const Padding(
                     padding: EdgeInsets.only(right: 6, top: 2),
                     child: Icon(Icons.warning_amber_rounded,
-                        size: 18, color: Colors.red),
+                        size: 18, color: AppColors.priceDown),
                   ),
                 // 종목명 + 티커
                 Expanded(
@@ -639,8 +640,8 @@ class _HoldingCard extends StatelessWidget {
                                 horizontal: 5, vertical: 1),
                             decoration: BoxDecoration(
                               color: holding.isKr
-                                  ? Colors.orange.withAlpha(40)
-                                  : Colors.blue.withAlpha(40),
+                                  ? AppColors.warning.withAlpha(40)
+                                  : AppColors.info.withAlpha(40),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -648,8 +649,8 @@ class _HoldingCard extends StatelessWidget {
                               style: TextStyle(
                                   fontSize: 10,
                                   color: holding.isKr
-                                      ? Colors.orange
-                                      : Colors.blue),
+                                      ? AppColors.warning
+                                      : AppColors.info),
                             ),
                           ),
                         ],
@@ -657,12 +658,12 @@ class _HoldingCard extends StatelessWidget {
                       Text(
                         holding.ticker,
                         style:
-                            const TextStyle(fontSize: 11, color: Colors.grey),
+                            const TextStyle(fontSize: 11, color: AppColors.mutedText),
                       ),
                       if (holding.entryDate.isNotEmpty)
                         Text(
                           '진입: ${holding.entryDate}',
-                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          style: const TextStyle(fontSize: 11, color: AppColors.mutedText),
                         ),
                     ],
                   ),
@@ -683,7 +684,7 @@ class _HoldingCard extends StatelessWidget {
                     Text(
                       '비중 ${holding.weightPct?.toStringAsFixed(1) ?? '-'}%',
                       style:
-                          const TextStyle(fontSize: 11, color: Colors.grey),
+                          const TextStyle(fontSize: 11, color: AppColors.mutedText),
                     ),
                   ],
                 ),
@@ -714,7 +715,7 @@ class _HoldingCard extends StatelessWidget {
                   _PriceChip(
                     label: 'SL',
                     value: holding.formatPrice(holding.stopLoss),
-                    color: Colors.red,
+                    color: AppColors.priceDown,
                   ),
               ],
             ),
@@ -724,18 +725,18 @@ class _HoldingCard extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withAlpha(20),
+                  color: AppColors.warning.withAlpha(20),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.orange.withAlpha(80)),
+                  border: Border.all(color: AppColors.warning.withAlpha(80)),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.swap_horiz_rounded,
-                        size: 14, color: Colors.orange),
+                        size: 14, color: AppColors.warning),
                     SizedBox(width: 4),
                     Text('매도 검토',
-                        style: TextStyle(fontSize: 12, color: Colors.orange)),
+                        style: TextStyle(fontSize: 12, color: AppColors.warning)),
                   ],
                 ),
               ),
@@ -745,18 +746,18 @@ class _HoldingCard extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.red.withAlpha(20),
+                  color: AppColors.priceDown.withAlpha(20),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.red.withAlpha(60)),
+                  border: Border.all(color: AppColors.priceDown.withAlpha(60)),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.warning_amber_rounded,
-                        size: 14, color: Colors.red),
+                        size: 14, color: AppColors.priceDown),
                     SizedBox(width: 4),
                     Text('스톱로스 이탈',
-                        style: TextStyle(fontSize: 12, color: Colors.red)),
+                        style: TextStyle(fontSize: 12, color: AppColors.priceDown)),
                   ],
                 ),
               ),
@@ -772,7 +773,7 @@ class _HoldingCard extends StatelessWidget {
                   child: Text(
                     holding.memo,
                     style:
-                        const TextStyle(fontSize: 11, color: Colors.grey),
+                        const TextStyle(fontSize: 11, color: AppColors.mutedText),
                   ),
                 ),
               ),
@@ -797,7 +798,7 @@ class _PriceChip extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            style: const TextStyle(fontSize: 10, color: AppColors.mutedText)),
         Text(value,
             style: TextStyle(
                 fontSize: 12,
@@ -825,19 +826,19 @@ class _AtrStopRow extends StatelessWidget {
     String statusLabel;
     IconData statusIcon;
     if (triggered || (distPct != null && distPct <= 0)) {
-      statusColor = Colors.red;
+      statusColor = AppColors.priceDown;
       statusLabel = '추세 이탈';
       statusIcon = Icons.trending_down;
     } else if (distPct != null && distPct <= 3) {
-      statusColor = Colors.red;
+      statusColor = AppColors.priceDown;
       statusLabel = '위험 ${distPct.toStringAsFixed(1)}%';
       statusIcon = Icons.warning_amber_rounded;
     } else if (distPct != null && distPct <= 7) {
-      statusColor = Colors.orange;
+      statusColor = AppColors.warning;
       statusLabel = '주의 ${distPct.toStringAsFixed(1)}%';
       statusIcon = Icons.info_outline;
     } else {
-      statusColor = Colors.green;
+      statusColor = AppColors.priceUp;
       statusLabel = distPct != null ? '안전 ${distPct.toStringAsFixed(1)}%' : '안전';
       statusIcon = Icons.check_circle_outline;
     }
@@ -902,7 +903,7 @@ class _AtrStopRow extends StatelessWidget {
                   height: 4,
                   width: constraints.maxWidth,
                   decoration: BoxDecoration(
-                    color: Colors.grey.withAlpha(40),
+                    color: AppColors.mutedText.withAlpha(40),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -951,9 +952,9 @@ class _RebalanceModeSelector extends ConsumerWidget {
               children: RebalanceMode.values.map((mode) {
                 final isSelected = mode == selected;
                 final color = switch (mode) {
-                  RebalanceMode.aggressive => Colors.red.shade600,
-                  RebalanceMode.balanced => Colors.blue.shade600,
-                  RebalanceMode.conservative => Colors.amber.shade700,
+                  RebalanceMode.aggressive => AppColors.priceDownMid,
+                  RebalanceMode.balanced => AppColors.infoMid,
+                  RebalanceMode.conservative => AppColors.rankGold,
                 };
                 return Expanded(
                   child: Padding(
@@ -971,7 +972,7 @@ class _RebalanceModeSelector extends ConsumerWidget {
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: isSelected ? color : Colors.grey.withAlpha(80),
+                            color: isSelected ? color : AppColors.mutedText.withAlpha(80),
                           ),
                         ),
                         child: Column(
@@ -992,7 +993,7 @@ class _RebalanceModeSelector extends ConsumerWidget {
                                 fontSize: 10,
                                 color: isSelected
                                     ? Colors.white.withAlpha(200)
-                                    : Colors.grey,
+                                    : AppColors.mutedText,
                               ),
                             ),
                           ],
@@ -1024,10 +1025,10 @@ class _LegacyPortfolioPlaceholder extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.account_balance_wallet_outlined,
-              size: 64, color: Colors.grey),
+              size: 64, color: AppColors.mutedText),
           SizedBox(height: 16),
           Text('포트폴리오',
-              style: TextStyle(fontSize: 16, color: Colors.grey)),
+              style: TextStyle(fontSize: 16, color: AppColors.mutedText)),
         ],
       ),
     );

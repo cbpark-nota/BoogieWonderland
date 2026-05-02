@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/screening_result.dart';
+import '../theme/app_colors.dart';
 
 /// ETH V10 시그널 위젯 — BtcSignalWidget과 동일 레이아웃, 라벨만 ETH로.
 /// (ETH V10 = BTC V10 신호 기반 ETH 카피 트레이딩)
@@ -11,7 +12,7 @@ class EthSignalWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isBuy = signal.signal == 'buy';
-    final color = isBuy ? Colors.green : Colors.grey;
+    final color = isBuy ? AppColors.priceUp : AppColors.mutedText;
     final icon = isBuy ? Icons.arrow_upward : Icons.remove;
     final label = isBuy ? '매수' : '관망';
     final priceStr = signal.price != null
@@ -88,7 +89,7 @@ class EthSignalWidget extends StatelessWidget {
                   regimeLabel,
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.grey.shade600,
+                    color: AppColors.mutedTextStrong,
                     fontStyle: FontStyle.italic,
                   ),
                 ),
@@ -112,7 +113,7 @@ class EthSignalWidget extends StatelessWidget {
                   signal.reason,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey.shade700,
+                    color: AppColors.secondaryText,
                   ),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 2,
@@ -126,7 +127,7 @@ class EthSignalWidget extends StatelessWidget {
               '기준: $timeStr (4h)',
               style: TextStyle(
                 fontSize: 10,
-                color: Colors.grey.shade500,
+                color: AppColors.placeholderText,
               ),
             ),
           ],
