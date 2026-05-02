@@ -1,18 +1,25 @@
 # 배포 계획서: 앱 + 웹 듀얼 타겟
 
-> **상태**: 토론용 초안 (v0.1, 2026-05-02 작성)
-> **결정**: 본 문서는 사용자 검토용 초안이다. 13개 결정 항목(D1~D13) 및 5장의 신규 항목(N1~N5)에 대해 사용자가 답을 확정한 뒤에야 실제 구현/마이그레이션 작업을 시작한다.
-> **자율 판단 금지**: 본 문서는 비교·정리·권장만 담는다. 단정형 결정은 포함하지 않는다.
-> **코드 변경 0건**: 본 PR/커밋은 문서 추가만 포함한다.
+> **상태**: v0.2 (2026-05-02 갱신) — 2개 핵심 결정 확정 후 반영본
+> **확정 결정 요약**:
+> 1. **N3 SSoT 모델**: "각 채널 독립 운영" — 앱·웹 각자 on-demand 스크리닝, 데이터 소스 공유 안 함. **cron 기반 정기 갱신 폐기**, 사용자 요청 시점에 스크리닝.
+> 2. **데이터 전송 방식**: **DB 저장 + 캐시 패턴**. 라이브 캐시 TTL 5분, 종가 스냅샷은 KST 06:30 / 15:35 두 번. 콜드 캐시 첫 사용자는 그냥 대기.
+> 3. **웹 측 Python 실행 (§3.2.2)**: **B. Cloudflare Containers** 확정. 웹 인프라 전체가 CF 단일 벤더 (D1 / R2 / KV / Workers / Cron Triggers).
+> **여전히 미결**: 앱 측 DB 종류, 인증/접근 제어, 코드 공유 구조, GH Actions 워크플로 처분, `backend/api` 처분, 비용·모니터링, 모바일 앱 base URL 분기 등 → §9 체크리스트 참조.
+> **코드 변경 0건**: 본 커밋은 문서 갱신만 포함.
+> **자율 판단 금지**: 미결 항목에 대해서는 단정형 결정을 포함하지 않는다.
 
 ---
 
 ## 0. TL;DR
 
 - 서비스를 **앱(모바일)** 과 **웹** 두 채널로 제공한다.
-- **앱 타겟**의 데이터 갱신/저장은 **호스트 머신**(자체 서버 또는 VPS)에서 수행 → `backend/app`(FastAPI + APScheduler + PostgreSQL) 활용.
-- **웹 타겟**의 데이터 갱신/저장은 **Cloudflare 계열 서버리스 환경**에서 수행 → 단, "Python 스크립트 실행"이라는 핵심 제약이 있어 옵션 A~E의 트레이드오프가 다음 큰 결정점이다.
-- 이 듀얼 타겟 결정만으로 D1~D13 중 다수 항목의 답이 채널별로 자동 분기된다(아래 4장 매트릭스 참고). 다만 **공통 코드 공유 / 데이터 sync / 인증 / 비용** 등 신규 결정 항목이 추가로 발생한다.
+- 두 채널은 **완전 독립 운영**: 같은 알고리즘·같은 외부 소스를 참조하지만 **공통 데이터 저장소·sync 절차 없음**. 미세한 결과 차이는 수용한다(§7.2).
+- **갱신 모델 전환**:
+  - 이전 모델: GitHub Actions cron (KR 04:00 / US 08:00 KST) → 정적 JSON push.
+  - **새 모델**: 사용자 요청 시점에 **on-demand 스크리닝** + **5분 TTL 라이브 캐시** + **KST 06:30(US 마감 후) / 15:35(KR 마감 후) 종가 스냅샷 2회 저장**.
+- **앱 타겟**: 호스트 머신(VPS/자체 서버)에 FastAPI(`backend/app`) + APScheduler(종가 스냅샷용 cron만 잔존) + DB. **DB 종류는 미결**.
+- **웹 타겟**: Cloudflare 단일 벤더. **CF Pages**(Flutter Web 호스팅) + **CF Workers**(API 라우팅) + **CF Containers**(Python 스크리너 실행) + **D1**(캐시 + 종가 스냅샷) + **R2**(정적 자산/대형 산출물) + **CF Cron Triggers**(종가 스냅샷 트리거).
 
 ---
 
@@ -20,34 +27,58 @@
 
 ### 1.1 현재 상태(2026-05-02 기준)
 
-- **프로덕션 모델**: GitHub Actions cron(KST 04:00 KR, KST 08:00 US) → Python 스크리너 실행 → 정적 JSON 산출 → GitHub Pages로 배포 → Flutter Web 앱이 정적 JSON을 fetch.
-- **DB**: 사용 안 함. 모든 결과는 `*.json` 파일로 저장.
+- **이전 프로덕션 모델** *(폐기 예정 — §7.5 GH Actions 워크플로 처분 결정 필요)*: GitHub Actions cron(KST 04:00 KR, KST 08:00 US) → Python 스크리너 → 정적 JSON → GitHub Pages → Flutter Web fetch.
+- **DB**: 사용 안 함. 결과는 `*.json` 파일.
 - **백엔드 코드**:
   - `backend/app/`: FastAPI + APScheduler + SQLAlchemy(async, asyncpg) + PostgreSQL + FCM. **구현은 되어 있으나 미사용.**
-  - `backend/api/`: 더 단순한 라우터 모듈(`main.py`, `screening.py`, `portfolio.py`). 역할 모호 (5장 N5 참조).
-- **프론트엔드**: Flutter (Web 빌드는 GitHub Pages에서 운영 중, iOS/Android/macOS/Windows 빌드 자산은 존재하나 **모바일 앱 빌드는 곧 시작 예정**).
-- **GitHub Actions 워크플로 5개**:
-  - `daily-screening.yml` — 일일 스크리닝(KR 04:00 / US 08:00 KST) + 서버리스 배포
-  - `_screening-deploy.yml` — 재사용 워크플로(스크리닝→Pages 배포)
-  - `deploy-web.yml` — Flutter Web 빌드/배포
-  - `btc-signal.yml` — BTC 신호
-  - `test.yml` — 테스트
-- **환경변수 분기**: `DEPLOY_ENV=serverless|local|cloud` 가 이미 코드에 존재 (구체 동작은 추후 확인 필요).
+  - `backend/api/`: 단순 라우터(`main.py`, `screening.py`, `portfolio.py`). **역할 모호** (§5 N5 참조).
+- **프론트엔드**: Flutter (Web 빌드는 GH Pages, iOS/Android 자산 존재, **모바일 앱 빌드 곧 시작**).
+- **GitHub Actions 워크플로 5개**: `daily-screening.yml` / `_screening-deploy.yml` / `deploy-web.yml` / `btc-signal.yml` / `test.yml`. 본 결정 후 처분 정책 필요.
+- **환경변수 분기**: `DEPLOY_ENV=serverless|local|cloud` 가 코드에 존재. on-demand 모델로 전환 시 `local` 변형 필요(§4 매트릭스 D7).
 
-### 1.2 사용자 시나리오 가정 (확정 필요)
+### 1.2 새 운영 모델 — "on-demand + 단기 캐시 + 종가 아카이브"
 
-| 채널 | 주 이용 시간 | 갱신 빈도 기대 | 푸시/알림 | 사용자 규모 가정 |
+#### 1.2.1 흐름
+```
+[사용자 요청] → [캐시 조회]
+       ├── HIT(< 5분 경과)  → 즉시 응답
+       └── MISS              → 스크리닝 실행 (5~30초 소요 예상)
+                              → DB(또는 캐시 테이블)에 저장
+                              → 응답
+                              → 다음 5분 동안 동일 요청은 HIT
+[종가 스냅샷 cron (06:30, 15:35 KST)]
+       → 강제 스크리닝 → "종가 스냅샷" 테이블에 영속 저장 (TTL 없음)
+```
+
+#### 1.2.2 캐시 정책 정리
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| 라이브 캐시 TTL (전체 시장 스크리닝) | **5분** | 비싼 작업. 캐시 적중률이 비용/응답 시간 핵심 |
+| 라이브 캐시 TTL (BTC/ETH 단일 시그널 등 싼 작업) | **짧은 TTL 또는 stateless** | 하이브리드. 정확한 TTL 값/매핑은 **미결** (§4 신규 항목) |
+| 종가 스냅샷 시점 | **KST 06:30** (US 정규장 마감 후), **KST 15:35** (KR 정규장 마감 후) | 시장별 스냅샷 페어 관리 |
+| 콜드 캐시 첫 사용자 정책 | **그냥 대기** | stale-while-revalidate 미사용. UX 위험은 §7.4 |
+
+> **하이브리드 매핑(=어떤 엔드포인트가 어느 TTL 그룹인지) 자체는 미결**. §9 체크리스트 항목.
+
+### 1.3 사용자 시나리오 가정 (검토 요망)
+
+| 채널 | 주 이용 시간 | 갱신 트리거 | 푸시/알림 | 사용자 규모 가정 |
 |---|---|---|---|---|
-| 앱 (iOS/Android) | 출퇴근/장중/장후 | 실시간성 기대 (장중 모니터링, 스톱 트리거 푸시) | FCM 푸시 필요 | 소수 ~ 중규모 (가정값 미확정) |
-| 웹 | 데스크톱 분석/공유 | 일 1~2회로 충분 | 불필요 | 가벼운 트래픽, 공개/공유 가능성 |
+| 앱 (iOS/Android) | 출퇴근/장중/장후 | 사용자 진입·새로고침 + 종가 cron | FCM 푸시 (스톱 트리거 등) | 소수~중규모 (값 미확정) |
+| 웹 | 데스크톱 분석/공유 | 사용자 진입·새로고침 + 종가 cron | 불필요 | 가벼운 트래픽 |
 
-> **미확정**: 위 가정은 검토용. 사용자 시나리오·규모 가정을 확정하지 않으면 비용/스케일 의사결정 정확도가 떨어진다.
+> 위 가정은 검토용. 비용·스케일 정밀도가 필요하면 사용자 규모 가정 확정 필요.
 
-### 1.3 트래픽·비용 가정 (개략)
+### 1.4 트래픽·비용 가정 (개략)
 
-- **웹**: 정적 JSON + 정적 SPA, 트래픽 < 10만 req/월 가정 시 Cloudflare Pages 무료 티어 내.
-- **앱 백엔드(호스트)**: VPS 1대(2vCPU/4GB) 기준 월 5~20 USD. PostgreSQL 동거 가정.
-- **데이터 갱신 컴퓨팅(웹용)**: Cloudflare Containers 또는 별도 PaaS(Railway/Fly.io/Render) 가격은 옵션 비교 표(3.2.2) 참조.
+- **웹**: CF Pages(정적) + Workers(요청 라우팅) + Containers(스크리닝) + D1/R2.
+  - Pages: 무료 티어 가정.
+  - Workers: 100k req/day 무료 티어 가정.
+  - Containers: 신규 서비스 — 정확 요금/가용성 검증 필요(§7.3).
+  - D1/R2: 무료 티어 또는 소액.
+- **앱 백엔드(호스트)**: VPS 1대(2vCPU/4GB, 월 5~20 USD) + DB 동거.
+- **종가 스냅샷 cron**: 일 2~4회 실행. on-demand 캐시 미스 비용은 사용자 진입 패턴에 종속.
 
 ---
 
@@ -58,71 +89,95 @@
 ```
 ┌──────────────────────┐
 │ Flutter iOS/Android  │
-│  (모바일 앱 패키지)   │
 └──────────┬───────────┘
-           │ HTTPS REST + (FCM Push 수신)
+           │ HTTPS REST  +  (FCM Push 수신)
            ▼
-┌──────────────────────────────────────────────┐
-│  Host Machine (VPS / 자체 서버)               │
-│ ┌──────────────────────────────────────────┐ │
-│ │ FastAPI (backend/app)                    │ │
-│ │  - /api/screening, /api/portfolio, ...   │ │
-│ │ APScheduler                              │ │
-│ │  - 일간 스크리닝 / 스톱체크 / 리밸런싱   │ │
-│ │  - run_screening() 호출 (in-process)     │ │
-│ └────────────┬─────────────────────────────┘ │
-│              │                               │
-│ ┌────────────▼────────────┐  ┌────────────┐ │
-│ │ PostgreSQL              │  │ FCM 자격증명│ │
-│ │  - ScreeningRun/Result  │  │ (서비스계정)│ │
-│ │  - Holding, DeviceToken │  └────────────┘ │
-│ └─────────────────────────┘                  │
-│                                              │
-│ scripts/screener/*.py  ← 동일 코드 import    │
-└──────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│  Host Machine (VPS / 자체 서버)                           │
+│ ┌──────────────────────────────────────────────────────┐ │
+│ │ FastAPI (backend/app)                                │ │
+│ │  GET /api/screening                                  │ │
+│ │   ├─ DB 캐시 조회 (TTL 5분)                          │ │
+│ │   │    HIT  → 즉시 응답                              │ │
+│ │   │    MISS → run_screening() 동기 실행 (5~30s)      │ │
+│ │   │           → 캐시 테이블 INSERT                   │ │
+│ │   │           → 응답                                  │ │
+│ │   └─ /api/screening/snapshot/{date} → 종가 스냅샷    │ │
+│ │                                                      │ │
+│ │ APScheduler (cron 2회만 잔존)                        │ │
+│ │  - KST 06:30 → US 종가 스냅샷 강제 갱신 + 저장       │ │
+│ │  - KST 15:35 → KR 종가 스냅샷 강제 갱신 + 저장       │ │
+│ │  - (선택) 스톱 체크 잡 — N4/N5와 함께 결정           │ │
+│ └────────────┬─────────────────────────────────────────┘ │
+│              │                                           │
+│ ┌────────────▼────────────┐  ┌────────────────────────┐  │
+│ │ DB (Postgres or SQLite) │  │ FCM 자격증명 (선택)     │  │
+│ │  - cache_snapshot       │  │ /etc/momentum/fcm.json  │  │
+│ │  - eod_snapshot         │  └────────────────────────┘  │
+│ │  - holdings (모바일별)  │                              │
+│ │  - device_tokens        │                              │
+│ └─────────────────────────┘                              │
+│                                                          │
+│ scripts/screener/*.py  ← 호스트 Python 모노레포 import   │
+└──────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 웹 타겟 — Cloudflare-like 서버리스
+### 2.2 웹 타겟 — Cloudflare 단일 벤더 (옵션 B 확정)
 
 ```
 ┌──────────────────────┐
 │ Flutter Web build    │
 │  (정적 SPA)          │
 └──────────┬───────────┘
-           │ HTTPS GET (정적 JSON or REST)
+           │ HTTPS GET (HTML/JS/CSS/icons)
            ▼
-┌──────────────────────────────────────────────┐
-│  Cloudflare Pages                            │
-│  (Flutter Web 정적 호스팅)                   │
-└──────────┬───────────────────────────────────┘
-           │  fetch JSON (R2/KV/Pages 정적 파일)
-           ▼
-┌──────────────────────────────────────────────┐
-│  데이터 저장: R2 / KV / D1 (옵션)            │
-└──────────────────────────────────────────────┘
-           ▲
-           │ 데이터 갱신 push
+┌──────────────────────────────────────────────────────────┐
+│  Cloudflare Pages                                        │
+│  (Flutter Web 정적 호스팅 + 도메인)                       │
+└──────────┬───────────────────────────────────────────────┘
            │
-┌──────────┴───────────────────────────────────┐
-│  데이터 갱신 컴퓨팅 (옵션 A~E 중 선택)        │
-│  - A: CF Workers Python (베타)               │
-│  - B: CF Containers + cron                   │
-│  - C: 외부 PaaS(Railway/Fly/Render) cron     │
-│  - D: GitHub Actions 유지 (현행)             │
-│  - E: TS로 포팅                              │
-└──────────────────────────────────────────────┘
+           │  fetch /api/screening, /api/snapshot/{date}, ...
+           ▼
+┌──────────────────────────────────────────────────────────┐
+│  Cloudflare Workers (라우팅 + 캐시 게이트)                │
+│   - GET /api/screening                                   │
+│      ├─ D1 캐시 조회 (TTL 5분)                           │
+│      │    HIT  → 즉시 응답                               │
+│      │    MISS → CF Containers 호출 (Python 스크리너)    │
+│      │           → 결과 D1 INSERT                        │
+│      │           → 응답                                   │
+│      └─ /api/snapshot/{date} → D1 종가 스냅샷 조회        │
+│   - (선택) R2 의 대형 산출물(parquet, history) 직접 서명URL│
+└──────────┬───────────────────────────────────────────────┘
+           │ 호출
+           ▼
+┌──────────────────────────────────────────────────────────┐
+│  Cloudflare Containers                                   │
+│   - Docker 이미지 = scripts/screener/* + python deps     │
+│   - 입력: 시장 코드(US/KR), 모드(live/snapshot)          │
+│   - 출력: JSON 결과                                       │
+└──────────┬───────────────────────────────────────────────┘
+           │ 종가 스냅샷 결과 저장 (대형은 R2)
+           ▼
+┌──────────────────────────────────────────────────────────┐
+│  D1 (cache + eod_snapshot)   |   R2 (대형 산출물)         │
+└──────────────────────────────────────────────────────────┘
+           ▲
+           │ 트리거
+           │
+┌──────────┴───────────────────────────────────────────────┐
+│  Cloudflare Cron Triggers                                │
+│   - KST 06:30 → Worker → Container → US 종가 스냅샷 저장 │
+│   - KST 15:35 → Worker → Container → KR 종가 스냅샷 저장 │
+└──────────────────────────────────────────────────────────┘
 ```
 
-### 2.3 데이터 정합성
+### 2.3 데이터 정합성 (각 채널 독립 모델 채택의 의미)
 
-- **두 타겟이 같은 데이터를 보여주는가?** — 같은 사용자라면 동일 결과를 기대할 가능성이 높음(같은 알고리즘, 같은 유니버스).
-- **갱신 시점 sync 문제**:
-  - 두 환경이 각자 cron을 돌리면 **결과 산출 시각 차이**, **외부 API(yfinance 등) 응답 차이**, **시드 의존성** 등으로 미세 불일치 가능.
-  - 단일 진실 소스(SSoT) 전략(신규 항목 N3에서 다룸):
-    - (a) 호스트만 갱신 → 웹은 호스트 산출물을 fetch
-    - (b) 웹용만 갱신 → 호스트는 웹 산출물을 import
-    - (c) 두 환경 독립 갱신 + 공통 sanity check
-- **권고 톤**: 어느 모델이든 "어느 쪽이 SSoT인가"를 먼저 정해야 한다. 사용자 결정 항목 N3 참고.
+- 앱과 웹은 **공유 저장소를 두지 않는다**. 각자 자기 DB(앱: 호스트 DB, 웹: D1)에 캐시·스냅샷을 가진다.
+- 같은 시각에 두 채널이 스크리닝해도 외부 소스(yfinance/pykrx) 응답 시점·결측 처리·실행 머신 차이로 **결과가 미세하게 다를 수 있음**. 본 결정은 그 차이를 **수용**하는 입장.
+- 종가 스냅샷도 두 채널에서 별도 저장. 일치 검증 절차 없음.
+- 위험 인지·대응은 §7.2.
 
 ---
 
@@ -131,187 +186,197 @@
 ### 3.1 앱 (모바일) — 호스트 머신 백엔드
 
 #### 3.1.1 컴포넌트
-- **프론트엔드**: Flutter (iOS/Android 빌드). API base URL은 환경별 분기 필요(N2).
-- **백엔드 프레임워크**: `backend/app/` 의 FastAPI (이미 구현되어 있는 자산 활용).
-- **스케줄러**: `backend/app/scheduler.py` 의 APScheduler (동일 프로세스 in-process).
-- **DB**: PostgreSQL (config.py 기본값 `postgresql+asyncpg://...`).
-- **푸시**: Firebase Cloud Messaging — `app/services/notification.py`, 자격증명 파일은 `APP_FCM_CREDENTIALS_PATH` 환경변수.
+- **프론트엔드**: Flutter (iOS/Android). API base URL 환경 분기 정책 미결(§5 N2).
+- **백엔드 프레임워크**: `backend/app/` 의 FastAPI 활용.
+- **스케줄러**: `backend/app/scheduler.py` — 정기 cron은 **종가 스냅샷 2회(06:30/15:35 KST)** 만 잔존. 일간 스크리닝 잡은 on-demand 모델로 전환되어 사실상 폐기 (코드 수정은 단계 1에서).
+- **DB**: **종류 미결** (Postgres vs SQLite — §4 D1 / §9 체크리스트).
+  - `backend/app/config.py` 의 기본값은 `postgresql+asyncpg://...`. SQLite로 가면 `aiosqlite` 드라이버로 전환 + `alembic` 호환성 점검 필요.
+- **푸시**: Firebase Cloud Messaging — `app/services/notification.py`, 자격증명은 `APP_FCM_CREDENTIALS_PATH`.
 
 #### 3.1.2 데이터 갱신 흐름
-- APScheduler가 `run_screening()` (즉, `scripts/screener/screener_v3*.py` 로직) 을 **함수 호출** 로 실행.
-- 결과는 `ScreeningRun` / `ScreeningResult` 테이블에 INSERT.
-- 모바일 앱은 REST `/api/screening`, `/api/portfolio`, `/api/market` 호출.
-- 스톱 트리거 발생 시 `DeviceToken` 대상으로 FCM push.
+- **on-demand**: 모바일 앱이 `/api/screening` 호출 → DB 캐시 조회(TTL 5분) → MISS면 `run_screening()` **함수 호출(in-process)** → 결과 INSERT → 응답.
+- **종가 스냅샷**: APScheduler 가 KST 06:30 / 15:35 에 강제 실행 → `eod_snapshot` 테이블 INSERT (TTL 없음, 영속).
+- **싼 작업(BTC/ETH 시그널)**: 짧은 TTL 또는 stateless. 매핑은 미결.
 
 #### 3.1.3 운영
 - 단일 호스트(VPS) — `uvicorn` + systemd 또는 docker compose 1대.
-- 백업: PostgreSQL `pg_dump` cron, 외부 스토리지로 업로드.
+- 백업: DB `pg_dump` 또는 SQLite 파일 cron 복사 → 외부 스토리지.
 - 모니터링: 별도 결정 필요(N5).
 
-### 3.2 웹 — Cloudflare-like 서버리스
+### 3.2 웹 — Cloudflare 단일 벤더 (옵션 B 확정)
 
 #### 3.2.1 컴포넌트
-- **호스팅**: Cloudflare Pages (현재 GitHub Pages → Cloudflare Pages 이전 가정).
-- **빌드**: Flutter Web (`fvm flutter build web --base-href /`).
-- **데이터 갱신**: Python 실행이라는 핵심 제약 → 옵션 A~E 중 택일 필요.
-- **데이터 저장**: R2(S3 호환 오브젝트), KV(소형 KV), D1(SQLite 호환 RDB) 중 택일.
+- **호스팅**: Cloudflare Pages — Flutter Web 빌드 산출물.
+- **라우팅·캐시 게이트**: Cloudflare Workers (TS/JS) — `/api/*` 진입점, D1 캐시 조회 후 MISS 시 Containers 호출.
+- **스크리너 실행**: Cloudflare Containers — 호스트 측과 동일한 `scripts/screener/*` Python 코드 베이스를 Docker 이미지로 빌드.
+- **DB**: D1 (SQLite 호환). 캐시 + 종가 스냅샷.
+- **오브젝트 스토리지**: R2 — 대형 산출물(parquet, history archive) 또는 정적 자산.
+- **KV**: 작은 키/값(예: 마지막 cron 실행 시각). **사용 여부는 미결** — 단계 3에서 확정 가능.
+- **cron**: Cloudflare Cron Triggers — Worker 발화 → Container 호출.
 
-#### 3.2.2 Python 실행 옵션 비교 (핵심 결정점)
+#### 3.2.2 Python 실행 옵션 비교 — **B 선택 확정**
 
-| 옵션 | 설명 | 장점 | 단점 | 적합도 메모 |
-|---|---|---|---|---|
-| **A. CF Workers Python (베타)** | Pyodide 기반 Python 런타임을 Workers 위에서 실행 | • CF 단일 콘솔로 통합<br>• 서버리스, scale-to-zero | • **베타** — 안정성·SLA 약함<br>• `pandas`/`yfinance`/`pykrx` 등 C-extension 의존 패키지 호환성 제한<br>• 메모리/실행 시간 한계(Workers 제약 적용)<br>• 콜드 스타트 시 패키지 로딩 비용 | 현재 의존성 셋(yfinance/pandas/pykrx/scipy 등)과 호환성 확인 필요. 그대로 쓰기 어려울 가능성 큼. |
-| **B. CF Containers + cron** | Docker 컨테이너를 CF 인프라에서 cron 트리거로 실행 | • Python/의존성 자유도 그대로<br>• CF 단일 벤더 유지<br>• cron 트리거 내장 | • **신규 기능** — 가용성·요금 변경 가능성<br>• 콜드 스타트/타임아웃 정책 확인 필요<br>• 지역 가용성/제한 확인 필요 | 가장 직관적인 후보 중 하나. 가격·SLA·Trigger 한도 검증 필요. |
-| **C. 외부 PaaS cron + R2/KV push** | Railway/Fly.io/Render 등에서 Python cron 실행 → 결과를 R2/KV에 업로드 → CF Pages에서 fetch | • Python 환경 100% 자유<br>• 안정적/보편적 패턴<br>• 벤더 락인 분산 | • 멀티 벤더 운영<br>• 인증/시크릿 관리가 두 곳<br>• 외부 PaaS 요금 별도 | 안정성·자유도 측면에서 가장 무난. |
-| **D. GH Actions 유지 + CF Pages만 호스팅 이전** | 현행 모델에서 호스팅만 GitHub Pages → CF Pages 이전 | • **사실상 변경 0**<br>• 검증된 모델<br>• 비용 거의 무증가 | • 사용자가 "Cloudflare 같은 서버리스에서 갱신"이라고 명시한 요구와 부합하지 않음<br>• GH Actions 분 사용량 제약(public repo면 무제한, private 시 한도) | 사용자가 "Cloudflare에서 갱신 수행" 을 명확히 요구했으므로 후보로만 둠. 그러나 가장 리스크 적음. |
-| **E. TS 포팅** | 스크리닝 로직 전체를 TypeScript로 재구현하여 Workers JS에서 실행 | • Workers 네이티브, 가장 가벼움<br>• 호환성 고민 없음 | • **대규모 리팩터** — 알고리즘 동치성 검증 부담<br>• yfinance/pykrx 대체 데이터 소스 필요<br>• 백테스트/연구 코드는 Python 그대로라 이중 유지보수 | 단기 비추, 장기 옵션. |
+| 옵션 | 설명 | 결과 |
+|---|---|---|
+| A. CF Workers Python (베타) | Pyodide 기반 Workers Python | **탈락** — pandas/yfinance/pykrx 호환성 위험, 베타 |
+| **B. CF Containers + cron** | **Docker 컨테이너 + CF Cron Triggers** | **선택됨** — Python 자유도 + CF 단일 벤더 |
+| C. 외부 PaaS cron + R2 push | Railway/Fly/Render 등에서 갱신 | 탈락 — 멀티벤더 운영 회피 |
+| D. GH Actions 유지 + CF Pages만 이전 | 사실상 변경 0 | 탈락 — on-demand 모델/CF 통합 요구와 부합 X |
+| E. TS 포팅 | 스크리닝 로직을 TS로 재구현 | 탈락 — 대규모 리팩터, 이중 유지보수 |
 
-> **권고 톤**: 위 5개 중 **B(Containers)** 또는 **C(외부 PaaS + R2)** 가 "Python 자유도 + 서버리스 정신" 양립 면에서 무난해 보임. **D(현상 유지)** 는 안전판으로 둘 만함. **A/E** 는 추가 실험·리팩터 비용이 큼. **사용자 결정 필요.**
+> **B 선택의 함의**:
+> - 웹 인프라 전체가 CF 단일 벤더로 묶임 → 락인 강해짐 (§7.3)
+> - Containers는 신규 서비스 — 가용성·요금·콜드 스타트 정책을 단계 3 시작 시 검증 필수
+> - 호스트 측 Python 코드와 컨테이너 내 Python 코드가 **동일 모듈 트리**여야 운영 단순 → §5 N1 (코드 공유) 결정 필요
 
-#### 3.2.3 데이터 저장소 비교
+#### 3.2.3 데이터 저장소 — **D1 + R2 사용 확정 (KV 선택)**
 
-| 저장소 | 형식 | 용량/요금(개략) | 적합도 |
-|---|---|---|---|
-| **R2** | 오브젝트 스토리지(S3 호환) | 10GB까지 무료, 이그레스 무료 | 정적 JSON/parquet 산출물 보관에 적합 |
-| **KV** | 글로벌 KV | 작은 키/값, 읽기 매우 빠름 | "최신 결과 1개" 같은 hot path에 적합, 큰 페이로드 비추 |
-| **D1** | SQLite 호환 RDB | 베타 → GA 진행 중 | 이력/검색 쿼리가 필요해질 때 |
-
-> **권고 톤**: 정적 JSON 산출물이 그대로면 **R2** 가 무난. 이력 조회/필터가 필요하면 **D1** 로 확장 검토. 사용자 결정 필요.
+| 저장소 | 용도 | 사용 |
+|---|---|---|
+| **D1** (SQLite 호환) | `cache_snapshot`, `eod_snapshot` 테이블 | **사용 확정** |
+| **R2** (S3 호환) | parquet, history, 대형 정적 산출물 | **사용 확정** (정적 자산만) |
+| **KV** (글로벌 KV) | hot path 소형 키 (예: 마지막 갱신 ts) | **선택** — 단계 3에서 필요 시 추가 |
 
 ---
 
-## 4. 13개 결정 항목 매트릭스
+## 4. 13개 결정 항목 매트릭스 (+ 신규 3 항목)
 
-> **읽는 법**: 각 항목은 **앱 타겟**과 **웹 타겟**에서 답이 다를 수 있다. 듀얼 타겟 결정으로 자동 해결되는 부분과, 그래도 사용자 결정이 남는 부분을 분리한다.
+> **읽는 법**: ✅ = 본 갱신으로 결정됨. ❓ = 사용자 결정 필요. 채널별로 답이 분기됨.
 
-| ID | 항목 | 앱 타겟 (호스트) | 웹 타겟 (CF-like) | 사용자 결정 필요 |
-|---|---|---|---|---|
-| **D1** | DB 종류 | PostgreSQL (`backend/app/config.py` 기본값) | 정적 JSON(R2) / KV / D1 중 택일 | 웹 측 저장소 선택 (R2/KV/D1) |
-| **D2** | 백엔드 구현 (`backend/app` vs `backend/api`) | `backend/app` 사용 (FastAPI + APScheduler + ORM 풀스택) | 백엔드 프로세스 없음(서버리스). 단 데이터 생성 스크립트는 `scripts/screener/*` 직접 사용 | `backend/api` 의 존속 여부(N5에서 다룸) |
-| **D3** | 스케줄러 라이브러리 / 작업 정의 위치 | APScheduler (`backend/app/scheduler.py` 그대로) | 옵션별로 다름:<br>• B: CF Containers cron<br>• C: 외부 PaaS cron(또는 별도 워커)<br>• D: GitHub Actions cron(현행 유지) | 웹 측 옵션 선택(3.2.2) — D3 답이 거기 종속 |
-| **D4** | 스케줄러가 호출할 인터페이스 | **함수 호출**(in-process). `run_screening()` 직접 import | 옵션별로 다름:<br>• A: 함수 호출(베타 제약)<br>• B/C: 컨테이너 안에서 `python script.py` subprocess 또는 함수 호출<br>• D: GH Actions에서 `python` 그대로 | 옵션 결정 후 자동 종속 |
-| **D5** | 갱신 주기 | 사용자 정책에 따름. 추천 후보:<br>• 일 2회 (현행 모델 그대로)<br>• 장중 추가(예: 30분 간격, 시장 시간 동안)<br>• 푸시 트리거(스톱 체크는 더 잦게) | 일 2회(KR 04:00, US 08:00 KST) 유지 권장 (현행과 동일) | **앱 측에서 추가 잦은 주기를 운영할지 여부** |
-| **D6** | 출력 파일/데이터 저장 위치 | DB(PostgreSQL) — `ScreeningRun` / `ScreeningResult` 테이블 | R2 버킷(또는 KV/D1). Pages 정적 파일도 검토 가능 | 웹 측 저장 매체 결정 |
-| **D7** | 프론트엔드 동작 모드 | **로컬 API 모드** — `lib/config/api_config.dart` 의 base URL을 호스트 백엔드로 | **서버리스 정적 JSON 모드** — 현행과 동일 | 환경별 base URL 분기 전략(N2) |
-| **D8** | 포트 할당 | FastAPI 8000(기본), PostgreSQL 5432. 호스트에서 reverse proxy(Caddy/nginx) 80/443 | 해당 없음 (서버리스) | 호스트 측 reverse proxy 선택 |
-| **D9** | 환경변수 파일/설정 위치 | `.env` (호스트 머신 로컬), `APP_*` prefix(`backend/app/config.py`). 시크릿은 systemd `Environment=` 또는 `.env` 권한 600 | CF Pages 환경변수 + Workers/Containers Secrets, GH Actions Secrets(옵션 D 시) | 시크릿 매니저 선택 (특히 FCM 자격증명 위치) |
-| **D10** | 의존성 설치 방식 | `uv sync` (개인 Mac) 또는 `pip install -r` 컨테이너 내부 (Linux 호스트) | 옵션별로 다름. B: Docker 이미지에 빌드. C: PaaS 빌드. D: GH Actions 캐시. | 호스트 운영 방식(systemd vs docker compose) |
-| **D11** | DB 마이그레이션 방식 | `alembic upgrade head` (이미 `backend/alembic/` 존재) | 해당 없음(R2/KV) 또는 D1 일 경우 D1 마이그레이션 도구 | D1 채택 시 마이그레이션 전략 |
-| **D12** | 시작 명령 / 단일 진입점 | docker compose 1개 파일에서 `db + api`. `deploy/docker/docker-compose.yml` 기존 자산 활용 검토 | 빌드 명령(`fvm flutter build web`) + 배포(`wrangler` 등) | 호스트 운영 매뉴얼 1쪽 작성 여부 |
-| **D13** | `portfolio.xlsx` 위치 / 캐시 디렉토리 | 호스트의 정해진 경로(예: `/var/lib/momentum/portfolio.xlsx`) + `data_cache/` | R2 버킷 내 prefix 또는 빌드 시 동봉 | `portfolio.xlsx` 의 SSoT 정의(누가 편집/업로드?) — 5장 N1 일부와 연결 |
+| ID | 항목 | 앱 타겟 (호스트) | 웹 타겟 (CF) |
+|---|---|---|---|
+| **D1** | DB 종류 | ❓ **미결** — Postgres vs SQLite | ✅ **D1** (+ R2 보조) |
+| **D2** | 백엔드 구현 (`backend/app` vs `backend/api`) | ✅ `backend/app` 사용 | ✅ 백엔드 프로세스 없음 — Workers + Containers (`backend/api` 처분은 N5) |
+| **D3** | 스케줄러 라이브러리 / 작업 정의 위치 | ✅ APScheduler (잡은 종가 스냅샷 2회만 잔존) | ✅ **CF Cron Triggers** (06:30 / 15:35 KST) |
+| **D4** | 스케줄러가 호출할 인터페이스 | ✅ **함수 호출(in-process)** — `run_screening()` | ✅ **Worker → Container HTTP 호출** (Container 내부는 함수 호출 또는 subprocess — 컨테이너 진입점 설계 시 결정) |
+| **D5** | 갱신 주기 | ✅ on-demand + 종가 스냅샷 2회. 별도 정기 cron 없음 | ✅ on-demand + 종가 스냅샷 2회. 별도 정기 cron 없음 |
+| **D6** | 출력 파일/데이터 저장 위치 | ✅ DB 테이블(`cache_snapshot`, `eod_snapshot`). 파일 산출물은 비핵심 | ✅ D1 테이블(동일 스키마 권장) + 대형은 R2 |
+| **D7** | 프론트엔드 동작 모드 | ✅ **로컬 REST API 모드** (모바일이 호스트 백엔드 호출) — `DEPLOY_ENV=local` 변형 정합성 점검 필요 | ✅ Workers `/api/*` → 정적 SPA가 호출. 정적 JSON 직접 fetch 모델은 폐기 |
+| **D8** | 포트 할당 | ❓ FastAPI 8000 + DB(5432 or SQLite 파일) + reverse proxy(80/443). 구체 매핑 미결 | ✅ 해당 없음 (서버리스) |
+| **D9** | 환경변수 파일/설정 위치 | ❓ `.env` 위치/시크릿 매니저 미결 (특히 FCM 자격증명) | ✅ CF Pages 환경변수 + Workers/Containers Secrets (CF 표준 패턴) |
+| **D10** | 의존성 설치 방식 | ❓ `uv sync` (개인 Mac) vs Docker (Linux 호스트) 미결 | ✅ Docker 이미지 빌드(컨테이너) — `pyproject.toml` 또는 `requirements.txt` 기반 |
+| **D11** | DB 마이그레이션 방식 | ❓ Alembic (Postgres) 또는 Alembic+aiosqlite (SQLite) — DB 종류 결정 후 자동 종속 | ✅ **D1 마이그레이션 도구**(`wrangler d1 migrations`) |
+| **D12** | 시작 명령 / 단일 진입점 | ❓ docker compose vs systemd 미결 | ✅ `wrangler deploy` (Workers + Cron Triggers + Containers) + Pages 배포 |
+| **D13** | `portfolio.xlsx` 위치 / 캐시 디렉토리 | ❓ 호스트 경로 미결 (예: `/var/lib/momentum/portfolio.xlsx`) | ❓ R2 prefix vs 컨테이너 이미지 동봉 미결 — 누가 편집/업로드하는지 SSoT 정의 필요 |
 
-> **요약**: 듀얼 타겟 결정으로 D1·D2·D3·D4·D6·D7·D8·D11·D12 는 채널별로 자동 분기됨. **여전히 사용자 결정이 필요한 핵심 잔여 항목**:
-> - 웹 측 Python 실행 옵션 (A/B/C/D/E)
-> - 웹 측 저장소 (R2/KV/D1)
-> - 앱 측 갱신 주기 정책(D5)
-> - 시크릿 매니저(D9)
-> - `portfolio.xlsx` SSoT(D13/N1)
+### 4.1 신규 항목 (on-demand + 캐시 모델 도입으로 추가)
+
+| 신규 ID | 항목 | 결정 / 미결 |
+|---|---|---|
+| **C1** | 라이브 캐시 TTL | ✅ 전체 시장 스크리닝 = **5분**. 싼 작업(BTC/ETH 시그널 등) = 짧은 TTL 또는 stateless. **엔드포인트별 TTL 매핑 표는 미결** (§9 체크리스트) |
+| **C2** | 종가 스냅샷 시점 | ✅ **KST 06:30** (US 정규장 마감 후) + **KST 15:35** (KR 정규장 마감 후) |
+| **C3** | 콜드 캐시 정책 | ✅ **그냥 대기** — stale-while-revalidate 미사용. 첫 사용자는 5~30초 로딩. **로딩 인디케이터/예상 시간 표시 정책은 UX 권장 사항으로 §7.4** |
+
+### 4.2 매트릭스 요약
+- 본 결정으로 **자동 해결된 항목**: D2(앱), D3, D4, D5, D6, D7, D11(웹), D12(웹), C1·C2·C3(원칙).
+- **여전히 사용자 결정이 필요한 항목**: D1(앱), D8(앱), D9(앱), D10(앱), D11(앱), D12(앱), D13, 그리고 §5 N1·N2·N4·N5, C1 매핑 표.
 
 ---
 
 ## 5. 신규 결정 항목 (듀얼 아키텍처 도입으로 발생)
 
-### N1. 코드 공유: 두 백엔드가 공통 Python 로직을 어떻게 공유?
-
-- **현황**: 스크리닝 로직은 `scripts/screener/*.py` 와 `backend/app/services/screener.py` 가 공존(추정). 단일 진실 소스 정의 필요.
+### N1. 코드 공유 — 호스트 Python ↔ CF Container Python ❓ **미결**
+- **현황**: 같은 `scripts/screener/*.py` 와 `backend/app/services/screener.py` 를 두 환경이 모두 실행해야 함. 컨테이너 이미지는 호스트 코드를 빌드 시점에 동봉.
 - **옵션**:
-  - (a) 단일 모듈 + 양쪽이 동일 Python 모듈 import (현재 단일 repo이므로 자연스러움)
-  - (b) 공통 패키지(`momentum_core/`)로 분리 → `scripts/`, `backend/app/`, `웹용 컨테이너` 모두 import
-  - (c) 코드 복제 (비추, 일관성 위험)
-- **권고 톤**: 단일 repo이므로 (b) 가 자연스러워 보임. 단, 분리 비용·테스트 영향 검토 필요. **사용자 결정**.
+  - (a) 단일 모노레포 + 양쪽이 동일 Python 패키지 import (현 구조)
+  - (b) 공통 패키지(`momentum_core/`)로 분리 → 호스트 / 컨테이너 / 스크립트 모두 import
+  - (c) 코드 복제 (비추)
+- **결정 필요 질문**:
+  - 모노레포 구조를 유지할 것인가? (b)로 분리할 가치가 있는가?
+  - CF Container 이미지 빌드 시 호스트 코드를 어떻게 가져올 것인가? (`pyproject.toml` build context vs git submodule vs 단일 Dockerfile에서 전체 repo COPY)
 
-### N2. 모바일 앱의 API base URL 환경별 분기
-
-- **현황**: `frontend/lib/config/api_config.dart` 가 base URL을 보유한다고 추정.
+### N2. 모바일 앱의 API base URL 환경별 분기 ❓ **미결**
+- **현황**: `frontend/lib/config/api_config.dart` 가 base URL을 보유한다고 추정. 모바일 앱은 항상 호스트 백엔드를 호출하지만, 개발/스테이징/프로덕션 호스트가 다를 수 있음.
 - **옵션**:
-  - (a) `--dart-define` 빌드 플래그 (`API_BASE_URL=https://...`)로 빌드 시 주입
-  - (b) Flutter flavor (dev/staging/prod)로 분리
-  - (c) 런타임 설정 화면에서 사용자가 입력
-- **권고 톤**: (a) 가 가장 단순. 다만 앱스토어 빌드 vs 사이드로드 빌드의 base URL이 다를 수 있어 (b) 도 검토할 만함. **사용자 결정**.
+  - (a) `--dart-define=API_BASE_URL=https://...` 빌드 플래그
+  - (b) Flutter flavor (dev/staging/prod)
+  - (c) 런타임 설정 화면에서 사용자 입력
+- **결정 필요 질문**: 모바일 앱 빌드 파이프라인에서 어느 방식이 가장 단순한가?
 
-### N3. 데이터 sync — 두 환경이 동시에 cron 돌면 어떻게 SSoT 유지?
+### N3. SSoT — 데이터 sync ✅ **확정**
+- **결정**: 각 채널 독립 운영. 공유 저장소·sync 절차·일치 검증 모두 없음. 결과 미세 차이 수용.
+- **함의**: 본 결정으로 §3.2.2 의 옵션 후보가 좁혀졌고(B 선택), 갱신 모델이 cron 기반에서 on-demand + 종가 cron 으로 전환됨.
 
-- **위험**: 같은 알고리즘이라도 외부 데이터 소스의 응답 시점·캐시·결측 처리에 따라 미세하게 다른 결과가 나올 수 있음. 사용자가 앱과 웹에서 다른 결과를 보면 신뢰도 손상.
-- **옵션**:
-  - (a) **호스트 SSoT 모델**: 호스트가 갱신 → 결과를 R2에 업로드 → 웹은 R2 fetch (웹 측 컴퓨팅 불필요)
-  - (b) **웹 SSoT 모델**: 웹용 컴퓨팅이 갱신 → 결과를 호스트가 fetch → DB에 INSERT
-  - (c) **독립 갱신 + sanity check**: 두 환경이 각자 갱신 후 일치성 검증 작업
-- **권고 톤**: 운영 단순성 면에서 (a) 가 매력적. (a) 를 택하면 웹 측 컴퓨팅 옵션 자체가 단순화(D 옵션에 가까워짐)됨. **사용자 결정**.
+### N4. 인증/접근 제어 ❓ **미결**
+- **호스트 백엔드 노출**: 모바일 앱이 외부에서 호출하므로 공개 도메인/IP 필요. 인증 미적용 시 누구나 호출 가능.
+- **CF Worker 노출**: 웹은 정적 자산 + Worker API. on-demand 스크리닝이 외부에서 호출 가능 → **악의적 캐시 무효화/리소스 소진 위험**.
+- **옵션 (호스트)**:
+  - (a) API 키 헤더(`X-API-Key`) — 단순
+  - (b) JWT (사용자 계정 도입)
+  - (c) Cloudflare Tunnel / Tailscale 로 직접 노출 회피
+- **옵션 (Worker)**:
+  - (a) 도메인별 Origin 검사 + 레이트리밋
+  - (b) Turnstile (CF 캡차) + 레이트리밋
+  - (c) 익명 허용 + 캐시 TTL 보호 (5분 TTL 자체가 보호막)
+- **결정 필요 질문**: 사용자 계정 개념을 도입할 것인가? 안 한다면 (a)/(c) + 레이트리밋 조합으로 충분한가?
 
-### N4. 인증/접근 제어
-
-- **호스트 백엔드 노출 여부**: 모바일 앱이 호출하므로 공개 IP/도메인 필요. 인증 미적용 시 누구나 호출 가능.
-- **옵션**:
-  - (a) API 키 헤더(`X-API-Key`) — 가장 단순
-  - (b) JWT (사용자 계정 도입 — 비용 큼)
-  - (c) 단순 프라이빗 게이트(Cloudflare Tunnel, Tailscale 등으로 직접 노출 회피)
-- **FCM 자격증명 분리**: 호스트에만 두는 것이 자연스러움 (웹 푸시 미사용 가정).
-- **웹 측 인증**: 정적 JSON 공개 가정 시 인증 불필요.
-- **권고 톤**: 모바일 앱만 호출한다면 (a) 또는 (c) 로 충분해 보임. 사용자 계정/포트폴리오 개인화가 들어오면 (b) 필요. **사용자 결정**.
-
-### N5. 비용·모니터링·알림
-
-- **비용 집계 후보**:
-  - 호스트 VPS (월 5~20 USD)
-  - PostgreSQL 백업 스토리지 (월 1~3 USD)
-  - Cloudflare Pages (무료 티어 가정)
-  - 데이터 갱신 컴퓨팅(옵션별 상이)
-  - FCM (현재 무료)
-  - 도메인 (연 10~15 USD)
-- **모니터링/알림 옵션**:
-  - (a) Healthcheck.io / UptimeRobot — cron이 안 돌면 알림
-  - (b) Grafana Cloud 무료 티어
-  - (c) 단순 Slack/Discord webhook
-- **백엔드 `backend/api` 의 존속**: 역할 모호. (i) `backend/app` 으로 통합 후 삭제, (ii) 단순 read-only API로 별도 운영, (iii) 실험 코드로 보존 — 셋 중 사용자 결정.
-- **권고 톤**: 단순함을 원하면 (c) 알림 + (i) 단일 백엔드 통합. **사용자 결정**.
+### N5. 비용·모니터링·`backend/api` 처분 ❓ **미결**
+- **비용 집계 후보**: 호스트 VPS, DB 백업, CF Pages/Workers/Containers/D1/R2, FCM, 도메인.
+- **모니터링 옵션**: Healthcheck.io / UptimeRobot, Grafana Cloud 무료, Slack/Discord webhook.
+- **`backend/api` 처분**: (i) `backend/app` 으로 통합 후 삭제, (ii) read-only API로 보존, (iii) 실험 코드로 보존.
+- **결정 필요 질문**:
+  - 모니터링/알림 채널 1개를 정할 것인가?
+  - `backend/api` 를 단계 1에서 삭제할 것인가, 별도 PR로 미루는가?
 
 ---
 
-## 6. 마이그레이션 단계 / 로드맵
+## 6. 마이그레이션 단계 / 로드맵 (on-demand 모델 기준 재작성)
 
-> **전제**: 본 로드맵은 D1~D13 + N1~N5 결정이 끝난 후 적용. 결정 전에는 단계 0~1만 가능.
+> **전제**: §9 미결 항목 결정이 단계 1 시작 전에 끝나야 함 (특히 앱 측 DB 종류, 인증 정책).
 
-### 단계 0 — 결정 회의 (즉시)
-- [ ] 사용자가 D1~D13 + N1~N5 항목별 답을 확정
-- [ ] 본 문서에 결정 결과를 추가하여 v1.0으로 픽스
-- 검증 기준: 매트릭스의 "사용자 결정 필요" 칸이 모두 비어 있음
+### 단계 1 — 앱 측 호스트 백엔드 구현 (on-demand + 캐시)
+- [ ] **DB 종류 결정 후** 호스트 셋업 (Postgres or SQLite)
+- [ ] DB 스키마 적용: `cache_snapshot(market, payload, expires_at, ...)`, `eod_snapshot(market, snapshot_date, payload, ...)`, 기존 `holdings` / `device_tokens` 유지
+- [ ] `backend/app/scheduler.py` 정리: 일간 스크리닝 잡 제거, **KST 06:30 / 15:35 두 잡만 잔존**
+- [ ] `backend/app/routers/screening.py`: on-demand 캐시 게이트 구현 (TTL 5분, MISS 시 동기 실행)
+- [ ] BTC/ETH 시그널 등 싼 엔드포인트 TTL 매핑 적용 (C1)
+- [ ] 단위 테스트 + 스모크 테스트 (캐시 HIT/MISS, TTL 만료, 종가 스냅샷 cron 발화)
+- **검증 기준**:
+  - 호스트 단독으로 on-demand 응답 5~30초 이내
+  - 5분 내 동일 요청은 < 100ms 응답
+  - 06:30/15:35 cron이 실제로 발화 + DB INSERT 확인
+  - 1주 무중단
 
-### 단계 1 — 사실관계 정리(코드 변경 0)
-- [ ] `backend/api` 와 `backend/app` 의 차이를 명확히 문서화
-- [ ] `frontend/lib/config/api_config.dart` 와 `lib/services/api_client.dart` 의 현재 base URL 경로 점검
-- [ ] `data_cache/` / `portfolio.xlsx` 위치 확인 (5장 N1·N3 자료)
-- [ ] `DEPLOY_ENV=serverless|local|cloud` 분기가 코드 어디에 어떻게 영향 주는지 정리
-- 검증 기준: 7장 "위험·미해결" 5건 모두 해소
+### 단계 2 — 모바일 앱 통합 + 환경 분기
+- [ ] N2 결정 적용 (base URL 환경 분기)
+- [ ] N4 결정 적용 (인증 헤더 / JWT 등)
+- [ ] iOS/Android 빌드 + 호스트 백엔드 통신 검증
+- [ ] FCM 푸시 동작 검증 (스톱 트리거가 잔존한다면)
+- **검증 기준**:
+  - 모바일 앱이 호스트 백엔드와 정상 통신
+  - 빌드 환경(dev/staging/prod)별 base URL 분기 동작
+  - 푸시 수신 성공률
 
-### 단계 2 — 앱 타겟 가능 상태(호스트 백엔드 활성화)
-- [ ] 호스트 1대 셋업 (VPS or 자체 서버)
-- [ ] PostgreSQL 셋업 + `alembic upgrade head`
-- [ ] `backend/app` 기동 (uvicorn + systemd 또는 docker compose)
-- [ ] APScheduler 가 일간 스크리닝/스톱 체크/리밸런싱 정상 실행 (1주 관찰)
-- [ ] FCM 자격증명 배치 + 푸시 동작 검증
-- [ ] 모바일 앱(Flutter) 빌드 — base URL을 호스트로 설정
-- [ ] 인증(N4) 적용
-- 검증 기준: 모바일 앱이 호스트 백엔드와 정상 통신, 푸시 수신, 1주 무중단
+### 단계 3 — 웹 측 CF Containers 인프라 구축
+- [ ] CF 계정 셋업 + 도메인 연결
+- [ ] D1 데이터베이스 생성 + 마이그레이션(`wrangler d1 migrations`)
+- [ ] R2 버킷 생성 (대형 산출물용)
+- [ ] **Container 이미지 빌드** (호스트 Python 코드 베이스 동일 — N1 결정 적용)
+- [ ] Workers 작성: `/api/*` 라우트 + D1 캐시 게이트 + Container 호출
+- [ ] Cron Triggers 설정: KST 06:30 / 15:35 → Worker → Container → D1 INSERT
+- [ ] CF Pages 배포: Flutter Web 빌드(`fvm flutter build web --base-href /`)
+- **검증 기준**:
+  - 웹에서 `/api/screening` 호출 시 캐시 HIT/MISS 동작
+  - Container 콜드 스타트 + 스크리닝 실행 시간 측정 (UX 위험 §7.4 평가용)
+  - Cron Trigger 발화 + D1 종가 스냅샷 저장 확인
+  - 호스트와 D1의 같은 시점 스냅샷 비교(미세 차이 허용 — §7.2)
 
-### 단계 3 — 웹 타겟 Cloudflare 이전
-- [ ] 호스팅: GitHub Pages → Cloudflare Pages 이전 (Flutter Web 빌드 산출물 배포)
-- [ ] 데이터 갱신 옵션(A~E) 결정값에 따라 구현
-  - 옵션 D 채택 시: GH Actions 그대로 두고 산출물 push 대상만 R2 또는 CF Pages assets로 변경
-  - 옵션 B/C 채택 시: 컨테이너 이미지 빌드 + cron 트리거 + R2 push 파이프라인 구축
-- [ ] 데이터 sync 정책(N3) 적용
-- 검증 기준: 일 2회 갱신 정상, 웹과 앱이 동일 데이터 표시(N3 결정안 충족)
+### 단계 4 — 도메인·DNS·모니터링·인증 정책 + 정리
+- [ ] 웹 도메인 / DNS 운영 정착
+- [ ] N4 인증 정책 적용 (Worker 측 레이트리밋, Origin 검사 등)
+- [ ] N5 모니터링 채널 1개 활성 (cron miss / 호스트 다운 / 빌드 실패 알림)
+- [ ] **GH Actions 워크플로 처분**: `daily-screening.yml`, `_screening-deploy.yml`, `deploy-web.yml` 보존/제거 결정 적용 (§7.5)
+- [ ] **`backend/api` 처분** (N5)
+- [ ] 비용 1개월 관찰 + 가정 검증
+- **검증 기준**:
+  - 한 달 무중단
+  - 비용이 §1.4 가정 범위 내
+  - 사용자가 양 채널을 동시에 쓰는 시나리오에 문제 없음
 
-### 단계 4 — 풀 듀얼 운영
-- [ ] 모니터링/알림(N5) 적용 — cron miss / 호스트 다운 / 빌드 실패 알림
-- [ ] 비용 집계 1개월 관찰
-- [ ] `backend/api` 처분 결정 적용(N5 (i)/(ii)/(iii))
-- [ ] GitHub Actions 의 `daily-screening.yml` 등 잔존 워크플로 정리
-- 검증 기준: 한 달 무중단, 비용이 가정 범위 내, 사용자가 양 채널을 동시에 쓰는 시나리오에 문제 없음
-
-### 단계별 예상 소요(아주 개략)
-- 단계 1: 0.5~1일
-- 단계 2: 3~5일 (호스트 운영 노하우 정도에 따라 가변)
-- 단계 3: 옵션 B/C는 3~7일, 옵션 D는 0.5~1일, 옵션 A/E는 1~4주
+### 단계별 예상 소요 (개략)
+- 단계 1: 5~7일 (캐시 테이블 설계 + cron 정리 + 테스트)
+- 단계 2: 3~5일 (모바일 빌드/인증/푸시)
+- 단계 3: 7~14일 (CF Containers 신규 인프라 학습 + 빌드 파이프라인)
 - 단계 4: 운영 안정화 1개월
 
 ---
@@ -319,34 +384,56 @@
 ## 7. 위험 / 가정 / 미해결
 
 ### 7.1 코드 사실 관계 미해결 5건
-> 본 계획서가 단정하기에는 코드 확인이 더 필요한 항목.
+1. **ApiClient 스키마 mismatch 가능성** — `frontend/lib/services/api_client.dart` 와 `backend/app/schemas/*` 일치 점검 필요. on-demand 엔드포인트 응답 스펙 정합성 확인 필수.
+2. **`data_cache` 위치** — `scripts/monitor/download_data.py` 의 parquet 캐시 위치. 호스트/컨테이너가 같은 경로 가정 가능한지 점검.
+3. **`/api/screening` 경로 mismatch** — `backend/app/routers/screening.py` 라우트와 프론트엔드 호출 경로 일치 여부 미확인.
+4. **collector 역할** — `scripts/collector/` Dockerfile + crontab(KST 23:00 KR / 07:00 US) 의 역할이 신규 종가 스냅샷 cron(06:30/15:35)과 중복인지 확인 후 정리 필요.
+5. **FCM 자격증명** — 출처/소유/회전 정책 미정. 단계 2 전에 확정 필요.
 
-1. **ApiClient 스키마 mismatch 가능성** — `frontend/lib/services/api_client.dart` 가 호출하는 응답 스키마와 `backend/app/schemas/*` 가 정의한 스키마가 일치하는지 미확인. 듀얼 운영 전에 점검 필요.
-2. **`data_cache` 위치** — 어떤 스크립트가 어디에 캐시를 만드는지(예: `scripts/monitor/download_data.py` 의 parquet 캐시 위치) 확정 필요. 호스트/컨테이너에서 같은 경로 가정 가능성 점검.
-3. **`/api/screening` 경로 mismatch** — `backend/app/routers/screening.py` 의 라우트 경로와 프론트엔드 호출 경로가 일치하는지 미확인.
-4. **collector 역할** — `scripts/collector/` 의 Dockerfile + crontab(KST 23:00 KR / 07:00 US)이 GH Actions cron(KST 04:00 / 08:00)과 별개 역할인지, 중복인지 미확인. 단계 1에서 정리 필요.
-5. **FCM 자격증명** — 자격증명 파일의 출처/소유/회전 정책이 미정. 단계 2 전에 확정 필요.
+### 7.2 각 채널 독립 운영의 데이터 일관성 위험 (수용)
+- 같은 시점에 두 채널이 스크리닝해도 외부 소스 응답 시점·결측 처리·실행 머신 차이로 결과 미세 차이 발생 가능.
+- 본 결정(N3)은 그 차이를 **수용**. 단, 사용자가 양 채널을 동시에 보고 다른 결과를 발견할 가능성은 존재.
+- **완화책 제안 (자율 결정 아님, 검토용)**: 종가 스냅샷에 "산출 환경(host/cf)" 메타 필드를 두면 디버깅 시 차이 추적 가능.
 
-### 7.2 듀얼 운영 시 데이터 일관성 위험
-- 두 환경이 각자 cron을 돌릴 경우 결과가 미세하게 어긋날 수 있음. N3 결정으로 SSoT를 명확히 하지 않으면 "어느 화면이 맞아요?" 라는 사용자 혼란 가능.
-- **완화책**: SSoT 모델(N3 (a)/(b)) 채택을 우선 검토.
+### 7.3 CF Containers 신생 서비스 락인 위험
+- Containers는 신규 기능 → 가용성/요금/지역/제한 변경 가능성.
+- 웹 인프라 전체가 CF에 묶임 (Pages/Workers/Containers/D1/R2/Cron).
+- **이주 비용**:
+  - Containers → 다른 PaaS (Railway/Fly): Docker 이미지 그대로 → 비교적 낮음
+  - D1 → 외부 SQLite/Postgres: 스키마 호환되지만 마이그레이션 절차 필요
+  - Workers → 다른 엣지 런타임(Vercel/Deno Deploy): 코드 일부 재작성 필요
+- **단계 3 시작 시 점검 필수**: 콜드 스타트 시간, 동시 실행 한도, 월 요금 상한.
 
-### 7.3 Cloudflare 옵션별 락인 정도
-- **A (Workers Python)**: 강한 락인 + 베타 → 가장 위험.
-- **B (Containers)**: 중간 락인. 표준 Docker 이미지이므로 다른 PaaS로 이주는 가능. CF의 Containers cron 트리거 방식에는 약간 의존.
-- **C (외부 PaaS + R2)**: R2 → S3 호환이므로 데이터 락인 약함. PaaS는 교체 가능.
-- **D (GH Actions 유지)**: 락인 거의 없음.
-- **E (TS 포팅)**: 코드 자체는 이식 가능하지만, 다른 환경에서 다시 실행할 인프라가 필요.
+### 7.4 콜드 캐시 + 첫 사용자 UX 위험
+- 사용자가 OK했지만, 첫 진입 시 5~30초 대기는 모바일/웹 모두에서 이탈 위험 요인.
+- **권장(자율 결정 아님)**:
+  - 로딩 인디케이터 + 예상 소요 시간 텍스트 표시 ("최신 데이터 가져오는 중... 약 10~30초")
+  - 종가 스냅샷이 있는 시간대(예: 새벽~오전)는 스냅샷을 폴백으로 우선 표시 후 백그라운드 갱신
+  - 실패 시 직전 스냅샷으로 폴백
+- 위 권장 사항을 적용할지/말지는 사용자 결정 필요 (§9 체크리스트).
 
-### 7.4 가정 목록 (사용자 검토 요망)
-- 모바일 앱 사용자 수가 호스트 1대로 감당 가능한 규모(가정값 미확정).
-- 웹 트래픽이 Cloudflare Pages 무료 티어 내(월 < 10만 req).
+### 7.5 GH Actions 워크플로 처분 결정 ❓ **미결**
+- 이전 cron 기반 정기 갱신 모델이 폐기되면서 다음 워크플로의 운명을 정해야 함:
+  - `daily-screening.yml` — 폐기 후보. 단, 단계 1~3 완료 전 안전망 역할 가능.
+  - `_screening-deploy.yml` — 폐기 후보 (재사용 워크플로).
+  - `deploy-web.yml` — CF Pages 이전 후 폐기 후보. 단, GH Pages 이중 운영 기간이 필요할 수 있음.
+  - `btc-signal.yml`, `test.yml` — 일단 보존 가정.
+- **결정 필요 질문**:
+  - 단계별 워크플로 보존/제거 시점 (단계 4 일괄 vs 단계별 점진)
+  - 안전망으로 1~2개월 병행 운영 후 제거할지
+
+### 7.6 가정 목록 (사용자 검토 요망)
+- 모바일 앱 사용자 수가 호스트 1대로 감당 가능한 규모.
+- 웹 트래픽이 CF 무료 티어 내 (월 < 10만 req).
 - `portfolio.xlsx` 는 사용자가 수동 편집/업로드. 자동 동기화 없음.
 - 인증은 N4 결정 전까지 단순 API key 가정.
+- 종가 스냅샷 시점 KST 06:30 / 15:35 가 시장 데이터 소스의 종가 데이터 가용 시점과 일치한다 (yfinance/pykrx 의 종가 갱신 시점 확인 필요).
 
 ---
 
 ## 8. 부록: 13개 항목 원본 정의 (참고)
+
+> v0.1 원문 그대로 보존.
 
 | ID | 항목 | 설명 |
 |---|---|---|
@@ -366,11 +453,60 @@
 
 ---
 
-## 9. 다음 행동 (사용자 입장)
+## 9. 다음 행동 (사용자 입장) — 미결 항목 체크리스트
 
-1. 본 문서를 읽고 **D1~D13 + N1~N5 의 답을 확정**.
-2. 답은 본 파일 9장 또는 별도 섹션에 inline 으로 추가.
-3. 5장 N1~N5 중 결정이 어려운 항목은 **사용자가 직접 답을 정하지 않고 후보를 좁힌 뒤** 별도 회의에서 확정 가능.
-4. 결정 완료 후, 단계 1(사실관계 정리)부터 실제 작업 착수.
+본 갱신으로 큰 결정 3개가 확정되었다. 단계 1 시작 전 다음 미결 항목에 대한 사용자 답이 필요하다.
 
-> 본 문서는 결정용 초안이며, 자율 판단에 기반한 단정형 결정은 포함하지 않는다. 추가 정보가 필요하면 7장의 "코드 사실 관계 미해결 5건"을 먼저 점검할 것.
+- [ ] **앱 측 DB 종류** — Postgres vs SQLite (D1, 단계 1 직결)
+- [ ] **인증/접근 제어 정책** — 호스트 측(API key/JWT/터널), Worker 측(레이트리밋/Turnstile/익명) (N4)
+- [ ] **코드 공유 구조** — 모노레포 유지 vs `momentum_core/` 분리, Container 이미지 빌드 방식 (N1)
+- [ ] **GH Actions 워크플로 처분** — 5개 워크플로 각각 보존/제거 시점 (§7.5)
+- [ ] **`backend/api` 처분** — 통합 후 삭제 vs 보존 (N5)
+- [ ] **비용·모니터링 정책** — 모니터링 채널 1개 선택 (N5)
+- [ ] **모바일 앱 base URL 환경 분기** — `--dart-define` vs flavor vs 런타임 입력 (N2)
+- [ ] **싼 작업 TTL 매핑 표** — BTC/ETH 시그널 등 엔드포인트별 TTL 값 (C1 매핑)
+- [ ] **콜드 캐시 UX 권장 적용 여부** — 로딩 인디케이터/예상 시간 표시, 종가 스냅샷 폴백 (§7.4)
+- [ ] **앱 호스트 운영 방식** — docker compose vs systemd, 포트 매핑, `.env` 위치 (D8/D9/D10/D12)
+- [ ] **`portfolio.xlsx` SSoT** — 호스트 경로 / R2 prefix / 컨테이너 동봉 (D13)
+- [ ] **종가 스냅샷 시점 검증** — 06:30 / 15:35 가 yfinance/pykrx 종가 갱신 시점과 정합한지 (§7.6)
+
+> 위 항목이 결정되면 §6 단계 1 작업을 시작할 수 있다.
+
+---
+
+## 10. 결정 이력 / 변경 로그
+
+### v0.2 — 2026-05-02
+**확정**:
+- **N3 SSoT**: 각 채널 독립 운영 (앱·웹 별도 저장, 일치 검증 없음)
+- **갱신 모델**: cron 기반 정기 갱신 폐기 → on-demand + 단기 캐시 + 종가 스냅샷 2회
+- **C1 라이브 캐시 TTL**: 전체 시장 5분 / 싼 작업 짧은 TTL or stateless 하이브리드
+- **C2 종가 스냅샷 시점**: KST 06:30 (US) + KST 15:35 (KR)
+- **C3 콜드 캐시 정책**: 첫 사용자 그냥 대기 (stale-while-revalidate 미사용)
+- **§3.2.2 웹 Python 실행**: B (Cloudflare Containers) 선택 — A/C/D/E 탈락
+- **D1(웹)**: D1 + R2 (KV는 선택)
+- **D3(웹)**: CF Cron Triggers
+- **D7**: 정적 JSON fetch 모델 폐기, 두 채널 모두 REST API 모드
+- **D2(앱)**: `backend/app` 사용 확정 (`backend/api` 처분은 N5에서 별도)
+
+**변경**:
+- §1 개요 — "on-demand + 단기 캐시 + 종가 아카이브" 모델로 전체 재서술
+- §2 다이어그램 — 앱·웹 모두 새 모델 반영하여 재작성
+- §3 채널별 스택 — 앱은 cron 잡 종가 2회만 잔존, 웹은 CF 단일 벤더 명시
+- §3.2.2 옵션 표 — B 선택됨 / A·C·D·E 탈락 표기
+- §4 매트릭스 — 결정/미결 ✅/❓ 표기, 신규 C1/C2/C3 항목 추가
+- §5 신규 항목 — N3 확정 표기, 나머지 N1/N2/N4/N5 미결 유지 + Worker 인증 옵션 추가
+- §6 로드맵 — 4단계 재작성 (앱 → 모바일 → 웹 CF → 운영 정착)
+- §7 위험 — §7.4 콜드 스타트 UX, §7.5 GH Actions 처분 신설
+- §9 체크리스트 — 미결 12개 항목 신설
+- §10 결정 이력 신설
+
+**미해결 (사용자 결정 대기)**:
+- §9 체크리스트 12개 전부
+
+### v0.1 — 2026-05-02 (초안)
+- 13개 결정 항목(D1~D13) 매트릭스 정의
+- 신규 항목 N1~N5 식별
+- Cloudflare Python 실행 옵션 A~E 비교 표
+- 4단계 마이그레이션 로드맵 초안
+- 위험·미해결 5건 명시
