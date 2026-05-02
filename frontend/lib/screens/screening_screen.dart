@@ -6,6 +6,7 @@ import '../providers/screening_provider.dart';
 import '../providers/market_filter_provider.dart';
 import '../providers/serverless_providers.dart';
 import '../widgets/stock_card.dart';
+import '../theme/app_colors.dart';
 
 // 3전략 세그먼트 버튼 설정
 const _kMainStrategies = [
@@ -238,7 +239,7 @@ class ScreeningScreen extends ConsumerWidget {
                           fontSize: 10,
                           color: isSelected
                               ? Colors.white.withValues(alpha: 0.85)
-                              : Colors.grey,
+                              : AppColors.mutedText,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -282,8 +283,8 @@ class ScreeningScreen extends ConsumerWidget {
                   ref.read(selectedHistoryDateProvider.notifier).state = null;
                 },
                 selectedColor: f == MarketFilter.kr
-                    ? Colors.red.shade700
-                    : Colors.blue.shade700,
+                    ? AppColors.priceDownStrong
+                    : AppColors.infoStrong,
                 labelStyle:
                     TextStyle(color: isSelected ? Colors.white : null),
                 visualDensity: VisualDensity.compact,
@@ -363,13 +364,13 @@ class ScreeningScreen extends ConsumerWidget {
   Color _chipColor(StrategyType st) {
     switch (st) {
       case StrategyType.aggressive:
-        return Colors.red.shade600;
+        return AppColors.priceDownMid;
       case StrategyType.balanced:
-        return Colors.blue.shade600;
+        return AppColors.infoMid;
       case StrategyType.conservative:
-        return Colors.amber.shade700;
+        return AppColors.rankGold;
       case StrategyType.adaptive:
-        return Colors.purple.shade600;
+        return AppColors.brandAccentStrong;
     }
   }
 
@@ -397,7 +398,7 @@ class ScreeningScreen extends ConsumerWidget {
                   style: const TextStyle(
                       fontSize: 20, fontWeight: FontWeight.bold)),
               Text('${run.totalPassed}/${run.totalScreened} 통과',
-                  style: const TextStyle(color: Colors.grey)),
+                  style: const TextStyle(color: AppColors.mutedText)),
             ],
           ),
         ),
@@ -414,7 +415,7 @@ class ScreeningScreen extends ConsumerWidget {
                 if (sr.currentRegime != null) ...[
                   const SizedBox(width: 8),
                   _infoChip('국면: ${sr.currentRegime}',
-                      color: Colors.purple.shade600),
+                      color: AppColors.brandAccentStrong),
                 ],
               ],
             ),
@@ -430,7 +431,7 @@ class ScreeningScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color ?? Colors.grey.shade200,
+        color: color ?? AppColors.dividerLight,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(text,
@@ -445,10 +446,10 @@ class ScreeningScreen extends ConsumerWidget {
         Center(
           child: Column(
             children: [
-              Icon(Icons.search_off, size: 64, color: Colors.grey),
+              Icon(Icons.search_off, size: 64, color: AppColors.mutedText),
               SizedBox(height: 16),
               Text('스크리닝 결과가 없습니다',
-                  style: TextStyle(fontSize: 16, color: Colors.grey)),
+                  style: TextStyle(fontSize: 16, color: AppColors.mutedText)),
             ],
           ),
         ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 class VixStrategyGuideScreen extends StatelessWidget {
   const VixStrategyGuideScreen({super.key});
@@ -167,8 +168,8 @@ class _OverviewCard extends StatelessWidget {
               runSpacing: 8,
               children: [
                 _Chip(label: 'VIX 급등 시 진입', color: accentColor),
-                _Chip(label: '지정가 계단식 매수', color: Colors.orange.shade600),
-                _Chip(label: 'VIX 20↓ 시 매도', color: Colors.green.shade600),
+                _Chip(label: '지정가 계단식 매수', color: AppColors.warningMid),
+                _Chip(label: 'VIX 20↓ 시 매도', color: AppColors.priceUpMid),
               ],
             ),
           ],
@@ -201,7 +202,7 @@ class _EtfSpecCard extends StatelessWidget {
             _EtfBlock(
               ticker: 'SVXY',
               name: 'ProShares Short VIX Short-Term Futures',
-              color: Colors.blue.shade600,
+              color: AppColors.infoMid,
               items: const [
                 ('추종 배율', '-0.5x (일간)'),
                 ('추종 지수', 'SPVXSP'),
@@ -213,7 +214,7 @@ class _EtfSpecCard extends StatelessWidget {
             _EtfBlock(
               ticker: 'SVIX',
               name: 'Volatility Shares -1x Short VIX Futures',
-              color: Colors.purple.shade600,
+              color: AppColors.brandAccentStrong,
               items: const [
                 ('추종 배율', '-1x (일간)'),
                 ('추종 지수', 'SHORTVOL'),
@@ -302,14 +303,14 @@ class _AllocationRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Icon(Icons.recommend, size: 16, color: Colors.green),
+        const Icon(Icons.recommend, size: 16, color: AppColors.priceUp),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             '권장 배분: SVXY 60% + SVIX 40%  |  예비자금 30% 별도 보유',
             style: TextStyle(
               fontSize: 12,
-              color: Colors.green.shade700,
+              color: AppColors.priceUpStrong,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -341,13 +342,13 @@ class _FuturesIndexCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _HighlightBox(
-              color: Colors.amber.shade700,
+              color: AppColors.rankGold,
               child: Text(
                 'SPVXSP / SHORTVOL은 VIX 선물 "지수"이지, 선물 자체가 아닙니다',
                 style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: Colors.amber.shade900),
+                    color: AppColors.amberDeep),
               ),
             ),
             const SizedBox(height: 12),
@@ -357,7 +358,7 @@ class _FuturesIndexCard extends StatelessWidget {
             const _InfoRow(
               label: 'VIX 절대값과 비교',
               value: '직접 비교 불가',
-              valueColor: Colors.red,
+              valueColor: AppColors.priceDown,
             ),
             const _InfoRow(
               label: '이론가 계산 입력값',
@@ -422,12 +423,12 @@ class _SpotToFuturesCard extends StatelessWidget {
             ...rows.asMap().entries.map((e) => _InfoRow(
                   label: e.value.$1,
                   value: e.value.$2,
-                  valueColor: Colors.orange.shade700,
+                  valueColor: AppColors.warningStrong,
                   isLast: e.key == rows.length - 1,
                 )),
             const SizedBox(height: 12),
             _HighlightBox(
-              color: Colors.blue.shade600,
+              color: AppColors.infoMid,
               child: Text(
                 '앱의 VIX 매매 탭은 VIX 현물 변동률을 R로 사용합니다 (근사값).\n'
                 '정확한 계산에는 SPVXSP 실제 변동률이 필요합니다.',
@@ -476,18 +477,18 @@ class _PathDependencyCard extends StatelessWidget {
               path: '경로 A: +20% → +20%',
               result: '\$37.30',
               sub: '분산 급등',
-              color: Colors.orange.shade600,
+              color: AppColors.warningMid,
             ),
             const SizedBox(height: 6),
             _PathRow(
               path: '경로 B: +40% → +2.86%',
               result: '\$36.31',
               sub: '집중 급등',
-              color: Colors.green.shade600,
+              color: AppColors.priceUpMid,
             ),
             const SizedBox(height: 12),
             _HighlightBox(
-              color: Colors.green.shade600,
+              color: AppColors.priceUpMid,
               child: const Text(
                 '단일일 급등이 매수자에게 가장 유리한 가격(하한) 제공\n'
                 '→ 지정가는 단일일 이론가 기준으로 설정',
@@ -576,7 +577,7 @@ class _TradingStrategyCard extends StatelessWidget {
             const SizedBox(height: 8),
             Table(
               border: TableBorder.all(
-                  color: Colors.grey.shade300, width: 0.5,
+                  color: AppColors.divider, width: 0.5,
                   borderRadius: BorderRadius.circular(4)),
               columnWidths: const {
                 0: FlexColumnWidth(2),
@@ -599,7 +600,7 @@ class _TradingStrategyCard extends StatelessWidget {
                         _TableCell(r.$2),
                         _TableCell(r.$3,
                             color: (r.$3 == '15%')
-                                ? Colors.blue.shade700
+                                ? AppColors.infoStrong
                                 : null),
                       ],
                     )),
@@ -613,28 +614,28 @@ class _TradingStrategyCard extends StatelessWidget {
                 icon: Icons.looks_one_outlined,
                 label: '1단계',
                 desc: 'VIX 임계값 하회 시 보유량 1/3 매도',
-                color: Colors.green),
+                color: AppColors.priceUp),
             const SizedBox(height: 6),
             const _ExitRow(
                 icon: Icons.looks_two_outlined,
                 label: '2단계',
                 desc: 'VIX 평균 복귀 시 1/3 추가 매도',
-                color: Colors.blue),
+                color: AppColors.info),
             const SizedBox(height: 6),
             const _ExitRow(
                 icon: Icons.looks_3_outlined,
                 label: '3단계',
                 desc: '나머지 1/3은 콘탱고 수익 목적 보유',
-                color: Colors.purple),
+                color: AppColors.brandAccent),
             const SizedBox(height: 6),
             const _ExitRow(
                 icon: Icons.block,
                 label: '손절',
                 desc: '투입 원금 대비 -50% 시 전량 매도',
-                color: Colors.red),
+                color: AppColors.priceDown),
             const SizedBox(height: 12),
             _HighlightBox(
-              color: Colors.indigo.shade600,
+              color: AppColors.indigo,
               child: const Text(
                 '매도 기준: VIX 20 이하 회복 시 단계적 청산 시작',
                 style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
@@ -697,7 +698,7 @@ class _ExitRow extends StatelessWidget {
                 fontSize: 12, fontWeight: FontWeight.bold, color: c)),
         Expanded(
             child: Text(desc,
-                style: const TextStyle(fontSize: 12, color: Colors.grey))),
+                style: const TextStyle(fontSize: 12, color: AppColors.mutedText))),
       ],
     );
   }
@@ -727,13 +728,13 @@ class _BacktestCard extends StatelessWidget {
             Row(
               children: [
                 Icon(Icons.warning_amber_rounded,
-                    size: 15, color: Colors.amber.shade700),
+                    size: 15, color: AppColors.rankGold),
                 const SizedBox(width: 6),
                 Text(
                   '거래 횟수 극도로 적음 — 통계적 유의미성 낮음',
                   style: TextStyle(
                       fontSize: 11,
-                      color: Colors.amber.shade700,
+                      color: AppColors.rankGold,
                       fontStyle: FontStyle.italic),
                 ),
               ],
@@ -741,15 +742,15 @@ class _BacktestCard extends StatelessWidget {
             const SizedBox(height: 12),
             const _InfoRow(label: '테스트 기간', value: '2020-01 ~ 2026-04'),
             const _InfoRow(label: 'SVXY 공격적 CAGR', value: '5.7%',
-                valueColor: Colors.green),
+                valueColor: AppColors.priceUp),
             const _InfoRow(label: 'SVXY 공격적 Sharpe', value: '0.94',
-                valueColor: Colors.blue),
+                valueColor: AppColors.info),
             const _InfoRow(label: 'SVIX 빠른매도 Sharpe', value: '0.73',
-                valueColor: Colors.blue),
+                valueColor: AppColors.info),
             const _InfoRow(
               label: 'SVXY 최대 낙폭 (MDD)',
               value: '-49.3% (COVID)',
-              valueColor: Colors.red,
+              valueColor: AppColors.priceDown,
               isLast: true,
             ),
             const SizedBox(height: 12),
@@ -800,9 +801,9 @@ class _HistoricalRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('$date  VIX $vixHigh',
-                style: const TextStyle(fontSize: 11, color: Colors.red)),
+                style: const TextStyle(fontSize: 11, color: AppColors.priceDown)),
             Text(note,
-                style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                style: const TextStyle(fontSize: 11, color: AppColors.mutedText)),
           ],
         ),
       ],
@@ -824,25 +825,25 @@ class _CautionsCard extends StatelessWidget {
         Icons.history,
         'SVXY 이력 변경 (2018-02-27)',
         '-1x → -0.5x 배율 변경 + 액면병합. 2018년 이전 데이터 직접 연결 불가. 백테스트는 2018-03 이후만 권장.',
-        Colors.orange,
+        AppColors.warning,
       ),
       (
         Icons.data_usage,
         'SPVXSP/SHORTVOL 데이터 미지원',
         'yfinance에서 SPVXSP/SHORTVOL 실시간 데이터를 제공하지 않음. 앱은 VIX 현물 변동률을 근사값으로 사용.',
-        Colors.blue,
+        AppColors.info,
       ),
       (
         Icons.compare_arrows,
         'VIX 현물 vs 선물 지수 괴리',
         'VIX 현물 변동 ≠ SPVXSP 변동. 선물 지수는 현물의 50~70% 수준으로 반응. 이론가 테이블은 근사값.',
-        Colors.purple,
+        AppColors.brandAccent,
       ),
       (
         Icons.dangerous,
         'SVIX 전멸 리스크',
         'VIX 선물 지수 단일일 +100% 급등 시 이론상 NAV = 0. 2018년 XIV 단일일 -96% 사례 실존. SVIX 투입 금액은 전액 손실 감수 가능한 수준으로 제한.',
-        Colors.red,
+        AppColors.priceDown,
       ),
     ];
 
@@ -886,7 +887,7 @@ class _CautionsCard extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(c.$3,
                               style: const TextStyle(
-                                  fontSize: 12, color: Colors.grey)),
+                                  fontSize: 12, color: AppColors.mutedText)),
                         ],
                       ),
                     ),
@@ -958,9 +959,9 @@ class _ExampleBox extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: AppColors.subtleBackground,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: AppColors.divider),
       ),
       child: Text(text,
           style: const TextStyle(

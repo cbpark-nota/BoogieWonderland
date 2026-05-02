@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/vix_etf_data.dart';
 import '../providers/vix_etf_provider.dart';
+import '../theme/app_colors.dart';
 
 class VixEtfCalculatorScreen extends ConsumerStatefulWidget {
   const VixEtfCalculatorScreen({super.key});
@@ -65,13 +66,13 @@ class _VixEtfCalculatorScreenState
         const Center(
           child: Column(
             children: [
-              Icon(Icons.show_chart, size: 64, color: Colors.grey),
+              Icon(Icons.show_chart, size: 64, color: AppColors.mutedText),
               SizedBox(height: 16),
               Text('VIX ETF 가격 데이터 없음',
-                  style: TextStyle(fontSize: 16, color: Colors.grey)),
+                  style: TextStyle(fontSize: 16, color: AppColors.mutedText)),
               SizedBox(height: 8),
               Text('GitHub Actions 실행 후 데이터가 생성됩니다.',
-                  style: TextStyle(fontSize: 13, color: Colors.grey)),
+                  style: TextStyle(fontSize: 13, color: AppColors.mutedText)),
             ],
           ),
         ),
@@ -99,7 +100,7 @@ class _VixEtfCalculatorScreenState
           Center(
             child: Text(
               '업데이트: ${data.updatedAt.substring(0, data.updatedAt.length.clamp(0, 19))}',
-              style: const TextStyle(fontSize: 11, color: Colors.grey),
+              style: const TextStyle(fontSize: 11, color: AppColors.mutedText),
             ),
           ),
       ],
@@ -144,10 +145,10 @@ class _VixEtfCalculatorScreenState
       changePct = (current - prevClose) / prevClose * 100;
     }
     final changeColor = changePct == null
-        ? Colors.grey
+        ? AppColors.mutedText
         : changePct >= 0
-            ? Colors.red.shade700
-            : Colors.blue.shade700;
+            ? AppColors.priceDownStrong
+            : AppColors.infoStrong;
     final changeStr = changePct != null
         ? '${changePct >= 0 ? '+' : ''}${changePct.toStringAsFixed(2)}%'
         : '';
@@ -177,7 +178,7 @@ class _VixEtfCalculatorScreenState
         if (prevClose != null) ...[
           const SizedBox(width: 8),
           Text('전일: $prefix${prevClose.toStringAsFixed(decimals)}',
-              style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              style: const TextStyle(fontSize: 11, color: AppColors.mutedText)),
         ],
       ],
     );
@@ -240,7 +241,7 @@ class _VixEtfCalculatorScreenState
                       ),
                       Text(
                         'VIX 선물 지수 변동률',
-                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                        style: TextStyle(fontSize: 11, color: AppColors.mutedText[600]),
                       ),
                     ],
                   ),
@@ -263,9 +264,9 @@ class _VixEtfCalculatorScreenState
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: const [
-                  Text('-50%', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  Text('0%', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  Text('+200%', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  Text('-50%', style: TextStyle(fontSize: 11, color: AppColors.mutedText)),
+                  Text('0%', style: TextStyle(fontSize: 11, color: AppColors.mutedText)),
+                  Text('+200%', style: TextStyle(fontSize: 11, color: AppColors.mutedText)),
                 ],
               ),
             ],
@@ -312,12 +313,12 @@ class _VixEtfCalculatorScreenState
         ? '${deviation >= 0 ? '+' : ''}${deviation.toStringAsFixed(2)}%'
         : '';
     final devColor = deviation == null
-        ? Colors.grey
+        ? AppColors.mutedText
         : deviation.abs() < 1
-            ? Colors.green.shade700
+            ? AppColors.priceUpStrong
             : deviation > 0
-                ? Colors.orange.shade700
-                : Colors.blue.shade700;
+                ? AppColors.warningStrong
+                : AppColors.infoStrong;
 
     return Row(
       children: [
@@ -335,7 +336,7 @@ class _VixEtfCalculatorScreenState
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text('현재가 ${current != null ? '\$${current.toStringAsFixed(2)}' : ''}',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      style: const TextStyle(fontSize: 11, color: AppColors.mutedText)),
                   const SizedBox(width: 6),
                   Container(
                     padding:
@@ -372,7 +373,7 @@ class _VixEtfCalculatorScreenState
             const SizedBox(height: 4),
             Text(
               'VIX 선물 변동 ≈ ΔVIX 가정 (근사)',
-              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 11, color: AppColors.mutedText[600]),
             ),
             const SizedBox(height: 12),
             SingleChildScrollView(
@@ -415,7 +416,7 @@ class _VixEtfCalculatorScreenState
                       DataCell(Text(
                         '${(r * 100).toStringAsFixed(1)}%',
                         style: TextStyle(
-                          color: r >= 0 ? Colors.red.shade700 : Colors.blue.shade700,
+                          color: r >= 0 ? AppColors.priceDownStrong : AppColors.infoStrong,
                           fontSize: 12,
                         ),
                       )),
@@ -426,8 +427,8 @@ class _VixEtfCalculatorScreenState
                         style: TextStyle(
                           color: svxy != null && data.svxyPrevClose != null
                               ? (svxy >= data.svxyPrevClose!
-                                  ? Colors.red.shade700
-                                  : Colors.blue.shade700)
+                                  ? AppColors.priceDownStrong
+                                  : AppColors.infoStrong)
                               : null,
                           fontWeight: FontWeight.w500,
                         ),
@@ -439,8 +440,8 @@ class _VixEtfCalculatorScreenState
                         style: TextStyle(
                           color: svix != null && data.svixPrevClose != null
                               ? (svix >= data.svixPrevClose!
-                                  ? Colors.red.shade700
-                                  : Colors.blue.shade700)
+                                  ? AppColors.priceDownStrong
+                                  : AppColors.infoStrong)
                               : null,
                           fontWeight: FontWeight.w500,
                         ),
@@ -476,7 +477,7 @@ class _VixEtfCalculatorScreenState
             Text(
               'R = VIX 선물 지수(SPVXSP) 일간 변동률\n'
               '괴리율 = (현재가 − 이론가) / 이론가 × 100%',
-              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 11, color: AppColors.mutedText[600]),
             ),
           ],
         ),

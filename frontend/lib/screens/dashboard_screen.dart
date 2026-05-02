@@ -5,6 +5,7 @@ import '../providers/market_provider.dart';
 import '../widgets/market_status_banner.dart';
 import '../widgets/btc_signal_widget.dart';
 import '../widgets/eth_signal_widget.dart';
+import '../theme/app_colors.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -79,14 +80,14 @@ class DashboardScreen extends ConsumerWidget {
               final next = status?.nextRebalance;
               return Card(
                 child: ListTile(
-                  leading: const Icon(Icons.calendar_today, color: Colors.blue),
+                  leading: const Icon(Icons.calendar_today, color: AppColors.info),
                   title: const Text('다음 리밸런싱'),
                   subtitle: Text(next ?? '일정 없음'),
                   trailing: next != null
                       ? Text(_daysUntil(next),
                           style: const TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold,
-                              color: Colors.blue))
+                              color: AppColors.info))
                       : null,
                 ),
               );
@@ -116,7 +117,7 @@ class DashboardScreen extends ConsumerWidget {
                 children: top3.map((r) => Card(
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: Colors.amber.shade700,
+                      backgroundColor: AppColors.rankGold,
                       child: Text('${r.rank}',
                           style: const TextStyle(color: Colors.white)),
                     ),
@@ -144,6 +145,7 @@ class DashboardScreen extends ConsumerWidget {
       if (days == 0) return 'D-Day';
       return 'D-$days';
     } catch (_) {
+      // 의도적 무시: 잘못된 날짜 형식은 빈 문자열로 표시(D-day 라벨 자체를 숨김)
       return '';
     }
   }

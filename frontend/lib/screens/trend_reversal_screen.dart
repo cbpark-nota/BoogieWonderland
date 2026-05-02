@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/trend_reversal_data.dart';
 import '../providers/trend_reversal_provider.dart';
+import '../theme/app_colors.dart';
 
 /// 추세 전환 화면 — 5MA / 120MA 일봉 골든크로스 후보 Top 25
 ///
@@ -44,7 +45,7 @@ class TrendReversalScreen extends ConsumerWidget {
           const Expanded(
             child: Center(
               child: Text('데이터가 없습니다.',
-                  style: TextStyle(color: Colors.grey)),
+                  style: TextStyle(color: AppColors.mutedText)),
             ),
           )
         else
@@ -70,7 +71,7 @@ class TrendReversalScreen extends ConsumerWidget {
           ),
           Text(
             dateStr,
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
+            style: const TextStyle(fontSize: 12, color: AppColors.mutedText),
           ),
         ],
       ),
@@ -320,7 +321,7 @@ class TrendReversalScreen extends ConsumerWidget {
         if (dStr.isNotEmpty)
           Text(
             dStr,
-            style: const TextStyle(fontSize: 10, color: Colors.grey),
+            style: const TextStyle(fontSize: 10, color: AppColors.mutedText),
           ),
       ],
     );
@@ -334,7 +335,7 @@ class TrendReversalScreen extends ConsumerWidget {
     final isWarning = !isSell && pct.abs() < 3.0;
     final color = isSell
         ? colorScheme.error
-        : (isWarning ? Colors.orange.shade400 : null);
+        : (isWarning ? AppColors.warningSoft : null);
     return Text(
       '${pct.toStringAsFixed(1)}%',
       style: TextStyle(color: color),
@@ -379,9 +380,9 @@ class TrendReversalScreen extends ConsumerWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.error_outline, size: 48, color: Colors.grey),
+          const Icon(Icons.error_outline, size: 48, color: AppColors.mutedText),
           const SizedBox(height: 12),
-          Text(message, style: const TextStyle(color: Colors.grey)),
+          Text(message, style: const TextStyle(color: AppColors.mutedText)),
         ],
       ),
     );

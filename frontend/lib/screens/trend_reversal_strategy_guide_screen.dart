@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 class TrendReversalStrategyGuideScreen extends StatelessWidget {
   const TrendReversalStrategyGuideScreen({super.key});
@@ -368,12 +369,12 @@ class _EntryConditionsCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     const conditions = [
-      ('필수', '최근 10영업일(=2주) 내에 MA25 ≤ MA600 → MA25 > MA600 전환 발생', Colors.red),
-      ('필수', '오늘 시점에도 MA25 > MA600 유지 (재이탈 종목 제외)', Colors.red),
-      ('스코어', 'gap ratio = (MA25 − MA600) / MA600 — 양수일수록 상위', Colors.blue),
-      ('정렬', 'cross_days_ago 오름차순(최근 돌파부터) — 동률 시 gap 내림차순', Colors.purple),
-      ('포지션', 'Top 25 동일비중 (US/KR 통합 슬롯 공유)', Colors.green),
-      ('타이밍', '격주 금요일 리밸런싱 시 신규 진입 / 편출 결정', Colors.orange),
+      ('필수', '최근 10영업일(=2주) 내에 MA25 ≤ MA600 → MA25 > MA600 전환 발생', AppColors.priceDown),
+      ('필수', '오늘 시점에도 MA25 > MA600 유지 (재이탈 종목 제외)', AppColors.priceDown),
+      ('스코어', 'gap ratio = (MA25 − MA600) / MA600 — 양수일수록 상위', AppColors.info),
+      ('정렬', 'cross_days_ago 오름차순(최근 돌파부터) — 동률 시 gap 내림차순', AppColors.brandAccent),
+      ('포지션', 'Top 25 동일비중 (US/KR 통합 슬롯 공유)', AppColors.priceUp),
+      ('타이밍', '격주 금요일 리밸런싱 시 신규 진입 / 편출 결정', AppColors.warning),
     ];
 
     return Card(
@@ -507,21 +508,21 @@ class _ExitConditionsCard extends StatelessWidget {
               desc: '매일 체크 — peak = max(누적 peak, 오늘 High), '
                   'stop = max(기존 stop, peak − ATR(14) × 2.5). '
                   'Close ≤ stop 시 즉시 청산.',
-              color: Colors.red,
+              color: AppColors.priceDown,
             ),
             SizedBox(height: 8),
             _ExitRow(
               icon: Icons.list_alt,
               label: 'Top 25 이탈',
               desc: '격주 금요일 리밸런싱 시 gap ratio 스코어 Top 25에서 밀려난 종목 청산.',
-              color: Colors.blue,
+              color: AppColors.info,
             ),
             SizedBox(height: 12),
             Text(
               '※ v3.3 모멘텀 스크리너와 동일한 매도 로직을 사용합니다 (스톱가는 상향만, 하향 갱신 없음).',
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.grey,
+                color: AppColors.mutedText,
                 fontStyle: FontStyle.italic,
                 height: 1.4,
               ),
@@ -559,7 +560,7 @@ class _ExitRow extends StatelessWidget {
         Expanded(
           child: Text(
             desc,
-            style: const TextStyle(fontSize: 12, color: Colors.grey, height: 1.4),
+            style: const TextStyle(fontSize: 12, color: AppColors.mutedText, height: 1.4),
           ),
         ),
       ],
@@ -590,14 +591,14 @@ class _BacktestCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.info_outline, size: 14, color: Colors.blue.shade700),
+                Icon(Icons.info_outline, size: 14, color: AppColors.infoStrong),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     '2015-01-01 ~ 2026-03-24 · 격주 금요일 리밸런싱 · Top 25 동일비중 · 수수료 편도 0.1%',
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.blue.shade700,
+                      color: AppColors.infoStrong,
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -612,7 +613,7 @@ class _BacktestCard extends StatelessWidget {
             const SizedBox(height: 8),
             Table(
               border: TableBorder.all(
-                color: Colors.grey.shade300,
+                color: AppColors.divider,
                 width: 0.5,
                 borderRadius: BorderRadius.circular(4),
               ),
@@ -638,29 +639,29 @@ class _BacktestCard extends StatelessWidget {
                 ),
                 const TableRow(children: [
                   _TableCell('통합 ★', highlight: true),
-                  _TableCell('+89.8%', color: Colors.green, highlight: true),
-                  _TableCell('-2.7%', color: Colors.red, highlight: true),
+                  _TableCell('+89.8%', color: AppColors.priceUp, highlight: true),
+                  _TableCell('-2.7%', color: AppColors.priceDown, highlight: true),
                   _TableCell('4.15', highlight: true),
                   _TableCell('67.5%', highlight: true),
                 ]),
                 const TableRow(children: [
                   _TableCell('US'),
-                  _TableCell('+79.5%', color: Colors.green),
-                  _TableCell('-3.1%', color: Colors.red),
+                  _TableCell('+79.5%', color: AppColors.priceUp),
+                  _TableCell('-3.1%', color: AppColors.priceDown),
                   _TableCell('3.95'),
                   _TableCell('64.4%'),
                 ]),
                 const TableRow(children: [
                   _TableCell('KR'),
-                  _TableCell('+64.5%', color: Colors.green),
-                  _TableCell('-3.3%', color: Colors.red),
+                  _TableCell('+64.5%', color: AppColors.priceUp),
+                  _TableCell('-3.3%', color: AppColors.priceDown),
                   _TableCell('3.72'),
                   _TableCell('66.8%'),
                 ]),
                 const TableRow(children: [
                   _TableCell('SPY B&H'),
                   _TableCell('+12.7%'),
-                  _TableCell('-31.0%', color: Colors.red),
+                  _TableCell('-31.0%', color: AppColors.priceDown),
                   _TableCell('0.82'),
                   _TableCell('64.3%'),
                 ]),
@@ -742,33 +743,33 @@ class _CautionsCard extends StatelessWidget {
         '서바이벌 바이어스',
         '현재 S&P 500 / Nasdaq 100 / KOSPI 200 / KOSDAQ 150 구성 종목으로 백테스트했습니다. '
             '2015년 당시 일부 종목은 지수에 속하지 않았거나 상장 전이었을 수 있어, 실제 성과보다 과대 추정 경향이 있습니다.',
-        Colors.red,
+        AppColors.priceDown,
       ),
       (
         Icons.access_time,
         'MA600 Warm-up',
         'MA600 계산에 600 거래일(약 2.4년)이 필요해 실질 첫 신호는 2017년 중반부터입니다. '
             '백테스트의 초기 약 2년은 사실상 무투자(현금) 기간입니다.',
-        Colors.orange,
+        AppColors.warning,
       ),
       (
         Icons.flash_on,
         '후행성 진입',
         'MA600을 이미 돌파한 종목만 매수하므로 강한 추세에 후행 진입합니다. 추세 초기 진입과 단기 변동성 손실은 ATR 스톱이 흡수합니다.',
-        Colors.amber,
+        AppColors.amber,
       ),
       (
         Icons.balance,
         '거래 승률 < 50%',
         '거래 승률 44.7%로 절반 이하지만 평균 수익(+2.87%)이 평균 손실보다 크기 때문에 누적 수익이 발생합니다. '
             '"손절은 빠르고 수익은 길게" 추세추종 전형의 분포입니다.',
-        Colors.blue,
+        AppColors.info,
       ),
       (
         Icons.layers_outlined,
         '포지션 집중 가능성',
         'Top 25 동일비중이지만 강세장에서는 Tech 섹터 종목이 상위를 독점할 가능성이 높습니다. 섹터 분산은 별도 리스크 관리가 필요합니다.',
-        Colors.purple,
+        AppColors.brandAccent,
       ),
     ];
 
@@ -811,7 +812,7 @@ class _CautionsCard extends StatelessWidget {
                           Text(c.$3,
                               style: const TextStyle(
                                   fontSize: 12,
-                                  color: Colors.grey,
+                                  color: AppColors.mutedText,
                                   height: 1.4)),
                         ],
                       ),

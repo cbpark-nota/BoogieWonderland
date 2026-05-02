@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 /// BTC + ETH 통합 전략 가이드 화면.
 ///
@@ -683,12 +684,12 @@ class _CorrelationCard extends StatelessWidget {
             const _InfoRow(
               label: 'CCF 최적 lag',
               value: '0봉 (lag 트레이딩 무의미)',
-              valueColor: Colors.orange,
+              valueColor: AppColors.warning,
             ),
             const _InfoRow(
               label: 'Granger BTC→ETH',
               value: 'p=0.0003 (유의)',
-              valueColor: Colors.green,
+              valueColor: AppColors.priceUp,
             ),
             const _InfoRow(
               label: 'Rolling 365d corr',
@@ -697,7 +698,7 @@ class _CorrelationCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             _HighlightBox(
-              color: Colors.blue.shade600,
+              color: AppColors.infoMid,
               child: const Text(
                 'BTC와 ETH는 즉시(lag=0) 동조하지만, BTC의 과거 5~12봉 정보가 ETH 미래를 통계적으로 예측합니다.\n'
                 '→ BTC 추세를 ETH 매매의 게이트로 사용',
@@ -769,35 +770,35 @@ class _ExitConditionsCard extends StatelessWidget {
               icon: Icons.trending_down,
               label: '트레일링 SL',
               desc: 'BTC 가격 / ATR(14) 기반 적응형 스톱 (레짐별 승수 동적 전환)',
-              color: Colors.red,
+              color: AppColors.priceDown,
             ),
             SizedBox(height: 8),
             _ExitRow(
               icon: Icons.flag_outlined,
               label: 'TP (이익 실현)',
               desc: 'BTC 가격이 TP 레벨 도달 시 청산 (V10 = 주간 +1% 목표 기반)',
-              color: Colors.green,
+              color: AppColors.priceUp,
             ),
             SizedBox(height: 8),
             _ExitRow(
               icon: Icons.timer_outlined,
               label: 'max_hold',
               desc: '최대 보유 봉 수 초과 시 강제 청산 (whipsaw 보호)',
-              color: Colors.blue,
+              color: AppColors.info,
             ),
             SizedBox(height: 8),
             _ExitRow(
               icon: Icons.layers_outlined,
               label: '레짐 전환',
               desc: 'BTC bull regime 이탈 시 신규 진입 차단, 보유분은 SL/TP 따름',
-              color: Colors.purple,
+              color: AppColors.brandAccent,
             ),
             SizedBox(height: 12),
             Text(
               '※ 매도 조건은 모두 BTC 가격/ATR 기준으로 트리거되며, 체결은 ETH 가격에 적용됩니다.',
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.grey,
+                color: AppColors.mutedText,
                 fontStyle: FontStyle.italic,
                 height: 1.4,
               ),
@@ -835,7 +836,7 @@ class _ExitRow extends StatelessWidget {
         Expanded(
           child: Text(
             desc,
-            style: const TextStyle(fontSize: 12, color: Colors.grey, height: 1.4),
+            style: const TextStyle(fontSize: 12, color: AppColors.mutedText, height: 1.4),
           ),
         ),
       ],
@@ -866,14 +867,14 @@ class _EthBacktestCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.info_outline, size: 14, color: Colors.blue.shade700),
+                Icon(Icons.info_outline, size: 14, color: AppColors.infoStrong),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     'Binance USDT, 수수료 RT 0.1%, 2021-01-01 ~ 2026-04-27',
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.blue.shade700,
+                      color: AppColors.infoStrong,
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -888,7 +889,7 @@ class _EthBacktestCard extends StatelessWidget {
             const SizedBox(height: 8),
             Table(
               border: TableBorder.all(
-                color: Colors.grey.shade300,
+                color: AppColors.divider,
                 width: 0.5,
                 borderRadius: BorderRadius.circular(4),
               ),
@@ -912,20 +913,20 @@ class _EthBacktestCard extends StatelessWidget {
                 ),
                 const TableRow(children: [
                   _TableCell('V10 ★'),
-                  _TableCell('+45.0%', color: Colors.green),
-                  _TableCell('-33.2%', color: Colors.red),
+                  _TableCell('+45.0%', color: AppColors.priceUp),
+                  _TableCell('-33.2%', color: AppColors.priceDown),
                   _TableCell('1.03'),
                 ]),
                 const TableRow(children: [
                   _TableCell('V9'),
-                  _TableCell('+40.6%', color: Colors.green),
-                  _TableCell('-31.0%', color: Colors.red),
+                  _TableCell('+40.6%', color: AppColors.priceUp),
+                  _TableCell('-31.0%', color: AppColors.priceDown),
                   _TableCell('0.98'),
                 ]),
                 const TableRow(children: [
                   _TableCell('V8'),
-                  _TableCell('+38.2%', color: Colors.green),
-                  _TableCell('-35.5%', color: Colors.red),
+                  _TableCell('+38.2%', color: AppColors.priceUp),
+                  _TableCell('-35.5%', color: AppColors.priceDown),
                   _TableCell('0.95'),
                 ]),
               ],
@@ -941,7 +942,7 @@ class _EthBacktestCard extends StatelessWidget {
             const _InfoRow(
               label: 'B안 V10 vs ETH B&H',
               value: 'CAGR ≈2배, MDD <1/2',
-              valueColor: Colors.green,
+              valueColor: AppColors.priceUp,
               isLast: true,
             ),
             const SizedBox(height: 12),
@@ -980,31 +981,31 @@ class _CautionsCard extends StatelessWidget {
         Icons.show_chart,
         '높은 변동성',
         'ETH 4h 수익률 표준편차는 BTC의 약 1.2~1.4배. BTC 신호의 변동성을 증폭하므로 수익뿐 아니라 MDD도 함께 커집니다.',
-        Colors.red,
+        AppColors.priceDown,
       ),
       (
         Icons.access_time,
         '청산 지연 가능성',
         'SL/TP 트리거가 BTC 가격/ATR 기준이므로, BTC가 횡보하고 ETH만 급변하는 구간에서는 청산이 늦어질 수 있습니다.',
-        Colors.orange,
+        AppColors.warning,
       ),
       (
         Icons.history,
         '제한된 백테스트 기간',
         '2021~2026 약 5년, 1~2 사이클만 포함. 다음 사이클에서 동일 성과를 보장하지 않습니다.',
-        Colors.amber,
+        AppColors.amber,
       ),
       (
         Icons.science_outlined,
         'Hindsight 최적화 위험',
         'V10은 V9에서 파라미터를 완화한 구조. 과적합 가능성을 내재하므로 실전에서는 보수적으로 진입 비중을 결정해야 합니다.',
-        Colors.blue,
+        AppColors.info,
       ),
       (
         Icons.account_balance,
         '슬리피지 / 수수료 가정',
         'RT 0.1% (Binance VIP 0~3 수준). 시장가 / 대량 주문 시 추가 비용이 발생할 수 있습니다.',
-        Colors.purple,
+        AppColors.brandAccent,
       ),
     ];
 
@@ -1047,7 +1048,7 @@ class _CautionsCard extends StatelessWidget {
                           Text(c.$3,
                               style: const TextStyle(
                                   fontSize: 12,
-                                  color: Colors.grey,
+                                  color: AppColors.mutedText,
                                   height: 1.4)),
                         ],
                       ),

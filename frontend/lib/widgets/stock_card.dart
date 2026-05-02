@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/screening_result.dart';
+import '../theme/app_colors.dart';
 
 class StockCard extends StatelessWidget {
   final ScreeningResult result;
@@ -46,7 +47,7 @@ class StockCard extends StatelessWidget {
                             ? '${result.ticker} · ${result.sector}'
                             : result.sector,
                         style: const TextStyle(
-                            fontSize: 11, color: Colors.grey),
+                            fontSize: 11, color: AppColors.mutedText),
                       ),
                     ],
                   ),
@@ -60,7 +61,7 @@ class StockCard extends StatelessWidget {
                       children: [
                         const Text('Score',
                             style: TextStyle(
-                                fontSize: 11, color: Colors.grey)),
+                                fontSize: 11, color: AppColors.mutedText)),
                         const SizedBox(width: 4),
                         Text(result.score.toStringAsFixed(3),
                             style: const TextStyle(
@@ -69,7 +70,7 @@ class StockCard extends StatelessWidget {
                     ),
                     Text('${result.weightPct.toStringAsFixed(1)}%',
                         style: const TextStyle(
-                            fontSize: 12, color: Colors.blue)),
+                            fontSize: 12, color: AppColors.info)),
                   ],
                 ),
               ],
@@ -98,16 +99,16 @@ class StockCard extends StatelessWidget {
   }
 
   Color _rankColor(int rank) {
-    if (rank <= 3) return Colors.amber.shade700;
-    if (rank <= 7) return Colors.blue;
-    return Colors.grey;
+    if (rank <= 3) return AppColors.rankGold;
+    if (rank <= 7) return AppColors.info;
+    return AppColors.mutedText;
   }
 
   Widget _metric(String label, String value) {
     return Column(
       children: [
         Text(label,
-            style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            style: const TextStyle(fontSize: 10, color: AppColors.mutedText)),
         Text(value,
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
       ],

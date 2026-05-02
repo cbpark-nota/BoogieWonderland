@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../models/screening_result.dart';
+import '../theme/app_colors.dart';
 
 Widget _metric(String label, String value) {
   return Column(
     children: [
-      Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+      Text(label, style: const TextStyle(fontSize: 11, color: AppColors.mutedText)),
       Text(value,
           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
     ],
@@ -19,7 +20,7 @@ class MarketStatusBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isGolden = status.isGoldenCross;
-    final color = isGolden ? Colors.green : Colors.red;
+    final color = isGolden ? AppColors.priceUp : AppColors.priceDown;
 
     return Container(
       width: double.infinity,
@@ -77,7 +78,7 @@ class KospiStatusBanner extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final color = isGolden ? Colors.green : Colors.red;
+    final color = isGolden ? AppColors.priceUp : AppColors.priceDown;
 
     return Container(
       width: double.infinity,

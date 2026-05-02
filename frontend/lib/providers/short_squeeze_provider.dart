@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/short_squeeze_result.dart';
 import '../services/static_data_source.dart';
@@ -8,7 +9,8 @@ final shortSqueezeProvider = FutureProvider<ShortSqueezeData?>((ref) async {
   try {
     final data = await StaticDataSource().getShortSqueeze();
     return ShortSqueezeData.fromJson(data);
-  } catch (_) {
+  } catch (e) {
+    debugPrint('shortSqueezeProvider: fetch failed: $e');
     return null;
   }
 });

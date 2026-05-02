@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 class StrategyGuideScreen extends StatelessWidget {
   const StrategyGuideScreen({super.key});
@@ -1072,9 +1073,9 @@ class _MarketCapStrategyCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
+                color: AppColors.warningBackground,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.shade200),
+                border: Border.all(color: AppColors.warningSubtle),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1082,13 +1083,13 @@ class _MarketCapStrategyCard extends StatelessWidget {
                   Row(
                     children: [
                       Icon(Icons.info_outline,
-                          size: 14, color: Colors.orange.shade700),
+                          size: 14, color: AppColors.warningStrong),
                       const SizedBox(width: 4),
                       Text('데이터 한계',
                           style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
-                              color: Colors.orange.shade700)),
+                              color: AppColors.warningStrong)),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -1117,7 +1118,7 @@ class _MarketCapStrategyCard extends StatelessWidget {
             child: Text(label,
                 style: const TextStyle(
                     fontSize: 12,
-                    color: Colors.grey,
+                    color: AppColors.mutedText,
                     fontWeight: FontWeight.w500)),
           ),
           const SizedBox(width: 8),

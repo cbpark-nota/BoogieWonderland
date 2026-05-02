@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 class StopLossIndicator extends StatelessWidget {
   final double marginPct;
@@ -11,13 +12,13 @@ class StopLossIndicator extends StatelessWidget {
     String label;
 
     if (marginPct <= 0) {
-      color = Colors.red;
+      color = AppColors.priceDown;
       label = 'BREACH';
     } else if (marginPct < 5) {
-      color = Colors.orange;
+      color = AppColors.warning;
       label = '${marginPct.toStringAsFixed(1)}%';
     } else {
-      color = Colors.green;
+      color = AppColors.priceUp;
       label = '${marginPct.toStringAsFixed(1)}%';
     }
 
