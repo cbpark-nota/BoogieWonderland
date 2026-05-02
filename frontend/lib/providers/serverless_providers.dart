@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/holding.dart';
 import '../models/portfolio_data.dart';
@@ -19,7 +20,8 @@ class ServerlessScreeningNotifier extends ScreeningNotifier {
     try {
       final data = await _source.getLatestScreening();
       return ScreeningRun.fromJson(data);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('ServerlessScreeningNotifier: latest screening fetch failed: $e');
       return null;
     }
   }
@@ -76,7 +78,8 @@ Future<MarketStatus?> serverlessMarketStatus(Ref ref) async {
     final ms = data['market_status'];
     if (ms != null) return MarketStatus.fromJson(ms);
     return null;
-  } catch (_) {
+  } catch (e) {
+    debugPrint('serverlessMarketStatus: latest screening fetch failed: $e');
     return null;
   }
 }
@@ -94,7 +97,8 @@ final strategyDataProvider =
   try {
     final data = await StaticDataSource().getStrategies();
     return StrategyScreeningData.fromJson(data);
-  } catch (_) {
+  } catch (e) {
+    debugPrint('strategyDataProvider(serverless, US): fetch failed: $e');
     return null;
   }
 });
@@ -106,7 +110,8 @@ final krStrategyDataProvider =
   try {
     final data = await StaticDataSource().getKrStrategies();
     return StrategyScreeningData.fromJson(data);
-  } catch (_) {
+  } catch (e) {
+    debugPrint('krStrategyDataProvider(serverless, KR): fetch failed: $e');
     return null;
   }
 });
@@ -122,7 +127,8 @@ final portfolioDataProvider = FutureProvider<PortfolioData>((ref) async {
   try {
     final data = await StaticDataSource().getPortfolio();
     return PortfolioData.fromJson(data);
-  } catch (_) {
+  } catch (e) {
+    debugPrint('portfolioDataProvider: fetch failed, returning empty portfolio: $e');
     return PortfolioData.fromJson({
       'updated_at': '',
       'total_invested': 0.0,
@@ -139,7 +145,8 @@ final shortSqueezeProvider = FutureProvider<ShortSqueezeData?>((ref) async {
   try {
     final data = await StaticDataSource().getShortSqueeze();
     return ShortSqueezeData.fromJson(data);
-  } catch (_) {
+  } catch (e) {
+    debugPrint('shortSqueezeProvider(serverless): fetch failed: $e');
     return null;
   }
 });
@@ -149,7 +156,8 @@ final shortSqueezeProvider = FutureProvider<ShortSqueezeData?>((ref) async {
 final marketCapTop20Provider = FutureProvider<Map<String, dynamic>?>((ref) async {
   try {
     return await StaticDataSource().getMarketCapTop20();
-  } catch (_) {
+  } catch (e) {
+    debugPrint('marketCapTop20Provider: fetch failed: $e');
     return null;
   }
 });
@@ -183,7 +191,8 @@ final historyScreeningProvider =
   try {
     final data = await StaticDataSource().getScreeningByDate(date);
     return StrategyScreeningData.fromJson(data);
-  } catch (_) {
+  } catch (e) {
+    debugPrint('historyScreeningProvider(serverless, US, $date): fetch failed: $e');
     return null;
   }
 });
@@ -199,7 +208,8 @@ final krHistoryScreeningProvider =
   try {
     final data = await StaticDataSource().getKrScreeningByDate(date);
     return StrategyScreeningData.fromJson(data);
-  } catch (_) {
+  } catch (e) {
+    debugPrint('krHistoryScreeningProvider($date): fetch failed: $e');
     return null;
   }
 });

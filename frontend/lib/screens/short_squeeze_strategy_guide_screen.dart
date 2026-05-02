@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 class ShortSqueezeStrategyGuideScreen extends StatelessWidget {
   const ShortSqueezeStrategyGuideScreen({super.key});
@@ -110,13 +111,13 @@ class _OverviewCard extends StatelessWidget {
             Row(
               children: [
                 _StatChip(label: 'Short Interest', value: '≥ 20%',
-                    color: Colors.red.shade600),
+                    color: AppColors.priceDownMid),
                 const SizedBox(width: 8),
                 _StatChip(label: 'Days to Cover', value: '≥ 5일',
-                    color: Colors.orange.shade600),
+                    color: AppColors.warningMid),
                 const SizedBox(width: 8),
                 _StatChip(label: '촉매 신호', value: '필수',
-                    color: Colors.blue.shade600),
+                    color: AppColors.infoMid),
               ],
             ),
           ],
@@ -170,31 +171,31 @@ class _IndicatorsCard extends StatelessWidget {
         Icons.trending_down,
         'Short Interest (%)',
         '발행 주식 대비 공매도 잔량 비율. 공매도 세력의 규모를 나타내는 핵심 지표.',
-        Colors.red,
+        AppColors.priceDown,
       ),
       (
         Icons.calendar_today,
         'Days to Cover (DTC)',
         '공매도 잔량 / 일평균 거래량. 높을수록 공매도 세력이 청산하기 어려움.',
-        Colors.orange,
+        AppColors.warning,
       ),
       (
         Icons.attach_money,
         'Cost to Borrow (CTB)',
         '주식 대여 연간 비용(%). 높으면 공매도 유지 비용이 커져 청산 압박 강화.',
-        Colors.amber,
+        AppColors.amber,
       ),
       (
         Icons.bar_chart,
         '거래량 스파이크',
         '20일 평균 대비 거래량 급증. 공매도 청산 또는 신규 매수세 유입 신호.',
-        Colors.blue,
+        AppColors.info,
       ),
       (
         Icons.show_chart,
         'RSI 반등',
         '과매도(RSI ≤ 30) 이후 상향 돌파. 바닥 확인 후 반등 타이밍 포착.',
-        Colors.green,
+        AppColors.priceUp,
       ),
     ];
 
@@ -236,7 +237,7 @@ class _IndicatorsCard extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(ind.$3,
                               style: const TextStyle(
-                                  fontSize: 12, color: Colors.grey)),
+                                  fontSize: 12, color: AppColors.mutedText)),
                         ],
                       ),
                     ),
@@ -260,12 +261,12 @@ class _EntryConditionsCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     const conditions = [
-      ('필수', 'Short Interest ≥ 20%', Colors.red),
-      ('필수', 'Days to Cover ≥ 5일', Colors.red),
-      ('촉매', '거래량 ≥ 3× 20일 평균 OR Cost to Borrow 급등', Colors.orange),
-      ('촉매', 'RSI 30 이하 → 상향 돌파 (선택적)', Colors.orange),
-      ('추세', '주가 5일 이상 연속 하락 후 반등 시작', Colors.blue),
-      ('리스크', '시가총액 ≥ 1억 달러 (소형주 유동성 리스크 필터)', Colors.green),
+      ('필수', 'Short Interest ≥ 20%', AppColors.priceDown),
+      ('필수', 'Days to Cover ≥ 5일', AppColors.priceDown),
+      ('촉매', '거래량 ≥ 3× 20일 평균 OR Cost to Borrow 급등', AppColors.warning),
+      ('촉매', 'RSI 30 이하 → 상향 돌파 (선택적)', AppColors.warning),
+      ('추세', '주가 5일 이상 연속 하락 후 반등 시작', AppColors.info),
+      ('리스크', '시가총액 ≥ 1억 달러 (소형주 유동성 리스크 필터)', AppColors.priceUp),
     ];
 
     return Card(
@@ -344,7 +345,7 @@ class _ExitConditionsCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(c.$1, size: 18, color: Colors.red.shade400),
+                    Icon(c.$1, size: 18, color: AppColors.priceDownSoft),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -356,7 +357,7 @@ class _ExitConditionsCard extends StatelessWidget {
                           const SizedBox(height: 3),
                           Text(c.$3,
                               style: const TextStyle(
-                                  fontSize: 12, color: Colors.grey)),
+                                  fontSize: 12, color: AppColors.mutedText)),
                         ],
                       ),
                     ),
@@ -406,31 +407,31 @@ class _BacktestCard extends StatelessWidget {
             const _BacktestRow(
               label: '테스트 기간',
               value: '2015 ~ 2026',
-              color: Colors.grey,
+              color: AppColors.mutedText,
             ),
             const Divider(height: 16),
             const _BacktestRow(
               label: '예상 CAGR',
               value: '준비 중',
-              color: Colors.grey,
+              color: AppColors.mutedText,
             ),
             const Divider(height: 16),
             const _BacktestRow(
               label: '예상 MDD',
               value: '준비 중',
-              color: Colors.grey,
+              color: AppColors.mutedText,
             ),
             const Divider(height: 16),
             const _BacktestRow(
               label: '예상 샤프비율',
               value: '준비 중',
-              color: Colors.grey,
+              color: AppColors.mutedText,
             ),
             const Divider(height: 16),
             const _BacktestRow(
               label: '평균 보유기간',
               value: '5~10 거래일 (단기)',
-              color: Colors.blue,
+              color: AppColors.info,
             ),
           ],
         ),
@@ -453,7 +454,7 @@ class _BacktestRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label,
-            style: const TextStyle(fontSize: 13, color: Colors.grey)),
+            style: const TextStyle(fontSize: 13, color: AppColors.mutedText)),
         Text(value,
             style: TextStyle(
                 fontSize: 13,
@@ -508,7 +509,7 @@ class _GlossaryCard extends StatelessWidget {
                     Expanded(
                       child: Text(t.$2,
                           style: const TextStyle(
-                              fontSize: 12, color: Colors.grey)),
+                              fontSize: 12, color: AppColors.mutedText)),
                     ),
                   ],
                 ),

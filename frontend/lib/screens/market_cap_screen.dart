@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/serverless_providers.dart';
+import '../theme/app_colors.dart';
 
 class MarketCapScreen extends ConsumerWidget {
   const MarketCapScreen({super.key});
@@ -31,16 +32,16 @@ class MarketCapScreen extends ConsumerWidget {
         const Center(
           child: Column(
             children: [
-              Icon(Icons.bar_chart, size: 64, color: Colors.grey),
+              Icon(Icons.bar_chart, size: 64, color: AppColors.mutedText),
               SizedBox(height: 16),
               Text(
                 '시총 Top 20 데이터 없음',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
+                style: TextStyle(fontSize: 16, color: AppColors.mutedText),
               ),
               SizedBox(height: 8),
               Text(
                 'GitHub Actions 실행 후 데이터가 생성됩니다.',
-                style: TextStyle(fontSize: 13, color: Colors.grey),
+                style: TextStyle(fontSize: 13, color: AppColors.mutedText),
               ),
             ],
           ),
@@ -162,7 +163,7 @@ class _NewEntrantsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: Colors.amber.shade50,
+      color: AppColors.amberSubtle,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -172,7 +173,7 @@ class _NewEntrantsCard extends StatelessWidget {
               children: [
                 const Icon(
                   Icons.new_releases_outlined,
-                  color: Colors.amber,
+                  color: AppColors.amber,
                   size: 18,
                 ),
                 const SizedBox(width: 6),
@@ -181,7 +182,7 @@ class _NewEntrantsCard extends StatelessWidget {
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
-                    color: Colors.amber,
+                    color: AppColors.amber,
                   ),
                 ),
               ],
@@ -194,7 +195,7 @@ class _NewEntrantsCard extends StatelessWidget {
                 final ticker = r['ticker'] as String? ?? '';
                 final sector = r['sector'] as String? ?? '';
                 return Chip(
-                  backgroundColor: Colors.amber.shade100,
+                  backgroundColor: AppColors.amberLight,
                   label: Text(
                     '$ticker ($sector)',
                     style: const TextStyle(fontSize: 12),
@@ -263,7 +264,7 @@ class _SectorDistCard extends StatelessWidget {
                           '$count개  ${(pct * 100).toStringAsFixed(0)}%',
                           style: const TextStyle(
                             fontSize: 12,
-                            color: Colors.grey,
+                            color: AppColors.mutedText,
                           ),
                         ),
                       ],
@@ -313,7 +314,7 @@ class _MarketCapTile extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 6),
-      color: isNew ? Colors.amber.shade50 : colorScheme.surfaceContainerLowest,
+      color: isNew ? AppColors.amberSubtle : colorScheme.surfaceContainerLowest,
       child: ListTile(
         dense: true,
         leading: SizedBox(
@@ -323,7 +324,7 @@ class _MarketCapTile extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 14,
-              color: rank <= 3 ? colorScheme.primary : Colors.grey,
+              color: rank <= 3 ? colorScheme.primary : AppColors.mutedText,
             ),
             textAlign: TextAlign.center,
           ),
@@ -339,7 +340,7 @@ class _MarketCapTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
-                  color: Colors.amber,
+                  color: AppColors.amber,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
@@ -360,14 +361,14 @@ class _MarketCapTile extends StatelessWidget {
           children: [
             Text(
               sector,
-              style: const TextStyle(fontSize: 11, color: Colors.grey),
+              style: const TextStyle(fontSize: 11, color: AppColors.mutedText),
             ),
             const SizedBox(height: 2),
             Text(
               displayEnteredAt.isEmpty
                   ? 'Top 20 진입일 기록 없음'
                   : 'Top 20 진입: $displayEnteredAt',
-              style: const TextStyle(fontSize: 11, color: Colors.grey),
+              style: const TextStyle(fontSize: 11, color: AppColors.mutedText),
             ),
           ],
         ),
@@ -381,7 +382,7 @@ class _MarketCapTile extends StatelessWidget {
             ),
             const Text(
               '시총(B)',
-              style: TextStyle(fontSize: 10, color: Colors.grey),
+              style: TextStyle(fontSize: 10, color: AppColors.mutedText),
             ),
           ],
         ),

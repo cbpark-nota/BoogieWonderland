@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/screening_result.dart';
 import '../services/static_data_source.dart';
@@ -136,7 +137,8 @@ final rebalanceSignalProvider =
     final tickers = sr?.results.map((r) => r.ticker).toSet() ?? <String>{};
 
     return RebalanceSignal(rebalanceDate: dateStr, screeningTickers: tickers);
-  } catch (_) {
+  } catch (e) {
+    debugPrint('rebalanceSignalProvider($dateStr): screening fetch failed: $e');
     return RebalanceSignal(rebalanceDate: dateStr, screeningTickers: {});
   }
 });
