@@ -1,20 +1,25 @@
 # 배포 계획서: 앱 + 웹 듀얼 타겟
 
-> **상태**: v0.4 (2026-05-03 갱신) — 인증·운영 형태·도메인 확정 + §6 학습용 세분화 + §11 아키텍처 근거 신설
-> **확정 결정 요약 (v0.4 추가분 포함)**:
-> 1. **N3 SSoT 모델**: "각 채널 독립 운영" — 앱·웹 각자 on-demand 스크리닝, 데이터 소스 공유 안 함. **cron 기반 정기 갱신 폐기**, 사용자 요청 시점에 스크리닝.
-> 2. **데이터 전송 방식**: **DB 저장 + 캐시 패턴**. 라이브 캐시 TTL 5분, 종가 스냅샷은 KST 06:30 / 15:35 두 번. 콜드 캐시 첫 사용자는 그냥 대기.
-> 3. **웹 측 Python 실행 (§3.2.2)**: **B. Cloudflare Containers** 확정. 웹 인프라 전체가 CF 단일 벤더 (D1 / R2 / KV / Workers / Cron Triggers).
-> 4. **N1 코드 공유 구조**: **`scripts/` = 알고리즘 R&D**, **`backend/` = 프로덕션 단일 소스**. 정책은 `README.md` 에 명문화됨.
-> 5. **D1 앱 측 DB**: **PostgreSQL** 확정.
-> 6. **N4 인증 (v0.4 신규)**: **B안 사용자 계정 + JWT** 확정. `users` 테이블 + 회원가입/로그인 라우터 + JWT 미들웨어. Worker는 호스트와 동일한 시크릿으로 JWT 검증.
-> 7. **D8/D12 운영 형태 (v0.4 신규)**: **docker compose** (`api` + `db`) + **Caddy 리버스 프록시**(자동 TLS) 확정. systemd / nginx 옵션 탈락.
-> 8. **D9 시크릿 위치 (v0.4 신규)**: **(α) `.env` 파일 + `chmod 600`** 확정. docker compose `env_file:` 또는 systemd `EnvironmentFile=` (전자 채택). 시크릿 매니저 도입은 미룸.
-> 9. **도메인 구조 (v0.4 신규)**: `cbpark.com`(개인 랜딩, 별도 프로젝트) / **`stock-portfolio.cbpark.com`**(웹 → CF Pages) / **`api-stock-portfolio.cbpark.com`**(호스트 백엔드 → Caddy + Docker). **도메인 등록처는 미결**(CF Registrar 검토 중).
-> **여전히 미결**: 도메인 등록처, GH Actions 워크플로 처분, `backend/api` 처분, 비용·모니터링, 모바일 앱 base URL 분기, TTL 매핑, 콜드 UX, `portfolio.xlsx` 위치, Alembic 첫 revision, `pg_dump` 정책 등 → §9 체크리스트 참조.
+> **상태**: v0.5 (2026-05-03 갱신) — portfolio 독립 저장 + 헥사고날/Clean Architecture + 콜드 UX 진행 표시 확정. §3 채널 스택 + §6 단계 + §11 미룸 표 큰 폭 재작성.
+> **확정 결정 요약 (v0.5 추가분 포함)**:
+> 1. **N3 SSoT 모델**: 각 채널 독립 운영. cron 기반 정기 갱신 폐기, on-demand 스크리닝.
+> 2. **데이터 전송 방식**: DB 저장 + 캐시 패턴. 라이브 캐시 TTL 5분, 종가 스냅샷 KST 06:30 / 15:35.
+> 3. **웹 측 Python 실행**: B. Cloudflare Containers (D1 / R2 / KV / Workers / Cron Triggers).
+> 4. **N1 코드 공유 구조**: `scripts/` = R&D, `backend/` = 프로덕션 단일 소스 (`README.md` 명문화).
+> 5. **D1 앱 측 DB**: PostgreSQL.
+> 6. **N4 인증**: B안 사용자 계정 + JWT. Worker는 호스트와 동일 시크릿 검증.
+> 7. **D8/D12 운영 형태**: docker compose(`api` + `db`) + Caddy 자동 TLS.
+> 8. **D9 시크릿 위치**: `.env` + `chmod 600`. 시크릿 매니저 도입 미룸.
+> 9. **도메인 구조**: `stock-portfolio.cbpark.com`(웹) / `api-stock-portfolio.cbpark.com`(API). 등록처 미결.
+> 10. **D13 portfolio.xlsx (v0.5)**: **무시** — 정체가 "개인화 서비스 초안"이었고 더 이상 사용 안 함. §4 D13 항목 폐기, §9 체크리스트에서 제거.
+> 11. **N7 포트폴리오 저장 정책 (v0.5 신규)**: **앱 = Flutter local storage**(sqflite/secure_storage), **웹 = CF D1**, **앱 ↔ 웹 동기화 없음**. **호스트 백엔드 DB에 `holdings` 테이블 불필요** — 호스트는 screening + auth만. 클라이언트 → 백엔드 호출은 stateless(현재가 계산은 클라이언트가 종목 리스트 전송 + 백엔드는 가격 반환).
+> 12. **N6 아키텍처 패턴 (v0.5 신규)**: **헥사고날(backend) + Clean Architecture(frontend)** 옵션 (2). 호스트와 CF Container 가 같은 `core/` 도메인 코어를 공유하고 어댑터(`postgres_cache` vs `d1_cache`)만 교체. **점진적 마이그레이션** — 새 기능부터 적용 + 기존 코드는 손댈 때마다 이전.
+> 13. **콜드 캐시 UX (§7.4) (v0.5)**: **(a) + 진행 표시 패키지** — 프로그레스바 + 예상 시간("약 10~30초") + 단계별 상태 문구("종목 스크리닝 중", "데이터 가져오는 중", "계산 중", "정렬 중").
+> 14. **D15 콜드 진행 표시 구현 (v0.5 신규)**: **시간 기반 가짜 프로그레스** 확정 — 평균 소요 시간(예: 15초)에 맞춰 클라이언트 자체 애니메이션, 상태 문구 시간대 로테이션. **백엔드 변경 0**(응답 스키마에 `data_source`/`as_of` 필드만 유지). **SSE 실시간 업그레이드는 §11.3 의식적 미룸 표에 후속 검토 항목**으로 명시(이탈률 측정 후).
+> **여전히 미결**: 도메인 등록처, GH Actions 워크플로 처분, `backend/api` 처분, 비용·모니터링, 모바일 base URL, TTL 매핑, Alembic 첫 revision, 비밀번호 해시, Worker 라우트 분리, `pg_dump` 정책, 종가 시점 검증, drift 자동화, **D14 frontend 마이그레이션 전략(점진 vs 빅뱅)** → §9 체크리스트 참조.
 > **코드 변경 0건**: 본 커밋은 문서 갱신만 포함.
 > **자율 판단 금지**: 미결 항목에 대해서는 단정형 결정을 포함하지 않는다.
-> **학습 목적 강화 (v0.4)**: §6 단계가 vertical slice 단위로 세분화되었고, §11에 단계 구분의 아키텍처적 근거 섹션이 추가됨.
+> **v0.5 큰 변경**: §3 채널 스택 헥사고날 구조로 재작성, §3.3 frontend Clean Architecture 신설, §6 sub-step 갱신(holdings 제거 + 어댑터 셋업 추가), §11.3 미룸 표 확장.
 
 ---
 
@@ -191,39 +196,86 @@
 
 ## 3. 채널별 기술 스택
 
-### 3.1 앱 (모바일) — 호스트 머신 백엔드
+### 3.1 앱 (모바일) — 호스트 머신 백엔드 (헥사고날 구조)
+
+#### 3.1.0 헥사고날 구조 개요 (v0.5)
+- **`backend/` 는 호스트와 CF Container 양쪽이 공유하는 단일 소스**. 채널별 차이는 **어댑터 교체** 로만 표현된다.
+- **계층**:
+  ```
+  backend/
+  ├── core/                         # 도메인 코어 (외부 의존 X, pure Python)
+  │   ├── domain/                   # 엔터티: ScreeningResult, Signal, Snapshot, User
+  │   ├── usecases/                 # RunScreening, GetSignal, GetSnapshot, AuthenticateUser
+  │   └── ports/
+  │       ├── inbound/              # ScreeningPort, AuthPort (use case가 외부에 노출하는 인터페이스)
+  │       └── outbound/             # MarketDataPort, CachePort, SnapshotRepoPort, UserRepoPort
+  ├── adapters/
+  │   ├── inbound/
+  │   │   ├── http_fastapi/         # FastAPI 라우터 — 호스트 + CF Container 공통
+  │   │   └── jwt_middleware/       # JWT 검증 미들웨어
+  │   └── outbound/
+  │       ├── yfinance_market/      # MarketDataPort 구현 (US)
+  │       ├── pykrx_market/         # MarketDataPort 구현 (KR)
+  │       ├── postgres_cache/       # CachePort 구현 (호스트, asyncpg)
+  │       ├── d1_cache/             # CachePort 구현 (CF Container, HTTP 어댑터)
+  │       └── memory_cache/         # 테스트용 fake
+  ├── app/                          # 기존 디렉토리 — 점진 마이그레이션 대상
+  │   └── ...                       # 새 기능부터 core/adapters/ 로 이동
+  ├── alembic/                      # 호스트 Postgres 마이그레이션
+  └── tests/
+  ```
+- **호스트 부팅 시점**: `core/usecases/RunScreening` 에 `postgres_cache.PostgresCacheAdapter` 와 `yfinance_market.YfMarketAdapter` 주입.
+- **CF Container 부팅 시점**: 같은 use case 에 `d1_cache.D1CacheAdapter` 와 동일 시장 어댑터 주입.
+- **테스트 시점**: `memory_cache.InMemoryCacheAdapter` 와 `fake_market.FakeMarketAdapter` 주입 → core 단독 테스트 가능.
+- 결과: **도메인 로직은 1번만 작성, 인프라 차이는 어댑터로 흡수**.
 
 #### 3.1.1 컴포넌트
-- **프론트엔드**: Flutter (iOS/Android). API base URL 환경 분기 정책 미결(§5 N2).
-- **백엔드 프레임워크**: `backend/app/` 의 FastAPI 활용. **`backend/` 는 프로덕션 코드의 단일 소스** — CF Container 도 같은 디렉토리를 빌드 컨텍스트로 사용한다(§3.2).
-- **스케줄러**: `backend/app/scheduler.py` — 정기 cron은 **종가 스냅샷 2회(06:30/15:35 KST)** 만 잔존. 일간 스크리닝 잡은 on-demand 모델로 전환되어 사실상 폐기 (코드 수정은 단계 1에서).
-- **DB**: ✅ **PostgreSQL 확정** (`postgresql+asyncpg://...`).
-  - 드라이버: `asyncpg` 유지.
-  - 마이그레이션: `alembic` 그대로(`backend/alembic/`). 첫 revision 생성 여부는 단계 1에서 결정 (§6 단계 1 체크리스트).
-  - 운영 형태: docker compose `db` 서비스 또는 호스트 PostgreSQL 별도 운영 — 단계 1에서 확정.
-- **알고리즘 코드**: `backend/app/services/screener.py` 가 운영용 단일 소스. R&D 결과는 `scripts/screener/*.py` 에서 검증한 뒤 **수동 복사** 로 반영(§7.1 #6 drift 위험 참조).
-- **푸시**: Firebase Cloud Messaging — `app/services/notification.py`, 자격증명은 `APP_FCM_CREDENTIALS_PATH`.
+- **프론트엔드**: Flutter (iOS/Android) — Clean Architecture 3-layer (§3.3).
+- **백엔드 프레임워크**: FastAPI (`backend/adapters/inbound/http_fastapi/`).
+- **스케줄러**: APScheduler — KST 06:30 / 15:35 두 잡만 잔존. `core/usecases/RunScreening` 을 호출.
+- **DB**: PostgreSQL (asyncpg). `users` + `screening_runs`(캐시) + `signal_snapshots`(종가 아카이브). **`holdings` 테이블 없음** (N7 결정).
+- **알고리즘 코드**: `backend/core/usecases/RunScreening` 이 운영용 단일 소스. R&D 결과는 `scripts/screener/*.py` 에서 검증한 뒤 **수동 복사** (§7.1 #6).
+- **인증**: JWT (N4) — `backend/adapters/inbound/jwt_middleware/`. `core/usecases/AuthenticateUser` + `core/ports/outbound/UserRepoPort`.
+- **푸시**: Firebase Cloud Messaging — 어댑터 위치 단계 1.2에서 결정.
 
 #### 3.1.2 데이터 갱신 흐름
-- **on-demand**: 모바일 앱이 `/api/screening` 호출 → DB 캐시 조회(TTL 5분) → MISS면 `run_screening()` **함수 호출(in-process)** → 결과 INSERT → 응답.
-- **종가 스냅샷**: APScheduler 가 KST 06:30 / 15:35 에 강제 실행 → `eod_snapshot` 테이블 INSERT (TTL 없음, 영속).
-- **싼 작업(BTC/ETH 시그널)**: 짧은 TTL 또는 stateless. 매핑은 미결.
+- **on-demand 스크리닝**: 클라이언트 → `/api/screening` → JWT 검증 → `RunScreening` use case → `CachePort.get(market, ttl=5min)` HIT → 즉시 응답 / MISS → `MarketDataPort.fetch()` + 알고리즘 → `CachePort.put()` → 응답.
+- **종가 스냅샷**: APScheduler → `RunScreening(mode="snapshot")` → `SnapshotRepoPort.save()` (TTL 없음).
+- **현재가 조회 (stateless)**: 클라이언트가 종목 리스트 전송 → `/api/quotes` → `MarketDataPort.quotes(tickers)` → 가격만 반환. **호스트는 사용자별 holdings 보관 안 함** (N7).
+- **싼 작업(BTC/ETH 시그널)**: 별도 use case + 짧은 TTL. 매핑은 미결.
 
 #### 3.1.3 운영
-- 단일 호스트(VPS) — `uvicorn` + systemd 또는 docker compose 1대.
-- 백업: **`pg_dump` cron + 외부 스토리지 업로드** (권장 패턴, 사용자 결정 필요 — §9 체크리스트).
-- 모니터링: 별도 결정 필요(N5).
+- 단일 호스트(VPS) — docker compose (`api` + `db` + `caddy` 3개 서비스, D12 확정).
+- 백업: `pg_dump` cron + 외부 스토리지 (정책 미결).
+- 모니터링: N5 미결.
 
-### 3.2 웹 — Cloudflare 단일 벤더 (옵션 B 확정)
+#### 3.1.4 DB 스키마 (v0.5 단순화)
+```
+users               # 인증 (N4)
+  id, email, password_hash, created_at, ...
+
+screening_runs      # 라이브 캐시 (TTL 5분, CachePort 구현 테이블)
+  market, payload, computed_at, expires_at
+
+signal_snapshots    # 종가 아카이브 (TTL 없음, SnapshotRepoPort 구현 테이블)
+  market, snapshot_date, payload, computed_at
+```
+- **삭제(또는 미생성)**: 기존 `holdings`, `device_tokens` 검토 — N7 결정에 따라 holdings 미사용. device_tokens 는 FCM 푸시 잔존 시만 필요(단계 1.2/2.3에서 결정).
+
+### 3.2 웹 — Cloudflare 단일 벤더 (옵션 B 확정 + 헥사고날 어댑터 교체)
 
 #### 3.2.1 컴포넌트
 - **호스팅**: Cloudflare Pages — Flutter Web 빌드 산출물.
-- **라우팅·캐시 게이트**: Cloudflare Workers (TS/JS) — `/api/*` 진입점, D1 캐시 조회 후 MISS 시 Containers 호출.
-- **스크리너 실행**: Cloudflare Containers — 호스트 측과 동일한 **`backend/`** 디렉토리를 Docker 빌드 컨텍스트로 사용. 즉 컨테이너 안에서도 `backend/app/services/*` 코드를 실행한다. (이미지 사이즈 최적화 + 단일 소스 유지 목적. `scripts/` 는 컨테이너에 포함하지 않음.)
-- **DB**: D1 (SQLite 호환). 캐시 + 종가 스냅샷.
+- **라우팅·인증·진행 표시 프록시**: Cloudflare Workers (TS/JS) — `/api/*` 진입점, JWT 검증, D1 캐시 조회 후 MISS 시 Containers 호출.
+- **스크리너 실행**: Cloudflare Containers — 호스트와 **동일한 `backend/` 코드 베이스**를 Docker 빌드. 헥사고날 어댑터만 교체:
+  - 부팅 시 `RunScreening` use case 에 **`d1_cache.D1CacheAdapter`** + 동일 시장 어댑터 주입.
+  - 도메인 로직(`core/usecases/`) 은 1바이트도 다르지 않다.
+- **DB**: D1 (SQLite 호환). `screening_runs`(캐시) + `signal_snapshots`(종가) — 호스트와 **같은 테이블 이름·같은 컬럼**, 다른 인스턴스.
+  - **`users` 미사용**: 웹 사용자도 호스트의 `users` 테이블로 인증 (Worker 가 호스트와 같은 JWT 시크릿 검증, N4).
+  - **`holdings` 미사용**: 웹은 D1 의 별도 `web_holdings` 테이블에 자체 보관 (N7). 단, 본 테이블 스키마/존재 여부는 단계 3.3에서 확정.
 - **오브젝트 스토리지**: R2 — 대형 산출물(parquet, history archive) 또는 정적 자산.
-- **KV**: 작은 키/값(예: 마지막 cron 실행 시각). **사용 여부는 미결** — 단계 3에서 확정 가능.
-- **cron**: Cloudflare Cron Triggers — Worker 발화 → Container 호출.
+- **KV**: 작은 키/값(예: 마지막 cron 실행 시각). 사용 여부 미결 — 단계 3.4에서 확정.
+- **cron**: Cloudflare Cron Triggers — Worker 발화 → Container 호출 → `signal_snapshots` INSERT.
 
 #### 3.2.2 Python 실행 옵션 비교 — **B 선택 확정**
 
@@ -244,13 +296,87 @@
 
 | 저장소 | 용도 | 사용 |
 |---|---|---|
-| **D1** (SQLite 호환) | `cache_snapshot`, `eod_snapshot` 테이블 | **사용 확정** |
+| **D1** (SQLite 호환) | `screening_runs`(캐시) + `signal_snapshots`(종가) + (선택) `web_holdings` | **사용 확정** |
 | **R2** (S3 호환) | parquet, history, 대형 정적 산출물 | **사용 확정** (정적 자산만) |
-| **KV** (글로벌 KV) | hot path 소형 키 (예: 마지막 갱신 ts) | **선택** — 단계 3에서 필요 시 추가 |
+| **KV** (글로벌 KV) | hot path 소형 키 (예: 마지막 갱신 ts) | **선택** — 단계 3.4에서 필요 시 추가 |
+
+### 3.3 프론트엔드 — Flutter Clean Architecture (v0.5 신설)
+
+#### 3.3.0 디렉토리 구조
+```
+frontend/lib/
+├── domain/                          # 순수 Dart, Flutter SDK 미의존
+│   ├── entities/                    # ScreeningResult, Signal, Holding, User
+│   └── usecases/                    # GetScreening, AddHolding, ListHoldings, ComputeQuotes
+│   └── repositories/                # 추상 인터페이스: HoldingsRepository, ScreeningRepository, AuthRepository
+├── data/                            # 인프라 어댑터
+│   ├── remote/
+│   │   ├── api_client.dart          # HTTP 클라이언트 (호스트 백엔드 호출)
+│   │   ├── screening_remote.dart    # ScreeningRepository remote 구현
+│   │   └── auth_remote.dart         # AuthRepository remote 구현
+│   ├── local/
+│   │   ├── holdings_local.dart      # HoldingsRepository local 구현 (sqflite)
+│   │   ├── token_storage.dart       # secure_storage 래퍼
+│   │   └── ...
+│   └── repositories/                # 채널별 어댑터 라우팅
+│       └── holdings_repository_factory.dart
+├── presentation/                    # 위젯 + Riverpod
+│   ├── screens/
+│   ├── widgets/
+│   └── providers/                   # Riverpod provider — usecase 주입
+└── main.dart                        # DI 컨테이너 부팅
+```
+
+#### 3.3.1 의존성 방향
+- `presentation` → `domain` ← `data`
+- `domain` 은 어떤 외부 패키지에도 의존하지 않음 (sqflite, http 등 import 금지).
+- `data` 는 `domain` 의 인터페이스를 구현. `presentation` 은 직접 `data` 를 import 하지 않고 `domain` 의 인터페이스를 받는다.
+- DI 는 `main.dart` 또는 Riverpod provider 에서 한 번만.
+
+#### 3.3.2 Holdings 어댑터 분기 — 채널별 구현 (N7 결정)
+- **모바일 앱**: `presentation` → `HoldingsRepository` 인터페이스 → `LocalHoldingsRepository` (sqflite) 주입.
+  - 데이터는 폰 로컬에만 존재. 백엔드와 동기화 X.
+- **Flutter Web**: 같은 `presentation` 코드 → 같은 `HoldingsRepository` 인터페이스 → `RemoteHoldingsRepository` (CF Worker `/api/web-holdings` → D1 `web_holdings` 테이블) 주입.
+- **UI 코드 분기 없음**: 위젯·use case·provider 모두 단일 코드. **DI 주입만 다르다**.
+- 빌드 시점 구분: `--dart-define=PLATFORM_TARGET=mobile|web` 또는 `kIsWeb` 으로 자동 분기 (단계 2.0/3.x 에서 결정).
+
+#### 3.3.3 점진 마이그레이션 전략 (D14 미결)
+- **새 기능부터 적용**: 단계 1 이후 추가하는 모든 기능은 Clean Architecture 패턴으로.
+- **기존 코드는 손댈 때마다 이전**: 화면을 수정하면 그 기회에 domain/data/presentation 분리.
+- **빅뱅 마이그레이션 안 함**: 한 번에 모든 코드를 옮기는 PR 은 리뷰 불가능.
+- 마이그레이션 전략 자체(D14)는 §9 미결 — "점진 vs 빅뱅" 사용자 최종 답 필요.
+
+#### 3.3.4 Stateless 백엔드 호출 패턴
+- 현재가 계산: 클라이언트가 `LocalHoldingsRepository.list()` 로 종목 리스트 가져옴 → `/api/quotes?tickers=AAPL,NVDA,...` 호출 → 가격만 반환 → 클라이언트가 합계/수익률 계산.
+- 백엔드는 사용자별 holdings 보관 안 함 → 호스트 DB 단순(N7).
+
+### 3.4 콜드 캐시 진행 표시 — 시간 기반 가짜 프로그레스 (v0.5, D15 ✅)
+
+#### 3.4.1 결정 요약
+- **방식**: 시간 기반 가짜 프로그레스. 평균 소요 시간(예: 15초)에 맞춰 프로그레스바 애니메이션.
+- **상태 문구 로테이션** (시간대 기반, 서버 신호 없이 클라이언트가 자체 진행):
+  - 0~25%: "종목 스크리닝 중"
+  - 25~50%: "데이터 가져오는 중"
+  - 50~85%: "계산 중"
+  - 85~100%: "정렬 중"
+- **예상 시간 표시**: "약 10~30초"
+- **백엔드 변경 0**: 응답 스키마에 `data_source` / `as_of` 필드만 유지(§4.1 C1 매핑과 정합). SSE 등 스트리밍 엔드포인트 신설 X.
+
+#### 3.4.2 구현 위치
+- **모바일/웹 공통 위젯**: `frontend/lib/presentation/widgets/loading_progress.dart` (3.3 Clean Architecture 의 presentation 계층).
+- 평균 소요 시간 상수는 `--dart-define` 또는 환경 설정에서 조정 가능하게.
+- 응답이 예상 시간보다 빨리/늦게 오면:
+  - 빠르면: 프로그레스바를 즉시 100% 채우고 자연스럽게 결과 표시.
+  - 늦으면: 95% 에서 멈추고 "거의 다 됐어요..." 로 문구 변경.
+
+#### 3.4.3 한계와 후속 (§11.3 미룸 표 항목)
+- 시간 기반은 "가짜" — 실제 백엔드 진행 단계와 무관. 사용자가 가짜라는 걸 인지해도 인디케이터 자체는 이탈 방지에 효과 있다는 가정.
+- **SSE 실시간 진행률 업그레이드는 후속 검토** — 사용자 이탈률 측정 후 임계값 초과 시 도입(§11.3).
+- 후속 시 영향 범위: 백엔드 SSE 엔드포인트 추가 + use case에 progress callback 주입 + 프론트엔드 EventSource 클라이언트.
 
 ---
 
-## 4. 13개 결정 항목 매트릭스 (+ 신규 3 항목)
+## 4. 13개 결정 항목 매트릭스 (+ 신규 항목)
 
 > **읽는 법**: ✅ = 본 갱신으로 결정됨. ❓ = 사용자 결정 필요. 채널별로 답이 분기됨.
 
@@ -268,7 +394,9 @@
 | **D10** | 의존성 설치 방식 | ✅ **`uv sync`** (개인 Mac 개발) + **Docker 이미지** (Linux 호스트) 병행. `pyproject.toml` 단일 매니페스트 사용 | ✅ Docker 이미지 빌드 (`backend/` 컨텍스트) — 동일 `pyproject.toml` 사용 |
 | **D11** | DB 마이그레이션 방식 | ✅ **Alembic + asyncpg** (`backend/alembic/`). ❓ 첫 revision 생성 vs `Base.metadata.create_all` 잔존 — 단계 1.1에서 결정 | ✅ **D1 마이그레이션 도구**(`wrangler d1 migrations`) |
 | **D12** | 시작 명령 / 단일 진입점 | ✅ **docker compose**(`api` + `db` 2개 서비스) + **Caddy** 컨테이너 1개(또는 호스트 systemd Caddy). systemd-only 옵션 탈락 | ✅ `wrangler deploy` (Workers + Cron Triggers + Containers) + Pages 배포 |
-| **D13** | `portfolio.xlsx` 위치 / 캐시 디렉토리 | ❓ 호스트 경로 미결 (예: `/var/lib/momentum/portfolio.xlsx`) | ❓ R2 prefix vs 컨테이너 이미지 동봉 미결 — 누가 편집/업로드하는지 SSoT 정의 필요 |
+| ~~**D13**~~ | ~~`portfolio.xlsx` 위치 / 캐시 디렉토리~~ | 🚫 **폐기 (v0.5)** — 정체가 "개인화 서비스 초안"이었고 더 이상 사용 안 함 | 🚫 폐기 |
+| **D14** (v0.5 신규) | 프론트엔드 Clean Architecture 마이그레이션 전략 | ❓ **점진 vs 빅뱅** 미결 (권장은 점진 — §3.3.3) | ❓ 동일 |
+| **D15** (v0.5 신규) | 콜드 진행 표시 구현 방식 | ✅ **시간 기반 가짜 프로그레스** 확정. 평균 소요 시간 기반 애니메이션 + 시간대 로테이션. 백엔드 변경 0 (§3.4) | ✅ 동일 패턴 재사용 |
 
 ### 4.1 신규 항목 (on-demand + 캐시 모델 도입으로 추가)
 
@@ -280,10 +408,10 @@
 | **C4** | 도메인 구조 (v0.4 신규) | ✅ 결정 — `cbpark.com`(개인 랜딩, 별도 프로젝트) / `stock-portfolio.cbpark.com`(웹 → CF Pages) / `api-stock-portfolio.cbpark.com`(호스트 백엔드 → Caddy + Docker). ❓ **도메인 등록처는 미결** (CF Registrar 검토 중) |
 
 ### 4.2 매트릭스 요약
-- v0.4 결정으로 **추가 해결된 항목**: D8(앱) 외부 노출 세부, D9(앱), D12(앱) 최종 선택, N4 본질, C4 도메인 구조.
-- v0.3 결정으로 **추가 해결된 항목**: D1(앱), D10(앱), D11(앱) 골격, D12(앱) 골격, D8(앱) 골격, N1.
-- **자동 해결된 항목 누적**: D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12 (앱/웹 양측 — 단, 일부는 세부 미결), N1, N3, N4, C1·C2·C3 원칙, C4 골격.
-- **여전히 사용자 결정이 필요한 항목**: D11(앱) 첫 revision 정책, D13, §5 N2·N5, C1 매핑 표, C4 도메인 등록처, §3.1.3 백업 정책, §7.4 콜드 UX 적용 여부, §7.5 GH Actions 처분.
+- v0.5 결정으로 **추가 해결된 항목**: D13 폐기, D15(시간 기반 가짜 프로그레스), N6(헥사고날+Clean), N7(포트폴리오 독립 저장), §7.4 콜드 UX 본질.
+- v0.4 결정으로 추가 해결된 항목: D8/D9/D12 세부, N4 본질, C4 도메인 골격.
+- v0.3 결정으로 추가 해결된 항목: D1(앱), D10(앱), D11(앱) 골격, N1.
+- **여전히 사용자 결정이 필요한 항목**: D11(앱) 첫 revision 정책, **D14 프론트엔드 마이그레이션 전략(점진 vs 빅뱅)**, §5 N2·N5, C1 매핑 표, C4 도메인 등록처, §3.1.3 백업 정책, §7.5 GH Actions 처분, 비밀번호 해시, Worker 라우트 분리, 종가 시점 검증, drift 자동화.
 
 ---
 
@@ -308,9 +436,13 @@
   - (c) 런타임 설정 화면에서 사용자 입력
 - **결정 필요 질문**: 모바일 앱 빌드 파이프라인에서 어느 방식이 가장 단순한가?
 
-### N3. SSoT — 데이터 sync ✅ **확정**
+### N3. SSoT — 데이터 sync ✅ **확정 + v0.5 보강 (포트폴리오까지 독립)**
 - **결정**: 각 채널 독립 운영. 공유 저장소·sync 절차·일치 검증 모두 없음. 결과 미세 차이 수용.
-- **함의**: 본 결정으로 §3.2.2 의 옵션 후보가 좁혀졌고(B 선택), 갱신 모델이 cron 기반에서 on-demand + 종가 cron 으로 전환됨.
+- **v0.5 보강**: 포트폴리오(holdings)도 채널별 독립 저장 — 모바일은 sqflite 로컬, 웹은 D1. **앱 ↔ 웹 동기화 없음(N7 결정)**. 결과로 호스트 DB에서 `holdings` 테이블 자체가 사라지고, 호스트는 screening + auth만 책임.
+- **함의**:
+  - §3.2.2 옵션 B 선택, on-demand + 종가 cron.
+  - 호스트 백엔드는 사용자별 영속 데이터를 거의 보관 X (users 외엔 캐시·스냅샷만).
+  - 백엔드 호출은 **stateless**: 클라이언트가 종목 리스트 전송 → 백엔드는 가격만 반환.
 
 ### N4. 인증/접근 제어 ✅ **확정 (v0.4) — B안 사용자 계정 + JWT**
 - **결정**: **사용자 계정 도입**. 호스트 백엔드와 CF Worker 모두 JWT 기반 검증.
@@ -331,6 +463,34 @@
 - **수반 위험**:
   - 비밀번호 분실 흐름(이메일 인증 등)은 v0.4 범위에 포함 안 함 — 미룸 (§11.3 참조).
   - 사용자 계정 도입은 **개인정보 처리** 책임이 따름 — 약관/개인정보처리방침 별도 작성 필요(법적 사안, 별도 결정).
+
+### N6. 아키텍처 패턴 — 헥사고날(backend) + Clean Architecture(frontend) ✅ **확정 (v0.5)**
+- **결정**: 옵션 (2) 채택. backend 는 헥사고날(ports/adapters), frontend 는 Clean Architecture 3-layer (domain/data/presentation).
+- **backend 적용 (§3.1.0)**:
+  - 도메인 코어(`core/`)는 호스트와 CF Container 양쪽이 공유.
+  - 어댑터만 채널별로 다름: `postgres_cache` (호스트) vs `d1_cache` (CF Container).
+  - 같은 use case 가 양쪽에서 동작 → 알고리즘 1번 작성, 인프라 차이는 어댑터로 흡수.
+- **frontend 적용 (§3.3)**:
+  - 3-layer: `domain/` (순수 Dart) ← `data/` (인프라 어댑터) → `presentation/` (위젯·Riverpod).
+  - Holdings: 같은 `HoldingsRepository` 인터페이스 뒤에 `LocalHoldingsRepository`(앱) / `RemoteHoldingsRepository`(웹) 두 구현. UI 분기 X, DI 분기만.
+- **마이그레이션 전략**: 점진(권장). 새 기능부터 적용 + 기존 코드는 손댈 때마다 이전. 빅뱅 X.
+  - **D14 (점진 vs 빅뱅 최종 선택)** 은 §9 미결.
+- **수반 위험**:
+  - 학습 곡선 (헥사고날·Clean 익숙하지 않은 경우 sub-step 1.0/2.0 에서 시간 추가 소요).
+  - 점진 마이그레이션 중 새 패턴/구 패턴 혼재 (§7.7 신설).
+
+### N7. 포트폴리오 저장 정책 — 채널별 독립 ✅ **확정 (v0.5)**
+- **결정**:
+  - 모바일 앱: Flutter local storage (sqflite + secure_storage).
+  - 웹: CF D1 (`web_holdings` 테이블).
+  - **앱 ↔ 웹 동기화 없음** — 사용자가 명시적으로 OK.
+- **호스트 백엔드 영향**:
+  - `holdings` 테이블 **불필요** → 호스트 DB 스키마 단순화 (users + screening_runs + signal_snapshots만, §3.1.4).
+  - 클라이언트 → 백엔드 호출은 stateless. 현재가 계산은 클라이언트가 종목 리스트 전송 + 백엔드는 가격만 반환.
+- **함의**:
+  - 모바일 앱 재설치 시 holdings 손실 가능 → 사용자에게 공지 필요(§7.8 신설).
+  - 웹 사용자는 다른 브라우저에서도 같은 holdings 봄 (D1 기준).
+  - 모바일과 웹을 같은 사용자가 쓸 때 두 화면이 다른 holdings 표시 — 본 결정은 그 불편을 수용.
 
 ### N5. 비용·모니터링·`backend/api` 처분 ❓ **미결**
 - **비용 집계 후보**: 호스트 VPS, DB 백업, CF Pages/Workers/Containers/D1/R2, FCM, 도메인.
@@ -361,6 +521,22 @@
 
 > **단계 목표**: `api-stock-portfolio.cbpark.com` 도메인으로 외부 노출되는 호스트 백엔드를 가동하고, 모바일 앱이 호출할 수 있는 인증 + 캐시 + 종가 스냅샷 메커니즘을 검증한다.
 > **단계 종료 시 데모 가능**: `curl https://api-stock-portfolio.cbpark.com/api/screening -H "Authorization: Bearer ..."` 가 5분 캐시로 동작한다.
+
+#### 1.0 헥사고날 디렉토리 셋업 (v0.5 신규)
+- **Goal**: `backend/core/` (domain/usecases/ports) + `backend/adapters/` (inbound/outbound) 디렉토리 구조 생성. 아직 비어 있어도 무방.
+- **Deliverable**:
+  - `backend/core/domain/`, `backend/core/usecases/`, `backend/core/ports/inbound/`, `backend/core/ports/outbound/` 빈 패키지
+  - `backend/adapters/inbound/http_fastapi/`, `backend/adapters/outbound/{yfinance_market,pykrx_market,postgres_cache,memory_cache}/` 빈 패키지
+  - 첫 use case 1개 + memory_cache fake 어댑터로 단위 테스트 1개 통과 (스모크: `RunScreening` 가짜 입력 → 가짜 출력)
+  - 기존 `backend/app/` 는 유지 (점진 마이그레이션, D14 결정 적용)
+- **Acceptance**:
+  - `pytest backend/tests/test_run_screening_smoke.py` 통과
+  - `from backend.core.usecases import RunScreening` import 성공
+  - `core/` 가 외부 의존(yfinance, sqlalchemy 등)을 import 하지 않음 (의존성 방향 검증)
+- **Estimate**: 0.5~1일
+- **Learning Note**:
+  - **빈 골격 먼저, 구현 나중**: 디렉토리 트리만 만들어도 다음 sub-step들이 어디에 코드를 두어야 하는지 명확해짐.
+  - **점진 마이그레이션 시작점**: 이 sub-step 이후 새 기능은 모두 core/adapters/ 에 작성. 기존 `backend/app/` 코드는 그대로 두고 손댈 때마다 이전.
 
 #### 1.1 인프라 슬라이스 — Docker compose + Postgres + Caddy + 도메인
 - **Goal**: 빈 FastAPI(`/health` 200만 응답) + Postgres + Caddy 가 docker compose 로 호스트에서 기동되고, 외부 도메인으로 TLS 응답.
@@ -398,37 +574,44 @@
   - **인증을 알고리즘보다 먼저**: 인증을 나중에 끼워 넣으면 모든 라우터 시그니처를 다시 손봐야 함 → 미들웨어 위치를 라우터 작성 전에 확정.
   - **사용자 계정 도입은 되돌리기 어려운 결정 (reversibility 낮음)**: 한번 사용자가 가입하면 데이터 마이그레이션 부담 발생 → 일찍 결정·구현.
 
-#### 1.3 알고리즘 슬라이스 — `/api/screening` on-demand + 5분 캐시
-- **Goal**: `scripts/screener/screener_v3.py` 의 검증된 로직을 `backend/app/services/screener.py` 로 복사·정리하고, `/api/screening` 이 5분 캐시로 동작.
+#### 1.3 알고리즘 슬라이스 — `RunScreening` use case + `/api/screening` + 5분 캐시 + 응답 스키마
+- **Goal**: `RunScreening` use case + `PostgresCacheAdapter` + `/api/screening` 라우터가 5분 캐시로 동작. **응답 스키마에 `data_source`/`as_of` 필드 포함** (D15 진행 표시 정합).
 - **Deliverable**:
-  - `backend/app/services/screener.py` 갱신 (scripts/와 핵심 함수 시그니처/상수 동기화 — drift 베이스라인 §7.1 #6)
-  - `cache_snapshot(market, payload, expires_at, ...)` 테이블 추가 마이그레이션
-  - `backend/app/routers/screening.py` — TTL 5분 캐시 게이트 + MISS 시 동기 실행
-  - pytest: HIT/MISS, TTL 만료, 동시 요청 처리 시나리오
+  - `backend/core/usecases/run_screening.py` (스크리너 알고리즘을 use case 로 정리, scripts/ 와 핵심 함수 시그니처 동기화 — drift 베이스라인 §7.1 #6)
+  - `backend/adapters/outbound/postgres_cache/` — `CachePort` 구현, `screening_runs` 테이블 마이그레이션
+  - `backend/adapters/outbound/{yfinance_market, pykrx_market}/` — `MarketDataPort` 구현
+  - `backend/adapters/inbound/http_fastapi/screening_router.py` — TTL 5분 캐시 게이트
+  - 응답 스키마: `{ "data_source": "live"|"cache"|"snapshot", "as_of": "...", "results": [...] }`
+  - **싼 작업 TTL 매핑 표 적용 (C1 매핑, 1.3 직전 결정)**
+  - pytest: HIT/MISS, TTL 만료, 동시 요청, 응답 스키마 검증
 - **Acceptance**:
-  - 첫 호출: 5~30초 응답
-  - 5분 내 동일 요청: < 100ms 응답 (HIT)
-  - TTL 만료 후 다음 호출: 다시 MISS → 동기 실행
-  - 같은 시점·같은 입력 기준 `backend/app/services/screener.py` 결과가 `scripts/screener/screener_v3.py` 결과와 일치
-- **Estimate**: 2~3일
+  - 첫 호출: 5~30초 응답, `data_source="live"`
+  - 5분 내 동일 요청: < 100ms 응답 (HIT), `data_source="cache"`
+  - TTL 만료 → 다시 MISS
+  - `RunScreening` use case 결과가 `scripts/screener/screener_v3.py` 결과와 일치
+  - `core/` 가 sqlalchemy / yfinance import 하지 않음 (의존성 방향 검증)
+- **Estimate**: 3~4일
 - **Learning Note**:
-  - **vertical slice = "한 엔드포인트를 끝까지"**: `/api/screening` 한 라우터를 골라 DB 캐시·스크리너 호출·응답까지 한 번에 완성. 라우터 다 만들고 캐시 다 만드는 horizontal layer 방식보다 통합 위험이 적음.
-  - **drift 베이스라인은 단계 1에서**: scripts/와 backend/services/의 1차 일치를 단계 1.3에서 확보해 두면 이후 알고리즘 수정 시 비교 기준점이 생김.
+  - **vertical slice + 헥사고날의 만남**: `/api/screening` 한 라우터를 끝까지 만드는데, 그 안에서 도메인(use case) 와 인프라(어댑터) 가 분리되어 있음. 다음 sub-step에서 어댑터 교체만으로 다른 환경 지원 가능.
+  - **응답 스키마는 일찍 고정**: `data_source`/`as_of` 같은 메타 필드를 단계 1.3에서 박아두면 단계 2.3 진행 표시 / 단계 3.4 데이터 일관성 비교가 같은 스키마로 동작.
 
-#### 1.4 영속 데이터 슬라이스 — 종가 스냅샷 cron + 이력 조회
-- **Goal**: APScheduler 가 KST 06:30 / 15:35 에 강제 스크리닝 → `eod_snapshot` 테이블 INSERT, 그리고 `/api/snapshot/{date}` 라우터가 조회 가능.
+#### 1.4 영속 데이터 슬라이스 — 종가 스냅샷 cron + 이력 조회 + `/api/quotes` stateless
+- **Goal**: APScheduler KST 06:30 / 15:35 → `signal_snapshots` INSERT, `/api/snapshot/{date}` 조회, **`/api/quotes` stateless 가격 조회 추가** (N7 — 클라이언트 holdings 보관 안 함).
 - **Deliverable**:
-  - `eod_snapshot(market, snapshot_date, payload, ...)` 테이블 추가 마이그레이션
-  - `backend/app/scheduler.py` 정리 — 일간 스크리닝 잡 제거, **KST 06:30 / 15:35 두 잡만 잔존**
-  - `backend/app/routers/screening.py` 에 `GET /api/snapshot/{date}` 추가
-  - pytest: 시간 모킹으로 cron 발화 + INSERT 검증
+  - `signal_snapshots` 테이블 마이그레이션
+  - `backend/adapters/outbound/postgres_cache/snapshot_repo.py` — `SnapshotRepoPort` 구현
+  - APScheduler 정리 — KST 06:30 / 15:35 두 잡만 잔존, `RunScreening(mode="snapshot")` 호출
+  - `GET /api/snapshot/{date}` 라우터
+  - **`POST /api/quotes` (또는 `GET /api/quotes?tickers=...`)** — 클라이언트가 종목 리스트 전송 → `MarketDataPort.quotes()` → 가격만 반환 (사용자별 데이터 보관 X)
+  - pytest: 시간 모킹 cron 발화, quotes 라우터, 응답 스키마 (`data_source` 포함)
 - **Acceptance**:
-  - 06:30/15:35 cron이 실제 발화 + DB INSERT 확인 (수동 트리거 또는 시간 모킹)
-  - `GET /api/snapshot/2026-05-02` → 해당 날짜 스냅샷 응답
-  - 종가 스냅샷이 라이브 캐시와 별도 영속 (TTL 없음)
-- **Estimate**: 1~1.5일
+  - 06:30/15:35 cron 발화 + `signal_snapshots` INSERT
+  - `GET /api/snapshot/2026-05-02` → 해당 날짜 스냅샷 응답 (`data_source="snapshot"`)
+  - `POST /api/quotes` → 가격만 반환, 호스트는 종목 리스트를 영속화 X
+  - 종가 시점 (06:30/15:35) 가 yfinance/pykrx 종가 데이터 가용 시점과 정합 (실측)
+- **Estimate**: 1.5~2일
 - **Learning Note**:
-  - **라이브 캐시와 영속 스냅샷의 분리**: 두 저장소를 같은 테이블로 합치면 TTL 정책이 꼬임. 처음부터 분리.
+  - **stateless 백엔드의 단순함**: 사용자별 holdings 를 호스트가 보관하지 않으면 백업·마이그레이션·동시성·인증 범위가 모두 줄어듦. N7 결정의 보상이 단계 1.4 에서 회수.
   - **종가 시점 검증 필수**: 06:30 / 15:35 가 yfinance/pykrx 종가 데이터 가용 시점과 일치하는지 1.4 시작 시 실측(§9 체크리스트).
 
 #### 1.5 운영 슬라이스 — 백업 + 로그 + 1주 안정성
@@ -453,6 +636,23 @@
 
 > **단계 목표**: Flutter 모바일 앱이 단계 1 호스트 백엔드와 인증·통신·푸시를 끝낸다.
 > **단계 종료 시 데모 가능**: 실제 폰에서 회원가입 → 로그인 → 스크리닝 결과 화면 표시 → 푸시 알림 수신.
+
+#### 2.0 Frontend Clean Architecture 디렉토리 셋업 (v0.5 신규)
+- **Goal**: `frontend/lib/{domain,data,presentation}/` 디렉토리 구조 생성. 첫 use case + repository 인터페이스 + local 어댑터 1개로 스모크 테스트.
+- **Deliverable**:
+  - `frontend/lib/domain/{entities,usecases,repositories}/` 빈 패키지
+  - `frontend/lib/data/{remote,local,repositories}/` 빈 패키지
+  - `frontend/lib/presentation/{screens,widgets,providers}/` 기존 코드 일부 이동 (점진 — D14 결정 적용)
+  - 첫 entity (`Holding`) + 인터페이스 (`HoldingsRepository`) + sqflite 구현 (`LocalHoldingsRepository`) + 단위 테스트
+  - DI 부팅 코드 (`main.dart` 또는 Riverpod provider 1개)
+- **Acceptance**:
+  - `flutter test` 통과
+  - `domain/` 가 sqflite/http 등 외부 패키지 import 하지 않음 (정적 분석으로 검증)
+  - 기존 화면 1개가 새 패턴(`domain/usecase` 통한 호출) 으로 동작
+- **Estimate**: 1~1.5일
+- **Learning Note**:
+  - **빈 골격 먼저**: backend 1.0 과 같은 패턴 — 디렉토리 트리만 만들어도 후속 sub-step 작업 위치가 명확.
+  - **점진 마이그레이션 시작점**: 이후 모든 새 화면은 Clean Architecture 패턴, 기존 화면은 손댈 때마다 이전.
 
 #### 2.1 빌드 파이프라인 + base URL 환경 분기
 - **Goal**: dev/staging/prod 빌드가 각각 다른 API base URL 로 빌드되고, 실제 폰에 설치되어 `/health` 호출 성공.
@@ -482,20 +682,28 @@
 - **Learning Note**:
   - **토큰 저장은 secure storage 필수**: SharedPreferences 평문 저장은 단계 4에서 보안 점검 시 반드시 지적됨 → 처음부터 secure storage 채택.
 
-#### 2.3 스크리닝 화면 연동 + FCM 푸시
-- **Goal**: 모바일 앱이 `/api/screening` 결과를 화면에 표시하고, FCM 푸시(스톱 트리거 등)를 수신.
+#### 2.3 스크리닝 화면 + 시간 기반 진행 표시 + 로컬 holdings + FCM
+- **Goal**: 모바일 앱이 `/api/screening` 결과를 화면에 표시 + **시간 기반 가짜 프로그레스 위젯**(D15) + **`LocalHoldingsRepository` 로 holdings 화면 동작** + FCM 푸시 수신.
 - **Deliverable**:
-  - 스크리닝 결과 화면 (기존 화면 갱신)
-  - 콜드 캐시 로딩 인디케이터 + 예상 소요 시간 텍스트 (§7.4 권장 적용 여부 결정 후)
-  - FCM 토큰 등록 → `device_tokens` 테이블 INSERT
+  - `presentation/widgets/loading_progress.dart` — 시간 기반 가짜 프로그레스 위젯 (§3.4)
+    - 평균 소요 시간(예: 15초) 기반 애니메이션
+    - 상태 문구 시간대 로테이션 (0~25% "종목 스크리닝 중" / 25~50% "데이터 가져오는 중" / 50~85% "계산 중" / 85~100% "정렬 중")
+    - 응답이 빠르면 즉시 100% 채움, 느리면 95% 에서 정지
+  - 스크리닝 결과 화면 (Clean Architecture 패턴) + 응답 스키마의 `data_source`/`as_of` 라벨 표시 (예: "라이브 데이터" / "5분 전 캐시" / "{날짜} 종가 기준")
+  - `LocalHoldingsRepository` (sqflite) 로 holdings 추가/조회/편집 화면
+  - 현재가 계산: `domain/usecases/ComputeQuotes` → `RemoteQuotesRepository` 가 `/api/quotes` 호출 (stateless)
+  - FCM 토큰 등록 → 호스트로 전송 (호스트가 `device_tokens` 보관할지는 1.2/2.3 사이에 결정)
   - 푸시 수신 핸들러 (포그라운드/백그라운드)
 - **Acceptance**:
-  - 첫 진입(콜드 캐시) → 로딩 인디케이터 → 결과 표시
-  - 5분 내 재진입 → 즉시 표시 (캐시 HIT)
-  - 호스트에서 푸시 발송 → 폰에서 수신
-- **Estimate**: 2~3일
+  - 첫 진입(콜드 캐시) → 시간 기반 프로그레스바 + 단계별 문구 → 결과 표시
+  - 5분 내 재진입 → 즉시 표시 + "5분 전 캐시" 라벨 (`data_source="cache"`)
+  - holdings 추가/삭제가 폰 재시작 후에도 유지 (sqflite 영속)
+  - holdings 화면에서 현재가 + 평가 금액 표시 (백엔드 quotes 호출 → 클라이언트 계산)
+  - FCM 푸시 수신 성공
+- **Estimate**: 3~4일
 - **Learning Note**:
-  - **콜드 캐시 UX는 백엔드만의 문제가 아님**: 5~30초 대기를 사용자가 받아들이게 하는 것은 UI의 책임. 단계 2.3에서 인디케이터 정책을 정해두면 단계 3 웹에서도 같은 패턴 재사용 가능.
+  - **콜드 캐시 UX는 백엔드만의 문제가 아님**: 5~30초 대기를 받아들이게 하는 건 UI 책임. §3.4 시간 기반 패턴을 단계 2.3 에서 정착시키면 단계 3.4 웹에서 같은 위젯 재사용.
+  - **stateless 백엔드 + 로컬 holdings 의 조합**: 백엔드는 단순, 클라이언트는 holdings 자유로이 편집. 채널별 holdings 분리 비용은 사용자 수용(N7).
 
 ---
 
@@ -534,35 +742,42 @@
 - **Learning Note**:
   - **가장 불확실한 부분을 단계 3 초반에**: CF Containers 가 yfinance/pykrx 같은 무거운 의존성을 잘 돌리는지가 본 프로젝트의 최대 기술 리스크(§7.3) → 3.2에서 가장 먼저 검증. 이게 안 되면 §3.2.2 옵션 재검토 필요(대규모 리스크).
   - **단계 1 Dockerfile 재사용 = drift 방지 + 작업량 절감**: 단계 1을 컨테이너로 한 보상이 단계 3에서 회수됨.
+  - **헥사고날의 보상은 단계 3.2 에서 회수 (v0.5)**: D1 어댑터 1개만 추가하면 같은 도메인 로직이 동작. PostgreSQL 직결 코드였다면 알고리즘 전체 재작성 필요.
 
-#### 3.3 Worker `/api/*` 라우팅 + JWT 검증 + 캐시 게이트
-- **Goal**: Worker 가 `/api/*` 요청을 받아 JWT 검증 + D1 캐시 조회 + MISS 시 Container 호출.
+#### 3.3 Worker `/api/*` 라우팅 + JWT 검증 + 캐시 게이트 + `/api/web-holdings` (N7)
+- **Goal**: Worker 가 `/api/*` 요청을 받아 JWT 검증 + D1 캐시 조회 + MISS 시 Container 호출 + **`/api/web-holdings` CRUD 라우트 추가** (웹 사용자 holdings 를 D1 `web_holdings` 테이블에 보관, N7).
 - **Deliverable**:
   - Workers 코드(TS) — 라우팅 + JWT 검증 (호스트와 동일 시크릿) + D1 SELECT/INSERT + Container 호출
-  - 익명 허용 라우트 vs 인증 필요 라우트 구분 (정책 3.3 시작 시 결정)
+  - **`/api/web-holdings` CRUD** — 웹 전용. JWT 의 user_id 기반 격리. D1 `web_holdings(user_id, ticker, qty, avg_price, ...)` 테이블 + 마이그레이션
+  - 익명 허용 라우트 vs 인증 필요 라우트 구분 (정책 3.3 시작 시 결정 — 미결)
   - `JWT_SECRET` 을 CF Workers Secret 에 등록
 - **Acceptance**:
   - 단계 1.2에서 발급받은 토큰을 Worker `/api/screening` 에 전달 → 200
   - 토큰 없거나 만료 → 401
   - 5분 내 동일 요청 → D1 캐시 HIT (< 100ms)
   - 캐시 MISS → Container 호출 → D1 INSERT → 응답
-- **Estimate**: 2~4일
+  - `/api/web-holdings` POST/GET 정상 동작, user_id 격리 검증
+- **Estimate**: 3~5일
 - **Learning Note**:
   - **호스트와 Worker 간 시크릿 공유**: 같은 JWT secret 을 두 곳에 배포하는 운영 패턴이 처음 등장. 회전 시 두 곳 동시에 갱신해야 한다는 운영 부채를 인식.
+  - **모바일과 웹의 holdings 비대칭 (N7)**: 모바일은 sqflite 로컬, 웹은 D1. 같은 사용자가 모바일·웹 양쪽에서 holdings 를 보면 다름 — 본 결정 수용. UI 에 안내 문구 권장(§7.8).
 
-#### 3.4 Cron Triggers + Flutter Web 통합 + 데이터 일관성 점검
-- **Goal**: KST 06:30 / 15:35 Cron Trigger 가 Worker 발화 → Container 실행 → D1 INSERT, 그리고 Flutter Web 빌드를 Pages 에 정식 배포.
+#### 3.4 Cron Triggers + Flutter Web 정식 배포 + RemoteHoldingsRepository + 데이터 일관성 점검
+- **Goal**: KST 06:30 / 15:35 Cron Trigger 가 D1 INSERT, Flutter Web 빌드 정식 배포, **`RemoteHoldingsRepository` 가 `/api/web-holdings` 호출**(N7 + Clean Architecture 어댑터 분기), §3.4 시간 기반 진행 표시 위젯 그대로 재사용.
 - **Deliverable**:
   - `wrangler.toml` Cron Triggers 정의
-  - Flutter Web 빌드 정식 배포 (`fvm flutter build web --base-href /`)
-  - 호스트 D1 vs CF D1 같은 시점 종가 스냅샷 비교 스크립트 (수동, 일치성 메모)
+  - Flutter Web 빌드 (`fvm flutter build web --base-href /`) + DI 분기 (`kIsWeb` 또는 `--dart-define=PLATFORM_TARGET=web` → `RemoteHoldingsRepository` 주입)
+  - **`frontend/lib/data/remote/web_holdings_remote.dart`** — `HoldingsRepository` 의 remote 구현
+  - 호스트 D1 vs CF D1 같은 시점 종가 스냅샷 비교 스크립트
 - **Acceptance**:
   - 다음 06:30 또는 15:35 에 Cron 발화 + D1 종가 스냅샷 INSERT
-  - 브라우저에서 `https://stock-portfolio.cbpark.com` → 로그인 → 스크리닝 결과 표시
+  - 브라우저에서 `https://stock-portfolio.cbpark.com` → 로그인 → 스크리닝 결과 표시 + 진행 표시 위젯 동작
+  - 웹에서 holdings 추가 → 새로고침 후 유지 (D1 영속) → 다른 브라우저에서도 같은 holdings 표시
   - 호스트와 D1 종가 스냅샷 비교: 미세 차이는 §7.2 수용 범위 내인지 메모
 - **Estimate**: 2~3일
 - **Learning Note**:
-  - **데이터 일관성은 검증 가능한 메트릭으로**: "다르다/같다" 가 아니라 "Top10 중 9개 일치, 1개 순위 차이" 같이 측정 → 미세 차이 수용 정책(N3)이 실제로 받아들일 만한지 객관 평가.
+  - **데이터 일관성은 검증 가능한 메트릭으로**: "다르다/같다" 가 아니라 "Top10 중 9개 일치, 1개 순위 차이" 같이 측정.
+  - **Clean Architecture 의 보상 (v0.5)**: `HoldingsRepository` 인터페이스 1개 + 어댑터 2개로 모바일·웹 다른 저장소 동작. UI 위젯·use case·Riverpod provider 분기 X.
 
 ---
 
@@ -617,11 +832,11 @@
 ### 단계별 예상 소요 (개략)
 | 단계 | sub-step 수 | 예상 소요 |
 |---|---|---|
-| 단계 1 | 5 | 7~11일 + 1주 관찰 |
-| 단계 2 | 3 | 5~8일 |
-| 단계 3 | 4 | 7.5~13일 |
+| 단계 1 | 6 (1.0 추가) | 8~13일 + 1주 관찰 |
+| 단계 2 | 4 (2.0 추가) | 7~11일 |
+| 단계 3 | 4 | 9.5~17일 |
 | 단계 4 | 3 | 2.5~4일 + 1개월 관찰 |
-| **합계** | **15** | **22~36일 작업 + 1개월 운영 관찰** |
+| **합계** | **17** | **27~45일 작업 + 1개월 운영 관찰** |
 
 > 위 추정은 1인 작업 가정. 실제 일정은 사용자 가용 시간·미결 항목 결정 지연·CF Containers 학습 곡선 등에 따라 변동.
 
@@ -635,7 +850,7 @@
 3. **`/api/screening` 경로 mismatch** — `backend/app/routers/screening.py` 라우트와 프론트엔드 호출 경로 일치 여부 미확인.
 4. **collector 역할** — `scripts/collector/` Dockerfile + crontab(KST 23:00 KR / 07:00 US) 의 역할이 신규 종가 스냅샷 cron(06:30/15:35)과 중복인지 확인 후 정리 필요.
 5. **FCM 자격증명** — 출처/소유/회전 정책 미정. 단계 2 전에 확정 필요.
-6. **`scripts/` ↔ `backend/services/` 동기화 (drift)** — N1 결정에 따라 두 디렉토리는 **수동 복사** 로 동기화된다. 현재 `scripts/screener/screener_v3.py` 와 `backend/app/services/screener.py` 가 어느 정도 일치하는지 미확인. 단계 1 첫 작업으로 베이스라인을 맞춰야 하며, 이후에도:
+6. **`scripts/` ↔ `backend/core/` 동기화 (drift, v0.5 갱신)** — N1 결정에 따라 두 디렉토리는 **수동 복사** 로 동기화된다. v0.5 헥사고날 구조에서 알고리즘은 `backend/core/usecases/run_screening.py` 가 단일 소스. 현재 `scripts/screener/screener_v3.py` 와의 일치 여부 미확인. 단계 1.3 첫 작업으로 베이스라인을 맞춰야 하며:
    - 알고리즘 변경 시 양쪽 모두 반영했는지 검증할 수단 부재 (수동 점검에 의존).
    - 향후 drift 감지 자동화(예: 핵심 함수 해시 비교 CI) 도입 여부는 별도 결정.
    - 위험: 백테스트와 프로덕션이 다른 알고리즘으로 돌아가는 silent drift 가능.
@@ -654,13 +869,10 @@
   - Workers → 다른 엣지 런타임(Vercel/Deno Deploy): 코드 일부 재작성 필요
 - **단계 3 시작 시 점검 필수**: 콜드 스타트 시간, 동시 실행 한도, 월 요금 상한.
 
-### 7.4 콜드 캐시 + 첫 사용자 UX 위험
-- 사용자가 OK했지만, 첫 진입 시 5~30초 대기는 모바일/웹 모두에서 이탈 위험 요인.
-- **권장(자율 결정 아님)**:
-  - 로딩 인디케이터 + 예상 소요 시간 텍스트 표시 ("최신 데이터 가져오는 중... 약 10~30초")
-  - 종가 스냅샷이 있는 시간대(예: 새벽~오전)는 스냅샷을 폴백으로 우선 표시 후 백그라운드 갱신
-  - 실패 시 직전 스냅샷으로 폴백
-- 위 권장 사항을 적용할지/말지는 사용자 결정 필요 (§9 체크리스트).
+### 7.4 콜드 캐시 + 첫 사용자 UX 위험 (v0.5 일부 완화)
+- 첫 진입 시 5~30초 대기는 모바일/웹 모두에서 이탈 위험 요인.
+- **v0.5 적용**: §3.4 시간 기반 가짜 프로그레스(D15)로 인디케이터·예상 시간·단계별 문구 제공 → 인지된 대기 시간 단축.
+- **잔존 위험**: 시간 기반은 가짜 — 실제 백엔드 진행과 무관. 실제 응답이 30초 초과 시 "거의 다 됐어요..." 에서 정지된 채 사용자 인내력 시험. 측정 후 SSE 업그레이드 검토(§11.3 미룸 항목).
 
 ### 7.5 GH Actions 워크플로 처분 결정 ❓ **미결**
 - 이전 cron 기반 정기 갱신 모델이 폐기되면서 다음 워크플로의 운명을 정해야 함:
@@ -672,12 +884,31 @@
   - 단계별 워크플로 보존/제거 시점 (단계 4 일괄 vs 단계별 점진)
   - 안전망으로 1~2개월 병행 운영 후 제거할지
 
-### 7.6 가정 목록 (사용자 검토 요망)
+### 7.6 가정 목록 (사용자 검토 요망, v0.5 갱신)
 - 모바일 앱 사용자 수가 호스트 1대로 감당 가능한 규모.
 - 웹 트래픽이 CF 무료 티어 내 (월 < 10만 req).
-- `portfolio.xlsx` 는 사용자가 수동 편집/업로드. 자동 동기화 없음.
-- 인증은 N4 결정 전까지 단순 API key 가정.
+- ~~`portfolio.xlsx` 는 사용자가 수동 편집/업로드~~ — **v0.5: D13 폐기로 가정 자체 제거**.
 - 종가 스냅샷 시점 KST 06:30 / 15:35 가 시장 데이터 소스의 종가 데이터 가용 시점과 일치한다 (yfinance/pykrx 의 종가 갱신 시점 확인 필요).
+- **v0.5 신규**: 시간 기반 가짜 프로그레스(D15)의 평균 소요 시간(예: 15초) 가정이 실제 분포와 큰 차이 안 남. 측정 후 조정.
+
+### 7.7 헥사고날·Clean Architecture 학습 곡선 + 패턴 혼재 위험 (v0.5 신규)
+- **학습 곡선**:
+  - 헥사고날(ports/adapters), Clean Architecture(domain/data/presentation) 가 익숙하지 않은 경우 단계 1.0 / 2.0 셋업과 단계 1.3 / 2.3 첫 use case 작성에서 시간이 추가 소요.
+  - 잘못 적용하면 "어댑터인 척하는 service 클래스" 같은 anti-pattern 발생.
+- **점진 마이그레이션 중 새/구 패턴 혼재**:
+  - D14 미결 — 점진(권장) vs 빅뱅 결정 전.
+  - 점진 채택 시 단계 1~4 진행 중 `backend/app/` (구) 와 `backend/core/` + `backend/adapters/` (신) 가 공존.
+  - 위험: "어디서 import 해야 하는지" 가 PR 리뷰마다 등장 → 가이드 1쪽 작성 권장.
+- **완화책 제안 (자율 결정 아님)**:
+  - 단계 1.0 / 2.0 의 빈 골격에 README 1쪽 추가 ("새 기능은 여기에, 기존 기능 수정 시 여기로 이전").
+  - 단계 4 회고에 "패턴 적용 진척도" 항목 추가.
+
+### 7.8 모바일 앱 holdings 손실 + 채널별 비대칭 위험 (v0.5 신규)
+- **모바일 holdings 는 sqflite 로컬에만 존재 (N7)** — 앱 재설치 / 폰 교체 시 손실.
+- **앱과 웹 같은 사용자가 쓸 때 holdings 다름** — 본 결정으로 수용. 사용자에게 안내 필요.
+- **완화책 제안 (자율 결정 아님)**:
+  - 모바일 앱 첫 화면에 "이 폰에서만 보관됩니다" 라벨.
+  - holdings 화면에 export/import 기능 (CSV 또는 JSON) — 단계 2.3 또는 단계 4 추가 사항으로 검토. 미결로 §9 추가 가능.
 
 ---
 
@@ -705,28 +936,75 @@
 
 ## 9. 다음 행동 (사용자 입장) — 미결 항목 체크리스트
 
-v0.4 갱신으로 N4(인증=JWT), D8/D9/D12(운영 형태=docker compose+Caddy+`.env`), C4(도메인 구조)가 추가 확정되었다. 단계 1.1 시작 전·각 sub-step 시작 전 다음 미결 항목에 대한 사용자 답이 필요하다.
+v0.5 갱신으로 D13(폐기), §7.4 콜드 UX 본질, D15(시간 기반 가짜 프로그레스), N6(헥사고날+Clean), N7(포트폴리오 독립)가 추가 확정되었다. 각 sub-step 시작 전 다음 미결 항목에 대한 사용자 답이 필요하다.
 
+- [ ] **D14 frontend 마이그레이션 전략** — 점진(권장) vs 빅뱅 (§3.3.3, 단계 2.0 직전)
 - [ ] **도메인 등록처** — CF Registrar 등 어디서 등록할지 (C4 세부, 단계 3.1 직전 결정 필요)
 - [ ] **GH Actions 워크플로 처분** — 5개 워크플로 각각 보존/제거 시점 (§7.5, 단계 4.2 직전)
 - [ ] **`backend/api` 처분** — 통합 후 삭제 vs 보존 (N5, 단계 4.2 직전)
 - [ ] **비용·모니터링 정책** — 모니터링 채널 1개 선택 (N5, 단계 4.1 직전)
 - [ ] **모바일 앱 base URL 환경 분기** — `--dart-define` vs flavor vs 런타임 입력 (N2, 단계 2.1 직전)
 - [ ] **싼 작업 TTL 매핑 표** — BTC/ETH 시그널 등 엔드포인트별 TTL 값 (C1 매핑, 단계 1.3 직전)
-- [ ] **콜드 캐시 UX 권장 적용 여부** — 로딩 인디케이터/예상 시간 표시, 종가 스냅샷 폴백 (§7.4, 단계 2.3 직전)
 - [ ] **DB 마이그레이션 첫 revision 정책** — Alembic 첫 revision 생성 vs `Base.metadata.create_all` 잔존 (D11 세부, 단계 1.1 직전)
 - [ ] **비밀번호 해시 라이브러리** — bcrypt vs argon2 (N4 세부, 단계 1.2 직전)
 - [ ] **Worker 익명/인증 라우트 분리 정책** — 종가 조회는 익명, on-demand는 인증 등 (N4 세부, 단계 3.3 직전)
 - [ ] **`pg_dump` 백업 정책** — 빈도/보관 기간/외부 스토리지 (§3.1.3, 단계 1.5 직전)
-- [ ] **`portfolio.xlsx` SSoT** — 호스트 경로 / R2 prefix / 컨테이너 동봉 (D13)
 - [ ] **종가 스냅샷 시점 검증** — 06:30 / 15:35 가 yfinance/pykrx 종가 갱신 시점과 정합한지 (§7.6, 단계 1.4 직전)
-- [ ] **drift 감지 자동화 도입 여부** — `scripts/` ↔ `backend/services/` 일치 검증 CI (§7.1 #6)
+- [ ] **drift 감지 자동화 도입 여부** — `scripts/` ↔ `backend/core/` 일치 검증 CI (§7.1 #6)
+- [ ] **device_tokens 테이블 존속 여부** — FCM 푸시 잔존 시만 필요 (N5/N7과 함께, 단계 1.2 또는 2.3 직전)
+- [ ] **모바일 holdings export/import 기능 도입 여부** — 폰 교체 시 손실 완화 (§7.8, 단계 2.3 또는 단계 4)
 
-> v0.4부터는 모든 항목이 단계 1.1 시작을 막지는 않고, 해당 sub-step 직전에 답하면 된다(§6 sub-step 옆 "직전" 표기 참조).
+**해결됨 (v0.5)**:
+- ~~D13 portfolio.xlsx SSoT~~ → 폐기 (정체가 "개인화 서비스 초안"이었고 더 이상 사용 안 함)
+- ~~콜드 캐시 UX 본질~~ → (a) + 진행 표시 패키지 확정
+- ~~D15 콜드 진행 표시 구현 방식~~ → 시간 기반 가짜 프로그레스 확정 (SSE는 §11.3 미룸 항목)
+
+> 모든 항목이 단계 1.0 시작을 막지는 않는다. 해당 sub-step 직전에 답하면 된다(§6 sub-step 옆 "직전" 표기 참조).
 
 ---
 
 ## 10. 결정 이력 / 변경 로그
+
+### v0.5 — 2026-05-03
+**확정**:
+- **D13 portfolio.xlsx**: 폐기 (정체가 "개인화 서비스 초안"이었고 더 이상 사용 안 함). §4 D13 폐기 표기, §9 체크리스트에서 제거.
+- **N7 포트폴리오 저장 정책**: 모바일 = sqflite 로컬, 웹 = CF D1, 앱 ↔ 웹 동기화 없음. 호스트 백엔드 DB 단순화 (`holdings` 테이블 제거).
+- **N6 아키텍처 패턴**: 헥사고날(backend) + Clean Architecture(frontend) 옵션 (2). 호스트와 CF Container 가 같은 `core/` 공유 + 어댑터 교체. 점진적 마이그레이션.
+- **§7.4 콜드 UX 본질**: (a) + 진행 표시 패키지 채택 — 프로그레스바 + 예상 시간 + 단계별 상태 문구.
+- **D15 콜드 진행 표시 구현 방식**: 시간 기반 가짜 프로그레스 확정. 평균 소요 시간(예: 15초) + 시간대 로테이션. 백엔드 변경 0(`data_source`/`as_of` 필드만 유지). SSE 실시간은 §11.3 미룸.
+
+**v0.4 vs v0.5 비교**:
+| 항목 | v0.4 | v0.5 |
+|---|---|---|
+| 백엔드 코드 구조 | `backend/app/{services,routers,...}` 단일 평면 | `backend/{core,adapters,app}` 헥사고날 (점진 마이그레이션) |
+| 프론트엔드 구조 | `frontend/lib/{providers,services,screens}` 평면 | `frontend/lib/{domain,data,presentation}` Clean Architecture |
+| 호스트 DB 테이블 | `users` + `cache_snapshot` + `eod_snapshot` + `holdings` + `device_tokens` | `users` + `screening_runs` + `signal_snapshots` (holdings 제거, device_tokens 미결) |
+| 모바일 holdings | 호스트 DB (사용자별) | sqflite 로컬 (폰별) |
+| 웹 holdings | 호스트 DB (사용자별) | CF D1 `web_holdings` (사용자별) |
+| 채널간 동기화 | 호스트 DB가 SSoT | 동기화 없음 (앱과 웹이 다른 holdings) |
+| 콜드 UX | 미결 | 시간 기반 가짜 프로그레스 |
+| sub-step 수 | 15 | 17 (1.0 / 2.0 헥사고날·Clean 셋업 추가) |
+
+**변경**:
+- 머리말 — v0.5 결정 4건 추가, 미결 목록 갱신
+- §3.1 — 헥사고날 구조(§3.1.0) + DB 스키마 단순화(§3.1.4) 추가
+- §3.2 — CF Container 가 어댑터 교체로 동작 명시
+- §3.3 — Frontend Clean Architecture 신설 (디렉토리·의존성·holdings 분기·점진 전략·stateless)
+- §3.4 — 콜드 캐시 진행 표시 (D15) 신설
+- §4 매트릭스 — D13 폐기, D14/D15 추가, §4.2 요약 갱신
+- §5 N3 — 포트폴리오 독립 보강
+- §5 N6/N7 — 신설
+- §6 — 단계 1.0 / 2.0 신설 (헥사고날·Clean 디렉토리 셋업), 1.3/1.4/2.3/3.2/3.3/3.4 모두 갱신, 단계별 예상 소요 갱신
+- §7.4 — v0.5 일부 완화 표기
+- §7.6 — 가정 갱신 (portfolio.xlsx 가정 제거)
+- §7.7 — 헥사고날·Clean 학습 곡선 + 패턴 혼재 위험 신설
+- §7.8 — 모바일 holdings 손실 + 채널 비대칭 위험 신설
+- §9 체크리스트 — D13/콜드UX/D15 제거, D14/device_tokens/holdings export 추가
+- §10 — v0.5 항목 신설
+- §11.3 — 미룸 표 확장 (SSE 후속 검토 / 앱↔웹 portfolio 동기화)
+
+**미해결 (사용자 결정 대기)**:
+- §9 체크리스트 15개 (v0.4 14개 → 해결 2건: 콜드 UX·D13 / 신규 3건: D14·device_tokens·holdings export → 순증 +1). D15는 v0.4에 없던 항목으로 등장과 동시에 해결.
 
 ### v0.4 — 2026-05-03
 **확정**:
@@ -915,6 +1193,8 @@ v0.4 갱신으로 N4(인증=JWT), D8/D9/D12(운영 형태=docker compose+Caddy+`
 | **DB 읽기 복제 / 샤딩** | 호스트 1대, 트래픽 가정 작음(§1.4). 측정 없이 분산 X. | DB CPU 70% 또는 응답 100ms 초과 지속 |
 | **Cloudflare Tunnel / Tailscale** | Caddy 자동 TLS + Origin 검사로 충분 가정. | 호스트 IP 노출이 실제 공격받음 |
 | **Kubernetes / 오케스트레이션** | 호스트 1대에 docker compose 1개로 충분. | 호스트 N대 운영 또는 무중단 배포 요구 |
+| **SSE 실시간 진행률 (v0.5 신규)** | D15 시간 기반 가짜 프로그레스로 충분 가정. SSE는 백엔드 라우터 추가 + use case progress callback + 프론트엔드 EventSource → 복잡도 큼. | 사용자 이탈률 측정 X% 초과 시, 또는 응답 시간 30초 초과 빈도 ↑ 시 |
+| **앱 ↔ 웹 portfolio 동기화 (v0.5 신규)** | N7 결정으로 의식적 미룸. 사용자가 양 채널 holdings 비대칭을 수용함. 동기화는 백엔드 holdings 테이블 + 충돌 해결 로직 + 클라이언트 sync 트리거 → 큰 비용. | 같은 사용자가 양 채널 사용 빈도 ↑ + 명시적 동기화 요청 |
 
 #### 미룸의 원칙
 - 미룬 것들도 **§7 위험·미해결** 또는 **§9 체크리스트** 에 살아 있어야 함 — 잊혀서는 안 되고, 다만 "지금 안 함" 이 의도적 결정임을 기록.
