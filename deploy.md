@@ -1,6 +1,6 @@
 # 배포 계획서: 앱 + 웹 듀얼 타겟
 
-> **상태**: v0.5 (2026-05-03 갱신) — portfolio 독립 저장 + 헥사고날/Clean Architecture + 콜드 UX 진행 표시 확정. §3 채널 스택 + §6 단계 + §11 미룸 표 큰 폭 재작성.
+> **상태**: v0.6 (2026-05-03 갱신) — D14 점진 마이그레이션 확정. backend/frontend 대칭 점진. §6 단계 1.0/2.0/4.3 갱신, §11.2 학습 포인트 추가.
 > **확정 결정 요약 (v0.5 추가분 포함)**:
 > 1. **N3 SSoT 모델**: 각 채널 독립 운영. cron 기반 정기 갱신 폐기, on-demand 스크리닝.
 > 2. **데이터 전송 방식**: DB 저장 + 캐시 패턴. 라이브 캐시 TTL 5분, 종가 스냅샷 KST 06:30 / 15:35.
@@ -16,7 +16,8 @@
 > 12. **N6 아키텍처 패턴 (v0.5 신규)**: **헥사고날(backend) + Clean Architecture(frontend)** 옵션 (2). 호스트와 CF Container 가 같은 `core/` 도메인 코어를 공유하고 어댑터(`postgres_cache` vs `d1_cache`)만 교체. **점진적 마이그레이션** — 새 기능부터 적용 + 기존 코드는 손댈 때마다 이전.
 > 13. **콜드 캐시 UX (§7.4) (v0.5)**: **(a) + 진행 표시 패키지** — 프로그레스바 + 예상 시간("약 10~30초") + 단계별 상태 문구("종목 스크리닝 중", "데이터 가져오는 중", "계산 중", "정렬 중").
 > 14. **D15 콜드 진행 표시 구현 (v0.5 신규)**: **시간 기반 가짜 프로그레스** 확정 — 평균 소요 시간(예: 15초)에 맞춰 클라이언트 자체 애니메이션, 상태 문구 시간대 로테이션. **백엔드 변경 0**(응답 스키마에 `data_source`/`as_of` 필드만 유지). **SSE 실시간 업그레이드는 §11.3 의식적 미룸 표에 후속 검토 항목**으로 명시(이탈률 측정 후).
-> **여전히 미결**: 도메인 등록처, GH Actions 워크플로 처분, `backend/api` 처분, 비용·모니터링, 모바일 base URL, TTL 매핑, Alembic 첫 revision, 비밀번호 해시, Worker 라우트 분리, `pg_dump` 정책, 종가 시점 검증, drift 자동화, **D14 frontend 마이그레이션 전략(점진 vs 빅뱅)** → §9 체크리스트 참조.
+> 15. **D14 마이그레이션 전략 (v0.6 신규)**: **(a) 점진 마이그레이션** 확정 — 새 기능은 항상 신 패턴(헥사고날/Clean), 기존 코드는 손댈 때마다 같은 PR에서 이전. **backend/frontend 대칭 점진**(비대칭 비추 권장 따름). 단계 1.0 / 2.0 산출물에 가이드 README 1쪽 + 단계 4.3 회고 메트릭에 "패턴 적용 진척도(%)" 항목 추가.
+> **여전히 미결**: 도메인 등록처, GH Actions 워크플로 처분, `backend/api` 처분, 비용·모니터링, 모바일 base URL, TTL 매핑, Alembic 첫 revision, 비밀번호 해시, Worker 라우트 분리, `pg_dump` 정책, 종가 시점 검증, drift 자동화, device_tokens, holdings export → §9 체크리스트 참조.
 > **코드 변경 0건**: 본 커밋은 문서 갱신만 포함.
 > **자율 판단 금지**: 미결 항목에 대해서는 단정형 결정을 포함하지 않는다.
 > **v0.5 큰 변경**: §3 채널 스택 헥사고날 구조로 재작성, §3.3 frontend Clean Architecture 신설, §6 sub-step 갱신(holdings 제거 + 어댑터 셋업 추가), §11.3 미룸 표 확장.
@@ -340,11 +341,14 @@ frontend/lib/
 - **UI 코드 분기 없음**: 위젯·use case·provider 모두 단일 코드. **DI 주입만 다르다**.
 - 빌드 시점 구분: `--dart-define=PLATFORM_TARGET=mobile|web` 또는 `kIsWeb` 으로 자동 분기 (단계 2.0/3.x 에서 결정).
 
-#### 3.3.3 점진 마이그레이션 전략 (D14 미결)
+#### 3.3.3 점진 마이그레이션 전략 (D14 ✅ v0.6 확정)
+- **결정**: (a) 점진 마이그레이션. backend/frontend 대칭(비대칭 비추 권장 따름).
 - **새 기능부터 적용**: 단계 1 이후 추가하는 모든 기능은 Clean Architecture 패턴으로.
 - **기존 코드는 손댈 때마다 이전**: 화면을 수정하면 그 기회에 domain/data/presentation 분리.
 - **빅뱅 마이그레이션 안 함**: 한 번에 모든 코드를 옮기는 PR 은 리뷰 불가능.
-- 마이그레이션 전략 자체(D14)는 §9 미결 — "점진 vs 빅뱅" 사용자 최종 답 필요.
+- **가이드 README**: 단계 1.0 / 2.0 산출물로 `backend/MIGRATION.md` + `frontend/MIGRATION.md` 1쪽 작성 (§6 단계 1.0 / 2.0 참조).
+- **진척도 메트릭**: 단계 4.3 회고에 "패턴 적용 진척도(%)" 항목 — 신 패턴 디렉토리/파일 카운트 비율 측정.
+- **trade-off 인지**: §7.7 패턴 혼재 위험은 살아있음 — 점진 선택의 비용. 빅뱅 trade-off 비교는 §11.2.
 
 #### 3.3.4 Stateless 백엔드 호출 패턴
 - 현재가 계산: 클라이언트가 `LocalHoldingsRepository.list()` 로 종목 리스트 가져옴 → `/api/quotes?tickers=AAPL,NVDA,...` 호출 → 가격만 반환 → 클라이언트가 합계/수익률 계산.
@@ -395,7 +399,7 @@ frontend/lib/
 | **D11** | DB 마이그레이션 방식 | ✅ **Alembic + asyncpg** (`backend/alembic/`). ❓ 첫 revision 생성 vs `Base.metadata.create_all` 잔존 — 단계 1.1에서 결정 | ✅ **D1 마이그레이션 도구**(`wrangler d1 migrations`) |
 | **D12** | 시작 명령 / 단일 진입점 | ✅ **docker compose**(`api` + `db` 2개 서비스) + **Caddy** 컨테이너 1개(또는 호스트 systemd Caddy). systemd-only 옵션 탈락 | ✅ `wrangler deploy` (Workers + Cron Triggers + Containers) + Pages 배포 |
 | ~~**D13**~~ | ~~`portfolio.xlsx` 위치 / 캐시 디렉토리~~ | 🚫 **폐기 (v0.5)** — 정체가 "개인화 서비스 초안"이었고 더 이상 사용 안 함 | 🚫 폐기 |
-| **D14** (v0.5 신규) | 프론트엔드 Clean Architecture 마이그레이션 전략 | ❓ **점진 vs 빅뱅** 미결 (권장은 점진 — §3.3.3) | ❓ 동일 |
+| **D14** (v0.5 신규, v0.6 ✅) | 프론트엔드 Clean Architecture 마이그레이션 전략 | ✅ **(a) 점진** 확정. backend/frontend 대칭 점진. 가이드 README + 진척도 메트릭(§6 단계 1.0/2.0/4.3) | ✅ 동일 |
 | **D15** (v0.5 신규) | 콜드 진행 표시 구현 방식 | ✅ **시간 기반 가짜 프로그레스** 확정. 평균 소요 시간 기반 애니메이션 + 시간대 로테이션. 백엔드 변경 0 (§3.4) | ✅ 동일 패턴 재사용 |
 
 ### 4.1 신규 항목 (on-demand + 캐시 모델 도입으로 추가)
@@ -408,10 +412,11 @@ frontend/lib/
 | **C4** | 도메인 구조 (v0.4 신규) | ✅ 결정 — `cbpark.com`(개인 랜딩, 별도 프로젝트) / `stock-portfolio.cbpark.com`(웹 → CF Pages) / `api-stock-portfolio.cbpark.com`(호스트 백엔드 → Caddy + Docker). ❓ **도메인 등록처는 미결** (CF Registrar 검토 중) |
 
 ### 4.2 매트릭스 요약
-- v0.5 결정으로 **추가 해결된 항목**: D13 폐기, D15(시간 기반 가짜 프로그레스), N6(헥사고날+Clean), N7(포트폴리오 독립 저장), §7.4 콜드 UX 본질.
+- v0.6 결정으로 **추가 해결된 항목**: D14 점진 마이그레이션 (backend/frontend 대칭).
+- v0.5 결정으로 추가 해결된 항목: D13 폐기, D15(시간 기반 가짜 프로그레스), N6(헥사고날+Clean), N7(포트폴리오 독립 저장), §7.4 콜드 UX 본질.
 - v0.4 결정으로 추가 해결된 항목: D8/D9/D12 세부, N4 본질, C4 도메인 골격.
 - v0.3 결정으로 추가 해결된 항목: D1(앱), D10(앱), D11(앱) 골격, N1.
-- **여전히 사용자 결정이 필요한 항목**: D11(앱) 첫 revision 정책, **D14 프론트엔드 마이그레이션 전략(점진 vs 빅뱅)**, §5 N2·N5, C1 매핑 표, C4 도메인 등록처, §3.1.3 백업 정책, §7.5 GH Actions 처분, 비밀번호 해시, Worker 라우트 분리, 종가 시점 검증, drift 자동화.
+- **여전히 사용자 결정이 필요한 항목**: D11(앱) 첫 revision 정책, §5 N2·N5, C1 매핑 표, C4 도메인 등록처, §3.1.3 백업 정책, §7.5 GH Actions 처분, 비밀번호 해시, Worker 라우트 분리, 종가 시점 검증, drift 자동화, device_tokens 존속, holdings export/import.
 
 ---
 
@@ -473,8 +478,8 @@ frontend/lib/
 - **frontend 적용 (§3.3)**:
   - 3-layer: `domain/` (순수 Dart) ← `data/` (인프라 어댑터) → `presentation/` (위젯·Riverpod).
   - Holdings: 같은 `HoldingsRepository` 인터페이스 뒤에 `LocalHoldingsRepository`(앱) / `RemoteHoldingsRepository`(웹) 두 구현. UI 분기 X, DI 분기만.
-- **마이그레이션 전략**: 점진(권장). 새 기능부터 적용 + 기존 코드는 손댈 때마다 이전. 빅뱅 X.
-  - **D14 (점진 vs 빅뱅 최종 선택)** 은 §9 미결.
+- **마이그레이션 전략**: ✅ **점진 확정 (v0.6, D14)**. 새 기능부터 적용 + 기존 코드는 손댈 때마다 이전. 빅뱅 X. backend/frontend 대칭.
+  - 가이드 README + 진척도 메트릭은 §3.3.3 / §6 단계 1.0·2.0·4.3 참조.
 - **수반 위험**:
   - 학습 곡선 (헥사고날·Clean 익숙하지 않은 경우 sub-step 1.0/2.0 에서 시간 추가 소요).
   - 점진 마이그레이션 중 새 패턴/구 패턴 혼재 (§7.7 신설).
@@ -522,21 +527,28 @@ frontend/lib/
 > **단계 목표**: `api-stock-portfolio.cbpark.com` 도메인으로 외부 노출되는 호스트 백엔드를 가동하고, 모바일 앱이 호출할 수 있는 인증 + 캐시 + 종가 스냅샷 메커니즘을 검증한다.
 > **단계 종료 시 데모 가능**: `curl https://api-stock-portfolio.cbpark.com/api/screening -H "Authorization: Bearer ..."` 가 5분 캐시로 동작한다.
 
-#### 1.0 헥사고날 디렉토리 셋업 (v0.5 신규)
-- **Goal**: `backend/core/` (domain/usecases/ports) + `backend/adapters/` (inbound/outbound) 디렉토리 구조 생성. 아직 비어 있어도 무방.
+#### 1.0 헥사고날 디렉토리 셋업 + 점진 가이드 README (v0.5 신규, v0.6 D14 반영)
+- **Goal**: `backend/core/` (domain/usecases/ports) + `backend/adapters/` (inbound/outbound) 디렉토리 구조 생성 + **`backend/MIGRATION.md` 가이드 1쪽** 작성.
 - **Deliverable**:
   - `backend/core/domain/`, `backend/core/usecases/`, `backend/core/ports/inbound/`, `backend/core/ports/outbound/` 빈 패키지
   - `backend/adapters/inbound/http_fastapi/`, `backend/adapters/outbound/{yfinance_market,pykrx_market,postgres_cache,memory_cache}/` 빈 패키지
   - 첫 use case 1개 + memory_cache fake 어댑터로 단위 테스트 1개 통과 (스모크: `RunScreening` 가짜 입력 → 가짜 출력)
-  - 기존 `backend/app/` 는 유지 (점진 마이그레이션, D14 결정 적용)
+  - 기존 `backend/app/` 는 유지 (점진 마이그레이션, D14 ✅)
+  - **`backend/MIGRATION.md`** — 다음 항목 포함:
+    - 위치 정책: 새 기능은 `backend/core/` + `backend/adapters/`. 기존 `backend/app/` 는 손댈 때마다 같은 PR에서 이전.
+    - PR 판별 기준: "이 변경이 새 기능인가, 기존 기능 수정인가, 혼합인가" 체크리스트.
+    - 신 패턴 PR 예시 1개 + 구 패턴 → 신 패턴 이전 PR 예시 1개 (의사 코드).
+    - 진척도 측정 방법: `find backend/core backend/adapters -name "*.py" | wc -l` vs `find backend/app -name "*.py" | wc -l` 비율 (단계 4.3 회고용).
 - **Acceptance**:
   - `pytest backend/tests/test_run_screening_smoke.py` 통과
   - `from backend.core.usecases import RunScreening` import 성공
   - `core/` 가 외부 의존(yfinance, sqlalchemy 등)을 import 하지 않음 (의존성 방향 검증)
-- **Estimate**: 0.5~1일
+  - `backend/MIGRATION.md` 가 존재하고 읽을 수 있음
+- **Estimate**: 1~1.5일 (README 작성 0.5일 추가)
 - **Learning Note**:
   - **빈 골격 먼저, 구현 나중**: 디렉토리 트리만 만들어도 다음 sub-step들이 어디에 코드를 두어야 하는지 명확해짐.
   - **점진 마이그레이션 시작점**: 이 sub-step 이후 새 기능은 모두 core/adapters/ 에 작성. 기존 `backend/app/` 코드는 그대로 두고 손댈 때마다 이전.
+  - **README 1쪽이 PR 리뷰 1시간을 줄인다**: 점진 마이그레이션의 가장 큰 비용은 매 PR 마다 "어디에 두지?" 의 반복. 가이드가 그 비용을 분산.
 
 #### 1.1 인프라 슬라이스 — Docker compose + Postgres + Caddy + 도메인
 - **Goal**: 빈 FastAPI(`/health` 200만 응답) + Postgres + Caddy 가 docker compose 로 호스트에서 기동되고, 외부 도메인으로 TLS 응답.
@@ -637,22 +649,30 @@ frontend/lib/
 > **단계 목표**: Flutter 모바일 앱이 단계 1 호스트 백엔드와 인증·통신·푸시를 끝낸다.
 > **단계 종료 시 데모 가능**: 실제 폰에서 회원가입 → 로그인 → 스크리닝 결과 화면 표시 → 푸시 알림 수신.
 
-#### 2.0 Frontend Clean Architecture 디렉토리 셋업 (v0.5 신규)
-- **Goal**: `frontend/lib/{domain,data,presentation}/` 디렉토리 구조 생성. 첫 use case + repository 인터페이스 + local 어댑터 1개로 스모크 테스트.
+#### 2.0 Frontend Clean Architecture 디렉토리 셋업 + 점진 가이드 README (v0.5 신규, v0.6 D14 반영)
+- **Goal**: `frontend/lib/{domain,data,presentation}/` 디렉토리 구조 + 첫 entity·interface·local 어댑터 1개 + **`frontend/MIGRATION.md` 가이드 1쪽**.
 - **Deliverable**:
   - `frontend/lib/domain/{entities,usecases,repositories}/` 빈 패키지
   - `frontend/lib/data/{remote,local,repositories}/` 빈 패키지
-  - `frontend/lib/presentation/{screens,widgets,providers}/` 기존 코드 일부 이동 (점진 — D14 결정 적용)
+  - `frontend/lib/presentation/{screens,widgets,providers}/` 기존 코드 일부 이동 (점진 — D14 ✅)
   - 첫 entity (`Holding`) + 인터페이스 (`HoldingsRepository`) + sqflite 구현 (`LocalHoldingsRepository`) + 단위 테스트
   - DI 부팅 코드 (`main.dart` 또는 Riverpod provider 1개)
+  - **`frontend/MIGRATION.md`** — 다음 항목 포함:
+    - 위치 정책: 새 화면은 `domain/` + `data/` + `presentation/`. 기존 화면은 수정할 때 같은 PR에서 분리.
+    - PR 판별 기준: "이 변경이 새 화면/기능인가, 기존 화면 수정인가, 혼합인가" 체크리스트.
+    - 신 패턴 화면 예시 1개 + 구 → 신 이전 PR 예시 1개 (의사 코드).
+    - DI 분기 가이드: `LocalHoldingsRepository` (모바일) vs `RemoteHoldingsRepository` (웹) — `kIsWeb` 또는 `--dart-define`.
+    - 진척도 측정 방법: `find frontend/lib/{domain,data,presentation} -name "*.dart" | wc -l` vs 나머지 `frontend/lib/` 비율.
 - **Acceptance**:
   - `flutter test` 통과
   - `domain/` 가 sqflite/http 등 외부 패키지 import 하지 않음 (정적 분석으로 검증)
   - 기존 화면 1개가 새 패턴(`domain/usecase` 통한 호출) 으로 동작
-- **Estimate**: 1~1.5일
+  - `frontend/MIGRATION.md` 가 존재하고 읽을 수 있음
+- **Estimate**: 1.5~2일 (README 작성 0.5일 추가)
 - **Learning Note**:
   - **빈 골격 먼저**: backend 1.0 과 같은 패턴 — 디렉토리 트리만 만들어도 후속 sub-step 작업 위치가 명확.
   - **점진 마이그레이션 시작점**: 이후 모든 새 화면은 Clean Architecture 패턴, 기존 화면은 손댈 때마다 이전.
+  - **backend/frontend 대칭 점진**: 두 가이드 README의 정책이 같아야 함 — 한쪽만 점진, 한쪽만 빅뱅이면 PR 리뷰 정책 충돌.
 
 #### 2.1 빌드 파이프라인 + base URL 환경 분기
 - **Goal**: dev/staging/prod 빌드가 각각 다른 API base URL 로 빌드되고, 실제 폰에 설치되어 `/health` 호출 성공.
@@ -813,19 +833,25 @@ frontend/lib/
 - **Learning Note**:
   - **부산물 정리는 단계 4에서**: 단계 1~3 중에 정리하면 안전망(GH Pages 병행)이 사라져 사고 시 복구 불가. 단계 4까지 안전망으로 살려뒀다가 자신감이 생긴 후 제거.
 
-#### 4.3 1개월 비용·안정성 회고
-- **Goal**: §1.4 비용 가정 검증 + 1개월 다운타임/사고 회고.
+#### 4.3 1개월 비용·안정성 회고 + **패턴 적용 진척도(%) 측정** (v0.6 D14 반영)
+- **Goal**: §1.4 비용 가정 검증 + 1개월 다운타임/사고 회고 + **점진 마이그레이션 진척도 측정**.
 - **Deliverable**:
   - CF 청구 내역 1개월 (Pages/Workers/Containers/D1/R2 항목별)
   - 호스트 VPS 1개월 비용
   - 다운타임/사고 로그 1장
+  - **패턴 적용 진척도(%)** — 다음 두 항목 측정·기록:
+    - backend: `find backend/core backend/adapters -name "*.py" | wc -l` ÷ (앞 + `find backend/app -name "*.py" | wc -l`) × 100
+    - frontend: `find frontend/lib/{domain,data,presentation} -name "*.dart" | wc -l` ÷ 전체 `frontend/lib/` × 100
+    - 1개월 시점 베이스라인 + 다음 회고(분기별)에서 추세 추적
   - 회고 문서 (`docs/postmortem-launch-2026-XX.md` — 이 문서만 신규 작성)
 - **Acceptance**:
   - 비용이 §1.4 가정 범위 내 또는 초과 시 원인 메모
   - 다운타임 합계 + 주요 사고 1~3건 회고
+  - 패턴 적용 진척도 baseline 수치 기록 (목표값은 아직 없음 — 추세 추적용)
 - **Estimate**: 1일 + 1개월 관찰
 - **Learning Note**:
   - **회고는 다음 프로젝트의 시작점**: 가정이 맞았는지/틀렸는지 기록해두지 않으면 다음 프로젝트에서 같은 실수 반복.
+  - **점진 마이그레이션은 측정 가능해야 한다 (v0.6)**: "언젠가 끝나겠지" 는 끝나지 않는다. 진척도(%) 를 메트릭으로 기록하면 정체 시 신호로 작동.
 
 ---
 
@@ -895,13 +921,13 @@ frontend/lib/
 - **학습 곡선**:
   - 헥사고날(ports/adapters), Clean Architecture(domain/data/presentation) 가 익숙하지 않은 경우 단계 1.0 / 2.0 셋업과 단계 1.3 / 2.3 첫 use case 작성에서 시간이 추가 소요.
   - 잘못 적용하면 "어댑터인 척하는 service 클래스" 같은 anti-pattern 발생.
-- **점진 마이그레이션 중 새/구 패턴 혼재**:
-  - D14 미결 — 점진(권장) vs 빅뱅 결정 전.
-  - 점진 채택 시 단계 1~4 진행 중 `backend/app/` (구) 와 `backend/core/` + `backend/adapters/` (신) 가 공존.
-  - 위험: "어디서 import 해야 하는지" 가 PR 리뷰마다 등장 → 가이드 1쪽 작성 권장.
-- **완화책 제안 (자율 결정 아님)**:
-  - 단계 1.0 / 2.0 의 빈 골격에 README 1쪽 추가 ("새 기능은 여기에, 기존 기능 수정 시 여기로 이전").
-  - 단계 4 회고에 "패턴 적용 진척도" 항목 추가.
+- **점진 마이그레이션 중 새/구 패턴 혼재 (v0.6: 점진 확정으로 위험 살아있음)**:
+  - D14 ✅ (a) 점진 확정 — 빅뱅 옵션 탈락 → 위험 자체는 해소 안 됨, 트레이드오프 수용.
+  - 단계 1~4 진행 중 `backend/app/` (구) 와 `backend/core/` + `backend/adapters/` (신) 공존.
+  - 위험: "어디서 import 해야 하는지" 가 PR 리뷰마다 등장.
+- **v0.6 완화 적용**:
+  - 단계 1.0 / 2.0 빈 골격 산출물에 **`backend/MIGRATION.md` + `frontend/MIGRATION.md` 1쪽 가이드** 포함 (§6 단계 1.0 / 2.0).
+  - 단계 4.3 회고 메트릭에 **"패턴 적용 진척도(%)"** 항목 추가 (신 패턴 디렉토리/파일 카운트 비율).
 
 ### 7.8 모바일 앱 holdings 손실 + 채널별 비대칭 위험 (v0.5 신규)
 - **모바일 holdings 는 sqflite 로컬에만 존재 (N7)** — 앱 재설치 / 폰 교체 시 손실.
@@ -936,9 +962,8 @@ frontend/lib/
 
 ## 9. 다음 행동 (사용자 입장) — 미결 항목 체크리스트
 
-v0.5 갱신으로 D13(폐기), §7.4 콜드 UX 본질, D15(시간 기반 가짜 프로그레스), N6(헥사고날+Clean), N7(포트폴리오 독립)가 추가 확정되었다. 각 sub-step 시작 전 다음 미결 항목에 대한 사용자 답이 필요하다.
+v0.6 갱신으로 D14(점진 마이그레이션) 추가 확정. v0.5 갱신으로 D13(폐기), §7.4 콜드 UX 본질, D15, N6, N7 확정. 각 sub-step 시작 전 다음 미결 항목에 대한 사용자 답이 필요하다.
 
-- [ ] **D14 frontend 마이그레이션 전략** — 점진(권장) vs 빅뱅 (§3.3.3, 단계 2.0 직전)
 - [ ] **도메인 등록처** — CF Registrar 등 어디서 등록할지 (C4 세부, 단계 3.1 직전 결정 필요)
 - [ ] **GH Actions 워크플로 처분** — 5개 워크플로 각각 보존/제거 시점 (§7.5, 단계 4.2 직전)
 - [ ] **`backend/api` 처분** — 통합 후 삭제 vs 보존 (N5, 단계 4.2 직전)
@@ -954,6 +979,9 @@ v0.5 갱신으로 D13(폐기), §7.4 콜드 UX 본질, D15(시간 기반 가짜 
 - [ ] **device_tokens 테이블 존속 여부** — FCM 푸시 잔존 시만 필요 (N5/N7과 함께, 단계 1.2 또는 2.3 직전)
 - [ ] **모바일 holdings export/import 기능 도입 여부** — 폰 교체 시 손실 완화 (§7.8, 단계 2.3 또는 단계 4)
 
+**해결됨 (v0.6)**:
+- ~~D14 frontend 마이그레이션 전략~~ → (a) 점진 확정. backend/frontend 대칭. 가이드 README + 진척도 메트릭(§3.3.3 / §6 단계 1.0·2.0·4.3)
+
 **해결됨 (v0.5)**:
 - ~~D13 portfolio.xlsx SSoT~~ → 폐기 (정체가 "개인화 서비스 초안"이었고 더 이상 사용 안 함)
 - ~~콜드 캐시 UX 본질~~ → (a) + 진행 표시 패키지 확정
@@ -964,6 +992,26 @@ v0.5 갱신으로 D13(폐기), §7.4 콜드 UX 본질, D15(시간 기반 가짜 
 ---
 
 ## 10. 결정 이력 / 변경 로그
+
+### v0.6 — 2026-05-03
+**확정**:
+- **D14 마이그레이션 전략**: (a) 점진 확정. backend/frontend 대칭(비대칭 비추 권장 따름). 빅뱅 옵션 탈락.
+
+**변경**:
+- 머리말 — 결정 15번(D14) 추가, 미결 목록 갱신
+- §3.3.3 — "점진 vs 빅뱅" 미결 표기 → "점진 ✅ 확정" 표기 + 가이드 README + 진척도 메트릭 명시
+- §4 D14 — ❓ → ✅, §4.2 요약 갱신
+- §5 N6 — "점진(권장)" → "✅ 점진 확정 (v0.6)" + 대칭 명시
+- §6 단계 1.0 — `backend/MIGRATION.md` 가이드 1쪽 산출물 추가, Estimate 0.5~1일 → 1~1.5일
+- §6 단계 2.0 — `frontend/MIGRATION.md` 가이드 1쪽 산출물 추가, Estimate 1~1.5일 → 1.5~2일
+- §6 단계 4.3 — 회고 메트릭에 "패턴 적용 진척도(%)" 항목 + 측정 방법(`find ... wc -l` 비율) 명시
+- §7.7 — D14 미결 표기 제거, "점진 확정으로 위험 살아있음 (트레이드오프 수용)" 으로 정리, v0.6 완화 적용 명시
+- §9 체크리스트 — D14 제거 (15 → 14), "해결됨 (v0.6)" 절 추가
+- §10 — v0.6 항목 신설
+- §11.2 — 본 프로젝트 적용 절에 "점진 마이그레이션과 vertical slice / reversibility 정합성" + "빅뱅 trade-off 비교" 학습 포인트 추가
+
+**미해결 (사용자 결정 대기)**:
+- §9 체크리스트 14개 (v0.5 15개 → 해결 1건: D14 → 순감 -1)
 
 ### v0.5 — 2026-05-03
 **확정**:
@@ -1171,6 +1219,30 @@ v0.5 갱신으로 D13(폐기), §7.4 콜드 UX 본질, D15(시간 기반 가짜 
 - CF Containers 가 yfinance/pykrx 를 안전히 돌리는지가 본 프로젝트의 최대 기술 리스크(§7.3).
 - 안 되면 §3.2.2 옵션 B 결정을 재검토해야 함 → 단계 3 전체 재설계.
 - 따라서 단계 3.1(빈 도메인) → 3.2(컨테이너 검증) 순서로 가장 위험한 것을 둘째에 둠. 첫째(3.1 도메인)는 행정 절차 차원에서 무조건 일찍 시작해야 하므로 1순위.
+
+#### (f) 왜 (a) 점진 마이그레이션이 §11.1 vertical slice + reversibility 와 정합되는가 (v0.6 D14)
+
+본 프로젝트는 §11.1 (1) **Vertical slice 우선** 과 (3) **Reversibility 고려** 두 원칙을 강하게 따른다. D14 결정의 (a) 점진과 (b) 빅뱅을 두 원칙에 비추면 다음과 같다.
+
+**Vertical slice 관점**
+- (a) 점진: 단계 2.0 종료 시점에 데모 가능한 산출물(첫 화면 + sqflite 어댑터 1개)이 남는다. 단계 2.1~2.3 모든 sub-step 도 마찬가지로 매번 데모 가능. 매 sub-step 이 §11.1 의 "Shippable per phase" 원칙과 정합.
+- (b) 빅뱅: 1~3주 동안 데모 가능한 산출물 0건. 빅뱅 PR 이 끝나기 전까지 사용자도 자기 자신도 무엇이 잘 되고 있는지 검증 불가. Horizontal layer 방식의 함정과 동일한 증상.
+
+**Reversibility 관점**
+- (a) 점진: 매 PR 이 작은 변경. 잘못 만들었으면 다음 PR 에서 되돌리거나 패턴을 조정 가능. 학습이 쌓이며 패턴이 진화 가능.
+- (b) 빅뱅: 한 번에 모든 코드 재구성 → 빅뱅 PR 자체가 큰 one-way door. 패턴이 잘못 잡히면 되돌리기 어렵고, 두 번째 빅뱅을 시작할 동기 부여가 안 됨.
+
+**빅뱅의 trade-off (학습용 비교)**
+- 빅뱅이 항상 나쁜 건 아님. 빅뱅이 정합한 경우:
+  - 코드베이스가 작고 (예: 화면 5개 미만) 1주일 안에 끝낼 수 있을 때.
+  - 신/구 패턴 혼재의 PR 리뷰 비용이 빅뱅 1회의 비용보다 클 때 (대규모 팀 + 잦은 PR).
+  - 마이그레이션 중에 데모 산출물이 필요 없을 때 (내부 도구 등).
+- 본 프로젝트는 1인 작업 + frontend 화면 10여 개 + 매 단계 데모 필요 → 빅뱅 비정합 → (a) 점진.
+
+**v0.6 적용 결과**
+- 단계 1.0 / 2.0 산출물에 가이드 README 1쪽 추가 (점진의 PR 리뷰 비용을 미리 분산).
+- 단계 4.3 회고 메트릭에 진척도(%) 추가 (점진이 정체되지 않도록 신호).
+- §7.7 패턴 혼재 위험은 살아있음 (점진의 비용으로 의식적 수용).
 
 ---
 
