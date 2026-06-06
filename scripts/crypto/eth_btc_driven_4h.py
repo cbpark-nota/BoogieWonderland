@@ -17,7 +17,7 @@ btc_eth_correlation 분석 결과를 기반으로 자동 결정된 알고리즘:
 
 결과:
   scripts/backtest/results/eth_4h_btc_driven/v{1..10}.json
-  docs/eth_4h_btc_driven_backtest_{YYYYMMDD}.md
+  docs/backtest/eth_4h_btc_driven_backtest_{YYYYMMDD}.md
 """
 
 import argparse
@@ -42,7 +42,7 @@ from eth_daytrading_4h import get_eth_data_4h
 warnings.filterwarnings("ignore")
 
 RESULTS_DIR = Path("scripts/backtest/results/eth_4h_btc_driven")
-DOCS_DIR    = Path("docs")
+DOCS_DIR    = Path("docs/backtest")
 FEE         = 0.001  # RT 0.1%
 LAG_BARS    = 0      # CCF 분석 결과 (모든 구간에서 최적 양수 lag = 0)
 

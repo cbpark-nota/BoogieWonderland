@@ -10,7 +10,7 @@ Bitcoin 알고리즘 트레이딩 백테스트 — v1 ~ v5 단계별 개선 비�
 출력:
     scripts/crypto/results/btc_equity_curves.png
     scripts/crypto/results/btc_backtest_summary.csv
-    docs/bitcoin_trading_algorithm.md  (자동 업데이트)
+    docs/backtest/btc_longterm_backtest_YYYYMMDD.md  (자동 업데이트)
 """
 
 import warnings
@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from collect_data import load_all_data
 
 RESULTS_DIR = Path(__file__).parent / "results"
-DOCS_DIR    = Path(__file__).parent.parent.parent / "docs"
+DOCS_DIR    = Path(__file__).parent.parent.parent / "docs" / "backtest"
 RESULTS_DIR.mkdir(exist_ok=True)
 
 INITIAL_CAPITAL = 10_000.0  # USD

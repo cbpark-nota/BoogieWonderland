@@ -54,7 +54,7 @@ CACHE_MAX_AGE_HOURS = 12
 
 # 결과 저장 경로
 RESULTS_DIR = Path("scripts/backtest/results/btc_4h")
-DOCS_DIR    = Path("docs")
+DOCS_DIR    = Path("docs/backtest")
 
 
 # ══════════════════════════════════════════════════════════════════════

@@ -9,7 +9,7 @@ BTC ↔ ETH 상관관계 분석 (4시간봉)
 5) 변동성 spillover: BTC vol → ETH vol
 
 결과:
-  docs/analysis_btc_eth_correlation.md
+  docs/research/analysis_btc_eth_correlation.md
   docs/figures/btc_eth_*.png
   scripts/backtest/results/btc_eth_correlation.json (B안 전략 자동결정용)
 """
@@ -30,8 +30,8 @@ warnings.filterwarnings("ignore")
 # ── 경로 ─────────────────────────────────────────────────
 BTC_CACHE  = Path("scripts/crypto/data/btc_4h.csv")
 ETH_CACHE  = Path("scripts/crypto/data/eth_4h.csv")
-DOCS_DIR   = Path("docs")
-FIG_DIR    = DOCS_DIR / "figures"
+DOCS_DIR   = Path("docs/research")
+FIG_DIR    = Path("docs/figures")
 JSON_OUT   = Path("scripts/backtest/results/btc_eth_correlation.json")
 
 BARS_PER_DAY = 6  # 4h봉
