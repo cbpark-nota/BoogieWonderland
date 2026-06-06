@@ -6,9 +6,9 @@
 
 ## 주요 참조 문서
 - `.project-context.md` — 프로젝트 전체 요약 (파일맵, 알고리즘, 전략, 명령어)
-- `docs/HANDOFF.md` — 프로젝트 인수인계 문서 (아키텍처, API, 테스트, 배포)
-- `docs/backtest_results.md` — ATR 튜닝 + 거래비용 반영 백테스트 결과
-- `docs/adaptive_strategy_results.md` — 적응형 전략 멀티 윈도우 백테스트 결과
+- `docs/operations/HANDOFF.md` — 프로젝트 인수인계 문서 (아키텍처, API, 테스트, 배포)
+- `docs/backtest/backtest_results.md` — ATR 튜닝 + 거래비용 반영 백테스트 결과
+- `docs/backtest/adaptive_strategy_results.md` — 적응형 전략 멀티 윈도우 백테스트 결과
 
 ## Git 설정
 - 이 프로젝트의 `user.email`은 `sogogimilk@google.com`을 사용한다.

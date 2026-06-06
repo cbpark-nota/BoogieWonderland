@@ -2,7 +2,7 @@
 
 > 작성일: 2026년 3월 24일
 > 스크립트: `scripts/backtest/backtest_entry_timing.py`
-> 출처 아이디어: `docs/market_entry_analysis.md`
+> 출처 아이디어: `docs/research/market_entry_analysis.md`
 
 ---
 

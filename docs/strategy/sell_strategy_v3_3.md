@@ -42,7 +42,7 @@ stop_t   = max(stop_{t-1}, peak_t - ATR(14)_t × M)
 | Sharpe | 3.58 | **3.77** |
 | 손익비 | 25.92 | **93.65** (3.6배) |
 
-> 출처: `docs/backtest_trailing_stop_comparison.md`
+> 출처: `docs/backtest/backtest_trailing_stop_comparison.md`
 
 ---
 
@@ -127,7 +127,7 @@ stop_t   = max(stop_{t-1}, peak_t - ATR(14)_t × M)
 - **Sharpe도 열위**: V3.3(3.82) > V3.3-instant(3.56) — 위험 조정 수익률 관점에서도 격주 체크가 우위.
 - **회전율 증가**: 즉시 매도는 거래 횟수와 슬리피지·수수료를 늘림 → 추가 비용.
 
-> 출처: `docs/backtest_instant_sell_comparison.md`
+> 출처: `docs/backtest/backtest_instant_sell_comparison.md`
 
 ---
 
@@ -140,8 +140,8 @@ stop_t   = max(stop_{t-1}, peak_t - ATR(14)_t × M)
 ---
 
 ## 참조 문서
-- `docs/backtest_trailing_stop_comparison.md` — V3.2 고정 스톱 vs V3.3 트레일링 비교
-- `docs/backtest_instant_sell_comparison.md` — 즉시 매도 변형 비교 (4 시나리오)
-- `docs/screening-algorithms/v3.1_strategy_spec.md` — 스크리너 진입 조건/스코어
+- `docs/backtest/backtest_trailing_stop_comparison.md` — V3.2 고정 스톱 vs V3.3 트레일링 비교
+- `docs/backtest/backtest_instant_sell_comparison.md` — 즉시 매도 변형 비교 (4 시나리오)
+- `docs/architecture/screening-algorithms/v3.1_strategy_spec.md` — 스크리너 진입 조건/스코어
 - `scripts/screener/screener_v3.py` — 프로덕션 스크리너 (peak_price, stop_price 출력)
 - `scripts/monitor/monitor.py` — 일별 스톱 체크 (peak/stop 갱신)

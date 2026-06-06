@@ -248,8 +248,8 @@ VIX 선물 지수 변동 구간별로 나누어 미리 지정가 주문 배치:
 
 ## 참고 문서
 
-- [`docs/vix_svxy_svix_trading_algorithm.md`](vix_svxy_svix_trading_algorithm.md) — 상세 알고리즘 설계 (수식 포함)
-- [`docs/backtest_results_vix.md`](backtest_results_vix.md) — 백테스트 상세 결과 및 데이터 보정 방안
+- [`docs/strategy/vix_svxy_svix_trading_algorithm.md`](vix_svxy_svix_trading_algorithm.md) — 상세 알고리즘 설계 (수식 포함)
+- [`docs/backtest/backtest_results_vix.md`](../backtest/backtest_results_vix.md) — 백테스트 상세 결과 및 데이터 보정 방안
 
 ---
 

@@ -230,7 +230,7 @@ python crypto/btc_signal_v10.py                  # 현재 BTC V10 시그널 확�
 
 > v3.1은 회전율을 41% 줄이면서 MDD도 -3.6% → -2.7%로 개선. CAGR은 -16.3%p 감소하지만 거래비용·슬리피지 절감 효과 포함.
 
-상세: `docs/backtest_results.md`, `docs/adaptive_strategy_results.md`, `docs/full_universe_refit_report.md`
+상세: `docs/backtest/backtest_results.md`, `docs/backtest/adaptive_strategy_results.md`, `docs/research/full_universe_refit_report.md`
 
 ---
 
@@ -390,7 +390,7 @@ docker compose run collector python collect_daily.py all  # 수동 실행
 | v3 최적 파라미터 적용 (ADX 20, RSI 77, HH-HL 2, 52w 75%, 최대비중 10%) | ✅ |
 | v3.1 개선 (KR 제외, ret12m_skip1, mcap가중, VOL_TARGET, BuyHoldSpread, REGIME_FILTER, DEPLOY_ENV) | ✅ |
 | 유니버스 동적 구성 (S&P 500 + NASDAQ-100, ~517개, v3.1: KR 제외) | ✅ |
-| 풀 유니버스 백테스트 (v1~v3 결과: docs/full_universe_refit_report.md) | ✅ |
+| 풀 유니버스 백테스트 (v1~v3 결과: docs/research/full_universe_refit_report.md) | ✅ |
 | 백테스트 (ATR 튜닝, 적응형, 멀티 윈도우) | ✅ |
 | FastAPI 백엔드 (모델/스키마/라우터/서비스/스케줄러) | ✅ |
 | Flutter 프론트엔드 (4화면 + 4전략 선택) | ✅ |

@@ -36,7 +36,7 @@ _THIS_DIR = Path(__file__).parent
 RESULTS_DIR = _THIS_DIR / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
 
-DOCS_DIR = _THIS_DIR.parent.parent / "docs"
+DOCS_DIR = _THIS_DIR.parent.parent / "docs" / "backtest"
 DOCS_DIR.mkdir(exist_ok=True)
 
 # ── 백테스트 기간 ─────────────────────────────────────────

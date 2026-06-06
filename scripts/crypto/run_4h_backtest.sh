@@ -39,4 +39,4 @@ tail -60 /tmp/btc_4h_aggregate.log
 TODAY=$(date +%Y%m%d)
 echo ""
 echo "=== 완료 ==="
-echo "    집계 보고서: docs/btc_4h_backtest_results_${TODAY}.md"
+echo "    집계 보고서: docs/backtest/btc_4h_backtest_results_${TODAY}.md"
