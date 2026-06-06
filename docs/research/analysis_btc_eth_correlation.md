@@ -27,7 +27,7 @@ lag = +N: BTC 수익률이 N봉(4h × N) 앞서 발생할 때 ETH 수익률과�
 | Bull | 0 봉 (0h) | 0.7933 | 0.7933 |
 | Bear | 0 봉 (0h) | 0.8608 | 0.8608 |
 
-**그래프**: `figures/btc_eth_ccf_all.png`, `_bull.png`, `_bear.png`
+**그래프**: `../figures/btc_eth_ccf_all.png`, `_bull.png`, `_bear.png`
 
 ### 상위 lag (전체 구간) — 상위 6개 양수 lag
 
@@ -86,7 +86,7 @@ H0: 원인변수가 결과변수를 Granger-cause 하지 않는다. p<0.05 → �
 | 90일 (540봉)   | 0.8433 | – | – |
 | 365일 (2190봉) | 0.8410 | – | – |
 
-**그래프**: `figures/btc_eth_rolling_corr.png`
+**그래프**: `../figures/btc_eth_rolling_corr.png`
 
 ## 5. 변동성 spillover (20일 logret std)
 

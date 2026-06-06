@@ -3,7 +3,7 @@
 ETH V10 시그널을 계산하고 screening JSON 파일의 eth_signal 필드를 업데이트한다.
 
 ETH V10 = B안 V10: BTC strategy_v10의 position 시퀀스를 ETH 가격에 그대로 적용한다.
-근거: docs/backtest_eth_strategies_comparison.md
+근거: docs/backtest/backtest_eth_strategies_comparison.md
   · CCF 분석 — 모든 구간 최적 양수 lag = 0봉
   · Granger BTC→ETH 강한 예측력 (p < 0.001)
   · B안 V10 CAGR +45.0%, MDD -33.2%, 샤프 1.03 (1순위 추천)

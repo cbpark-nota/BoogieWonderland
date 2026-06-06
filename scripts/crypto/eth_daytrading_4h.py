@@ -11,7 +11,7 @@ btc_daytrading_4h.py의 strategy_v1~v10을 그대로 ETH 4h 가격에 적용.
 
 결과:
   · scripts/backtest/results/eth_4h/v{1..10}.json
-  · docs/eth_4h_backtest_results_YYYYMMDD.md
+  · docs/backtest/eth_4h_backtest_results_YYYYMMDD.md
 """
 
 import argparse
@@ -41,7 +41,7 @@ warnings.filterwarnings("ignore")
 CACHE_PATH         = Path("scripts/crypto/data/eth_4h.csv")
 CACHE_MAX_AGE_HRS  = 12
 RESULTS_DIR        = Path("scripts/backtest/results/eth_4h")
-DOCS_DIR           = Path("docs")
+DOCS_DIR           = Path("docs/backtest")
 FEE                = 0.001  # RT 0.1%
 
 

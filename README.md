@@ -47,7 +47,7 @@
 ├── backend/            # 프로덕션 코드의 단일 소스 (SSoT)
 │   └── app/services/   # scripts/에서 검증된 알고리즘을 복사하여 운영
 ├── frontend/           # Flutter (iOS / Android / Web)
-├── docs/               # 문서 (핸드오프, 백테스트 결과, 제안서)
+├── docs/               # 문서 (6개 카테고리: backtest, strategy, research, architecture, operations, dev)
 └── deploy/             # 배포 설정 (로컬, Docker, AWS)
 ```
 

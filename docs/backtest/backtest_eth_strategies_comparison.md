@@ -9,7 +9,7 @@
 
 ## 1. BTC ↔ ETH 상관관계 분석 핵심 발견
 
-(상세: [`docs/analysis_btc_eth_correlation.md`](analysis_btc_eth_correlation.md))
+(상세: [`docs/research/analysis_btc_eth_correlation.md`](../research/analysis_btc_eth_correlation.md))
 
 | 항목 | 값 | 의미 |
 |------|---:|------|
